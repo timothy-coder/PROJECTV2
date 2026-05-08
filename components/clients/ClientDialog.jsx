@@ -65,11 +65,25 @@ function formFromClient(client) {
 }
 
 export function ClientDialog({ open, mode, client, options, onClose, onSubmit }) {
+  if (!open) return null;
+
+  return (
+    <ClientDialogBody
+      key={`${mode || "closed"}-${client?.id || "new"}`}
+      open={open}
+      mode={mode}
+      client={client}
+      options={options}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function ClientDialogBody({ mode, client, options, onClose, onSubmit }) {
   const [form, setForm] = useState(formFromClient(client));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  if (!open) return null;
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -279,13 +293,13 @@ function Field({ label, value, onChange, type = "text", inputMode, maxLength, pl
 }
 
 function documentMaxLength(type) {
-  if (type === "DNI") return 9;
+  if (type === "DNI") return 8;
   if (type === "RUC") return 11;
   return undefined;
 }
 
 function documentPlaceholder(type) {
-  if (type === "DNI") return "Max. 9 digitos";
+  if (type === "DNI") return "Max. 8 digitos";
   if (type === "RUC") return "11 digitos";
   return "Numero de documento";
 }
