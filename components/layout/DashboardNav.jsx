@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, ChevronLeft } from "lucide-react";
+import { Menu, ChevronLeft, LogOut, UserRound } from "lucide-react";
+import { toast } from "sonner";
 
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { HOME_ITEM, NAV_TREE } from "@/lib/navtree";
@@ -24,6 +26,83 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+
+function getInitials(user) {
+  const source = user?.fullname || user?.username || "Usuario";
+  const parts = source.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] || "U";
+  const second = parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1];
+  return `${first}${second || ""}`.toUpperCase();
+}
+
+function UserBox({ user, collapsed = false, onNavigate }) {
+  const router = useRouter();
+  const displayName = user?.fullname || user?.username || "Usuario";
+  const roleName = user?.role?.name || "Sin rol";
+  const initials = getInitials(user);
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      toast.success("Sesion cerrada");
+      router.replace("/login");
+      router.refresh();
+    } catch (error) {
+      toast.error(error?.message || "No se pudo cerrar sesion");
+    }
+  };
+
+  if (collapsed) {
+    return (
+      <div className="border-t border-white/10 p-2">
+        <Link
+          href="/perfil"
+          title="Mi perfil"
+          className="flex h-11 w-full items-center justify-center rounded-xl border border-indigo-400/30 bg-indigo-500/15 text-sm font-semibold text-white transition hover:bg-indigo-500/25"
+        >
+          {initials}
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-white/10 p-3">
+      <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-indigo-600 text-sm font-bold text-white shadow-sm">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+            <p className="truncate text-[11px] text-slate-400">{roleName}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Link
+            href="/perfil"
+            onClick={onNavigate}
+            className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-white/10 bg-white px-2 text-xs font-medium text-slate-950 transition hover:bg-slate-100"
+          >
+            <UserRound className="h-3.5 w-3.5" />
+            Mi perfil
+          </Link>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={handleLogout}
+            className="h-8 text-red-100 hover:bg-red-500/15 hover:text-white"
+          >
+            <LogOut className="mr-1 h-3.5 w-3.5" />
+            Salir
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function buildMenuForUser(menu, userPermissions) {
   return menu
@@ -173,6 +252,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
                 onNavigate={onNavigate}
                 activeGroupKey={activeGroupKey}
               />
+              <UserBox user={user} onNavigate={onNavigate} />
             </SheetContent>
           </Sheet>
 
@@ -241,6 +321,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
             );
           })}
         </div>
+        <UserBox user={user} collapsed />
       </aside>
     );
   }
@@ -272,6 +353,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
         onNavigate={() => {}}
         activeGroupKey={activeGroupKey}
       />
+      <UserBox user={user} />
     </aside>
   );
 }
