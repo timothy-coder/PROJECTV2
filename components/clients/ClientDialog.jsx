@@ -299,7 +299,7 @@ function documentMaxLength(type) {
 }
 
 function documentPlaceholder(type) {
-  if (type === "DNI") return "Max. 8 digitos";
+  if (type === "DNI") return "8 digitos";
   if (type === "RUC") return "11 digitos";
   return "Numero de documento";
 }
@@ -313,7 +313,7 @@ function normalizeDocument(value, type) {
 function validateDocument(type, value) {
   const clean = String(value || "").trim();
   if (!clean) return "El numero de documento es obligatorio.";
-  if (type === "DNI" && clean.length !== 9) return "El DNI debe tener 9 digitos.";
+  if (type === "DNI" && clean.length !== 8) return "El DNI debe tener 8 digitos.";
   if (type === "RUC" && clean.length !== 11) return "El RUC debe tener 11 digitos.";
   return "";
 }

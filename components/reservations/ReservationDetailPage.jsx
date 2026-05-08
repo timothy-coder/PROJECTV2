@@ -171,7 +171,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, update
           <Field label="Numero de Motor"><Input disabled={readOnly} value={form.numeroMotor} onChange={(e) => setForm((f) => ({ ...f, numeroMotor: e.target.value }))} /></Field>
         </Block>
         <Block title="DESCUENTOS Y MONTOS">
-          <Field label="Descuento Tienda (S/)"><Input disabled={readOnly} type="number" value={form.descuentoTienda} onChange={(e) => setForm((f) => ({ ...f, descuentoTienda: e.target.value }))} /></Field>
+          <Field label="Descuento Tienda ($)"><Input disabled={readOnly} type="number" value={form.descuentoTienda} onChange={(e) => setForm((f) => ({ ...f, descuentoTienda: e.target.value }))} /></Field>
           <Field label="Descuento Tienda (%)"><Input disabled={readOnly} type="number" value={form.descuentoTiendaPorcentaje} onChange={(e) => setForm((f) => ({ ...f, descuentoTiendaPorcentaje: e.target.value }))} /></Field>
           <Field label="Bono Retoma"><Input disabled={readOnly} type="number" value={form.bonoRetoma} onChange={(e) => setForm((f) => ({ ...f, bonoRetoma: e.target.value }))} /></Field>
           <Field label="Descuento Marca"><Input disabled={readOnly} type="number" value={form.descuentoNper} onChange={(e) => setForm((f) => ({ ...f, descuentoNper: e.target.value }))} /></Field>

@@ -69,7 +69,6 @@ export default async function PublicQuotePage({ params }) {
               <h1 className="text-3xl font-bold">Resumen de Cotizacion</h1>
               <p className="text-sm text-slate-600">Q-{String(quote.id).padStart(6, "0")}</p>
             </div>
-            <button type="button" className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white">Descargar PDF</button>
           </header>
 
           <section className="rounded-lg border border-violet-200 bg-violet-50 p-5">
