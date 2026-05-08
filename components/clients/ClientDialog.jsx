@@ -29,7 +29,7 @@ function emptyClient() {
     apellido: "",
     email: "",
     celular: "",
-    tipoIdentificacion: "",
+    tipoIdentificacion: "DNI",
     identificacionFiscal: "",
     fechaNacimiento: "",
     ocupacion: "",
@@ -49,8 +49,8 @@ function formFromClient(client) {
     nombre: client.nombre || "",
     apellido: client.apellido || "",
     email: client.email || "",
-    celular: client.celular || "",
-    tipoIdentificacion: client.tipoIdentificacion || "",
+    celular: normalizePhone(client.celular || ""),
+    tipoIdentificacion: client.tipoIdentificacion || "DNI",
     identificacionFiscal: client.identificacionFiscal || "",
     fechaNacimiento: client.fechaNacimiento ? String(client.fechaNacimiento).slice(0, 10) : "",
     ocupacion: client.ocupacion || "",
@@ -88,6 +88,9 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
       identificacionFiscal: normalizeDocument(value, current.tipoIdentificacion),
     }));
   }
+  function updatePhone(value) {
+    updateField("celular", normalizePhone(value));
+  }
   const departamentoOptions = (options?.departamentos || []).map((item) => ({
     value: item.id,
     label: item.nombre,
@@ -102,8 +105,28 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!form.nombre.trim() && !form.nombreComercial.trim()) {
-      setError("Ingresa nombre o nombre comercial.");
+    if (!form.nombre.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    if (!form.apellido.trim()) {
+      setError("El apellido es obligatorio.");
+      return;
+    }
+    if (!form.celular.trim()) {
+      setError("El celular es obligatorio.");
+      return;
+    }
+    if (form.celular.length !== 9) {
+      setError("El celular debe tener 9 digitos.");
+      return;
+    }
+    if (!form.email.trim()) {
+      setError("El email es obligatorio.");
+      return;
+    }
+    if (!isValidEmail(form.email)) {
+      setError("Ingresa un email valido.");
       return;
     }
     const documentError = validateDocument(form.tipoIdentificacion, form.identificacionFiscal);
@@ -116,7 +139,14 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
     setError("");
 
     try {
-      await onSubmit(form);
+      await onSubmit({
+        ...form,
+        email: form.email.trim(),
+        nombre: form.nombre.trim(),
+        apellido: form.apellido.trim(),
+        identificacionFiscal: form.identificacionFiscal.trim(),
+        celular: `+51${form.celular}`,
+      });
       onClose();
     } catch (err) {
       setError(err.message || "No se pudo guardar el cliente.");
@@ -138,10 +168,10 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Nombre" value={form.nombre} onChange={(value) => updateField("nombre", value)} />
-              <Field label="Apellido" value={form.apellido} onChange={(value) => updateField("apellido", value)} />
-              <Field label="Celular" value={form.celular} onChange={(value) => updateField("celular", value)} />
-              <Field label="Email" value={form.email} onChange={(value) => updateField("email", value)} />
+              <Field label="Nombre *" value={form.nombre} onChange={(value) => updateField("nombre", value)} />
+              <Field label="Apellido *" value={form.apellido} onChange={(value) => updateField("apellido", value)} />
+              <Field label="Celular *" inputMode="numeric" maxLength={9} value={form.celular} onChange={updatePhone} placeholder="999999999" />
+              <Field type="email" label="Email *" value={form.email} onChange={(value) => updateField("email", value)} />
               <div className="space-y-2">
                 <Label>Tipo de documento</Label>
                 <SearchableSelect
@@ -153,7 +183,7 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
                 />
               </div>
               <Field
-                label="Numero de documento"
+                label="Numero de documento *"
                 value={form.identificacionFiscal}
                 onChange={updateDocument}
                 inputMode={form.tipoIdentificacion === "PASAPORTE" ? "text" : "numeric"}
@@ -268,8 +298,18 @@ function normalizeDocument(value, type) {
 
 function validateDocument(type, value) {
   const clean = String(value || "").trim();
-  if (!clean) return "";
+  if (!clean) return "El numero de documento es obligatorio.";
   if (type === "DNI" && clean.length !== 9) return "El DNI debe tener 9 digitos.";
   if (type === "RUC" && clean.length !== 11) return "El RUC debe tener 11 digitos.";
   return "";
+}
+
+function normalizePhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const withoutCountry = digits.startsWith("51") && digits.length > 9 ? digits.slice(2) : digits;
+  return withoutCountry.slice(0, 9);
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }

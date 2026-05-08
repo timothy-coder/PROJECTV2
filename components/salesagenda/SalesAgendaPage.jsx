@@ -174,7 +174,7 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
           <DialogTitle className="text-2xl font-bold text-violet-700">Nueva oportunidad</DialogTitle>
           <p className="text-sm text-slate-500">Completa los datos, actividades y agenda de la oportunidad.</p>
         </DialogHeader>
-        <div className="grid min-w-0 gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-4 p-4 sm:p-5 ">
           <div className="min-w-0 space-y-4">
             <section className="rounded-lg border border-violet-200 bg-violet-50/40 p-4">
               <h3 className="mb-3 text-sm font-bold text-violet-700">Informacion general</h3>
@@ -191,6 +191,10 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
               <h3 className="mb-3 text-sm font-bold text-blue-800">Nueva actividad</h3>
               <Textarea className="min-h-28 bg-white" value={form.detalle} placeholder="Describe que accion se realizo..." onChange={(e) => setForm((current) => ({ ...current, detalle: e.target.value }))} />
               <Button type="button" className="mt-3 w-full bg-slate-950 text-white hover:bg-slate-800" disabled={!form.detalle.trim()} onClick={() => { setActivities((current) => [...current, { detalle: form.detalle.trim() }]); setForm((current) => ({ ...current, detalle: "" })); }}><Plus className="size-4" />Agregar actividad</Button>
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="mb-3 font-bold">Actividades ({activities.length})</h3>
+              <div className="space-y-2">{activities.length ? activities.map((item, index) => <div key={index} className="rounded-md border bg-slate-50 p-3 text-sm">{item.detalle}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay actividades registradas</div>}</div>
+            </section>
             </section>
             <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
               <h3 className="mb-3 text-sm font-bold text-emerald-800">Nueva agenda</h3>
@@ -199,18 +203,13 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
                 <Field label="Hora agenda"><Input type="time" value={form.horaAgenda} onChange={(e) => setForm((current) => ({ ...current, horaAgenda: e.target.value }))} /></Field>
               </div>
               <Button type="button" className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={!form.fechaAgenda || !form.horaAgenda} onClick={() => setAgendas((current) => [...current, { fechaAgenda: form.fechaAgenda, horaAgenda: form.horaAgenda }])}><Plus className="size-4" />Agregar agenda</Button>
-            </section>
-          </div>
-          <div className="min-w-0 space-y-4">
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <h3 className="mb-3 font-bold">Actividades ({activities.length})</h3>
-              <div className="space-y-2">{activities.length ? activities.map((item, index) => <div key={index} className="rounded-md border bg-slate-50 p-3 text-sm">{item.detalle}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay actividades registradas</div>}</div>
-            </section>
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
+             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h3 className="mb-3 font-bold">Agendas ({agendas.length})</h3>
               <div className="space-y-2">{agendas.length ? agendas.map((item, index) => <div key={index} className="rounded-md border bg-emerald-50 p-3 text-sm font-medium">{item.fechaAgenda} - {item.horaAgenda}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay agendas registradas</div>}</div>
             </section>
+            </section>
           </div>
+          
         </div>
         <DialogFooter className="sticky bottom-0 border-t bg-white p-4">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
