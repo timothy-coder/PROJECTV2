@@ -14,7 +14,7 @@ import { useSalesAgenda } from "@/hooks/salesagenda/useSalesAgenda";
 import { hasPerm } from "@/lib/permissions";
 
 const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const dayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const dayLabels = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
 export default function SalesAgendaPage({ userPermissions }) {
   const data = useSalesAgenda();
@@ -66,15 +66,19 @@ export default function SalesAgendaPage({ userPermissions }) {
           {[["all", "Todos"], ["opportunity", "OP"], ["lead", "LD"]].map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${filters.kind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
         </div>
       </section>
-      <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
-        <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
-          <div className="border-b border-r bg-slate-50" />
-          {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}
-          {slots.map((slot) => (
-            <SlotRow key={slot} slot={slot} days={days} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: slot })} />
-          ))}
+      {mode === "month" ? (
+        <MonthCalendar days={monthCalendarDays(baseDate)} week={schedule.week} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: "" })} />
+      ) : (
+        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+          <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
+            <div className="border-b border-r bg-slate-50" />
+            {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}
+            {slots.map((slot) => (
+              <SlotRow key={slot} slot={slot} days={days} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: slot })} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       {dialog ? <NewOpportunityDialog state={dialog} data={data} canViewAll={canViewAll} onClose={() => setDialog(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); toast.success("Oportunidad creada en agenda"); setDialog(null); }} /> : null}
     </div>
   );
@@ -119,28 +123,98 @@ function AgendaCard({ item }) {
   );
 }
 
+function MonthCalendar({ days, week, items, canCreate, nowTime, onCell }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold text-slate-700">
+        {dayLabels.map((label) => (
+          <div key={label} className="border-r border-slate-200 py-2 last:border-r-0">{label}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map((day) => {
+          const dayItems = items.filter((item) => item.agendaDate === day.date);
+          const past = new Date(`${day.date}T23:59:59`).getTime() < nowTime;
+          const inactive = hasActiveConfig(week) && !week?.[day.key]?.active;
+          return (
+            <div
+              key={day.date}
+              className={`group relative min-h-32 border-b border-r p-2 text-left last:border-r-0 ${day.outside || inactive ? "bg-slate-50 text-slate-400" : past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!inactive && !past && !dayItems.length && canCreate ? "cursor-pointer" : ""}`}
+              onClick={() => !inactive && !past && !dayItems.length && canCreate && onCell(day)}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className={`flex size-7 items-center justify-center rounded-full text-xs font-bold ${day.today ? "bg-violet-700 text-white" : ""}`}>{day.day}</span>
+                <span className="text-[10px] font-bold uppercase text-slate-400">{day.label}</span>
+              </div>
+              <div className="relative z-10 space-y-1">
+                {dayItems.map((item) => <AgendaCard key={item.id} item={item} />)}
+              </div>
+              {!dayItems.length && !inactive && !past && canCreate ? <span className="hidden rounded bg-white px-3 py-2 text-xs font-bold shadow group-hover:inline-block">Nueva Oportunidad</span> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
   const [form, setForm] = useState({ clienteId: "", origenId: "", suborigenId: "", asignadoA: canViewAll ? "" : String(data.currentUser?.id || ""), detalle: "", fechaAgenda: state.date, horaAgenda: state.time });
+  const [activities, setActivities] = useState([]);
+  const [agendas, setAgendas] = useState(state.date && state.time ? [{ fechaAgenda: state.date, horaAgenda: state.time }] : []);
   const clientOptions = data.options.clients.map((item) => ({ value: item.id, label: item.nombre }));
   const originOptions = data.options.origins.map((item) => ({ value: item.id, label: item.name }));
   const suboriginOptions = data.options.suborigins.filter((item) => !form.origenId || Number(item.origenId) === Number(form.origenId)).map((item) => ({ value: item.id, label: item.name }));
   const userOptions = [{ value: "", label: "Sin asignar" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
+  const canSubmit = Boolean(form.clienteId && form.origenId && activities.length && agendas.length);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl bg-white text-slate-950">
-        <DialogHeader><DialogTitle>Nueva oportunidad</DialogTitle></DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Cliente *"><SearchableSelect value={form.clienteId} options={clientOptions} placeholder="Buscar cliente" onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} /></Field>
-          <Field label="Origen *"><SearchableSelect value={form.origenId} options={originOptions} placeholder="Buscar origen" onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
-          <Field label="Suborigen"><SearchableSelect value={form.suborigenId} options={suboriginOptions} placeholder="Buscar suborigen" onChange={(value) => setForm((current) => ({ ...current, suborigenId: value }))} /></Field>
-          <Field label="Asignado a"><SearchableSelect disabled={!canViewAll} value={form.asignadoA} options={userOptions} onChange={(value) => setForm((current) => ({ ...current, asignadoA: value }))} /></Field>
-          <Field label="Fecha agenda *"><Input type="date" value={form.fechaAgenda} onChange={(e) => setForm((current) => ({ ...current, fechaAgenda: e.target.value }))} /></Field>
-          <Field label="Hora agenda *"><Input type="time" value={form.horaAgenda} onChange={(e) => setForm((current) => ({ ...current, horaAgenda: e.target.value }))} /></Field>
-          <div className="sm:col-span-2"><Field label="Detalle obligatorio"><Textarea value={form.detalle} onChange={(e) => setForm((current) => ({ ...current, detalle: e.target.value }))} /></Field></div>
+      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-y-auto bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-slate-200 p-5">
+          <DialogTitle className="text-2xl font-bold text-violet-700">Nueva oportunidad</DialogTitle>
+          <p className="text-sm text-slate-500">Completa los datos, actividades y agenda de la oportunidad.</p>
+        </DialogHeader>
+        <div className="grid gap-4 p-5 lg:grid-cols-[280px_1fr]">
+          <div className="space-y-4">
+            <section className="rounded-lg border border-violet-200 bg-violet-50/40 p-4">
+              <h3 className="mb-3 text-sm font-bold text-violet-700">Informacion general</h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+                <Field label="Cliente *"><SearchableSelect value={form.clienteId} options={clientOptions} placeholder="Buscar cliente" onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} /></Field>
+                <Field label="Creado por"><Input disabled value={data.currentUser?.fullname || "Usuario"} /></Field>
+                <Field label="Origen *"><SearchableSelect value={form.origenId} options={originOptions} placeholder="Buscar origen" onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
+                <Field label="Suborigen"><SearchableSelect value={form.suborigenId} options={suboriginOptions} placeholder="Buscar suborigen" onChange={(value) => setForm((current) => ({ ...current, suborigenId: value }))} /></Field>
+                <Field label="Etapa actual"><Input disabled value="Nuevo" className="bg-violet-100 font-bold text-violet-700" /></Field>
+                <Field label="Asignado a"><SearchableSelect disabled={!canViewAll} value={form.asignadoA} options={userOptions} onChange={(value) => setForm((current) => ({ ...current, asignadoA: value }))} /></Field>
+              </div>
+            </section>
+            <section className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <h3 className="mb-3 text-sm font-bold text-blue-800">Nueva actividad</h3>
+              <Textarea className="min-h-28 bg-white" value={form.detalle} placeholder="Describe que accion se realizo..." onChange={(e) => setForm((current) => ({ ...current, detalle: e.target.value }))} />
+              <Button type="button" className="mt-3 w-full bg-slate-950 text-white hover:bg-slate-800" disabled={!form.detalle.trim()} onClick={() => { setActivities((current) => [...current, { detalle: form.detalle.trim() }]); setForm((current) => ({ ...current, detalle: "" })); }}><Plus className="size-4" />Agregar actividad</Button>
+            </section>
+            <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <h3 className="mb-3 text-sm font-bold text-emerald-800">Nueva agenda</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Fecha agenda"><Input type="date" value={form.fechaAgenda} onChange={(e) => setForm((current) => ({ ...current, fechaAgenda: e.target.value }))} /></Field>
+                <Field label="Hora agenda"><Input type="time" value={form.horaAgenda} onChange={(e) => setForm((current) => ({ ...current, horaAgenda: e.target.value }))} /></Field>
+              </div>
+              <Button type="button" className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={!form.fechaAgenda || !form.horaAgenda} onClick={() => setAgendas((current) => [...current, { fechaAgenda: form.fechaAgenda, horaAgenda: form.horaAgenda }])}><Plus className="size-4" />Agregar agenda</Button>
+            </section>
+          </div>
+          <div className="space-y-4">
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="mb-3 font-bold">Actividades ({activities.length})</h3>
+              <div className="space-y-2">{activities.length ? activities.map((item, index) => <div key={index} className="rounded-md border bg-slate-50 p-3 text-sm">{item.detalle}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay actividades registradas</div>}</div>
+            </section>
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="mb-3 font-bold">Agendas ({agendas.length})</h3>
+              <div className="space-y-2">{agendas.length ? agendas.map((item, index) => <div key={index} className="rounded-md border bg-emerald-50 p-3 text-sm font-medium">{item.fechaAgenda} - {item.horaAgenda}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay agendas registradas</div>}</div>
+            </section>
+          </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 border-t bg-white p-4">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button disabled={!form.clienteId || !form.origenId || !form.fechaAgenda || !form.horaAgenda || !form.detalle} onClick={() => onSubmit({ clienteId: form.clienteId, origenId: form.origenId, suborigenId: form.suborigenId, asignadoA: form.asignadoA, activities: [{ detalle: form.detalle }], detail: { fechaAgenda: form.fechaAgenda, horaAgenda: form.horaAgenda } })}>Crear oportunidad</Button>
+          <Button disabled={!canSubmit} onClick={() => onSubmit({ clienteId: form.clienteId, origenId: form.origenId, suborigenId: form.suborigenId, asignadoA: form.asignadoA, activities, detail: agendas.at(-1) })}>Crear oportunidad</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -150,16 +224,25 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
 function Field({ label, children }) { return <div className="min-w-40 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
 function weekDays(date) { const start = addDays(date, -date.getDay() + 1); return Array.from({ length: 7 }, (_, i) => dayObj(addDays(start, i))); }
 function monthDays(date) { const start = new Date(date.getFullYear(), date.getMonth(), 1); const end = new Date(date.getFullYear(), date.getMonth() + 1, 0); return Array.from({ length: end.getDate() }, (_, i) => dayObj(addDays(start, i))); }
+function monthCalendarDays(date) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1);
+  const start = addDays(first, -first.getDay());
+  const today = formatDate(new Date());
+  return Array.from({ length: 42 }, (_, index) => {
+    const current = addDays(start, index);
+    return { ...dayObj(current), outside: current.getMonth() !== date.getMonth(), today: formatDate(current) === today };
+  });
+}
 function dayObj(date) { return { date: formatDate(date), key: dayKeys[date.getDay()], label: dayLabels[date.getDay()], day: String(date.getDate()).padStart(2, "0") }; }
 function addDays(date, days) { const copy = new Date(date); copy.setDate(copy.getDate() + days); return copy; }
 function formatDate(date) { return date.toISOString().slice(0, 10); }
 function dateRangeLabel(days) { return days.length ? `${days[0].date} - ${days.at(-1).date}` : ""; }
 function filterActiveDays(days, week) {
-  const hasConfig = Object.values(week || {}).some((value) => value?.active);
-  if (!hasConfig) return days;
+  if (!hasActiveConfig(week)) return days;
   const activeDays = days.filter((day) => week?.[day.key]?.active);
   return activeDays.length ? activeDays : days;
 }
+function hasActiveConfig(week) { return Object.values(week || {}).some((value) => value?.active); }
 function timeSlots(week, step) {
   const active = Object.entries(week || {}).filter(([, value]) => value?.active);
   const start = active.map(([, value]) => value.start || "08:00").sort()[0] || "08:00";

@@ -184,7 +184,7 @@ export default function CarPricesPage({ userPermissions }) {
                   <td className="px-3 py-3 font-medium">{item.marcaName}</td>
                   <td className="px-3 py-3">{item.modeloName}</td>
                   <td className="px-3 py-3 font-semibold">{item.version}</td>
-                  <td className="px-3 py-3 font-bold text-emerald-700">{item.monedaSimbolo} {item.precioBase.toFixed(2)}</td>
+                  <td className="px-3 py-3 font-bold text-emerald-700">{formatMoney(item.monedaSimbolo, item.precioBase)}</td>
                   <td className="px-3 py-3"><StockBadge active={item.enStock} /></td>
                   <td className="px-3 py-3"><OfferBadge active={item.existe} /></td>
                   <td className="px-3 py-3">{item.enStock ? "Disponible" : `${item.tiempoEntregaDias} dias`}</td>
@@ -433,7 +433,7 @@ function OfferBadge({ active }) {
 
 function formatMoney(symbol, value) {
   if (value === null || value === undefined) return "-";
-  return `${symbol} ${Number(value).toFixed(2)}`;
+  return `${symbol} ${Number(value).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(value) {

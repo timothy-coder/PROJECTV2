@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
+  return `$${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function QuoteVehicleDiscountEditor({ quoteId, discountAmount, discountPercentage }) {
@@ -183,7 +183,7 @@ function ItemDialog({ dialog, options, onClose, onSubmit }) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[92svh] max-w-3xl overflow-y-auto bg-white text-slate-950">
         <DialogHeader>
           <DialogTitle>{item ? "Editar" : "Agregar"} {isGift ? "Regalo" : "Accesorio"}</DialogTitle>
         </DialogHeader>
@@ -218,7 +218,7 @@ function ItemDialog({ dialog, options, onClose, onSubmit }) {
             </div>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 border-t bg-white pt-3">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button className="bg-slate-950 text-white hover:bg-slate-800" disabled={!form.catalogId} onClick={() => onSubmit({ type: dialog.type, mode: item ? "update" : "create", itemId: item?.id, ...form })}>
             Guardar

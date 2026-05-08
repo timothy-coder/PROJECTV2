@@ -467,7 +467,7 @@ function ModelDialog({ state, brands, classes, onClose, onSubmit }) {
             <Field label="Clase">
               <SearchableSelect value={String(form.claseId)} options={classOptions} disabled={readonly} placeholder="Seleccionar clase" onChange={(value) => setForm((current) => ({ ...current, claseId: value }))} />
             </Field>
-            <Field label="Anios">
+            <Field label="Años">
               <Input value={form.anios} disabled={readonly} placeholder="Ej: 2022, 2023, 2024" onChange={(event) => setForm((current) => ({ ...current, anios: event.target.value }))} />
             </Field>
           </div>
@@ -738,15 +738,15 @@ function MaintenanceDialog({ state, data, onClose, onSubmit }) {
               </div>
             </div>
             <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
-              <p className="mb-3 text-sm font-bold text-violet-700">3. Rango de Anios</p>
+              <p className="mb-3 text-sm font-bold text-violet-700">3. Rango de Años</p>
               <label className="mb-3 flex items-center gap-3 rounded-lg border border-violet-200 bg-white/70 p-3">
                 <Switch checked={allYears} onCheckedChange={(checked) => setAllYears(Boolean(checked))} />
                 <span>
-                  <span className="block text-xs font-bold text-violet-700">Aplica a todos los anios</span>
+                  <span className="block text-xs font-bold text-violet-700">Aplica a todos los años</span>
                   <span className="block text-[11px] font-medium text-slate-500">Si esta activado, ignora los rangos especificos</span>
                 </span>
               </label>
-              <p className="mb-3 text-xs font-medium text-slate-500">Define los rangos de anios para aplicar este algoritmo:</p>
+              <p className="mb-3 text-xs font-medium text-slate-500">Define los rangos de años para aplicar este algoritmo:</p>
               <div className="space-y-3">
                 {ranges.map((range, index) => (
                   <YearRangeCard
@@ -806,7 +806,7 @@ function YearRangeCard({ range, index, disabled, canRemove, onChange, onAdd, onR
             onChange={(value) => onChange("fromOp", value)}
           />
         </CompactField>
-        <CompactField label="Anio">
+        <CompactField label="Año">
           <Input disabled value="Anio" className="h-8 bg-white text-center text-slate-500" />
         </CompactField>
         <CompactField label="Op">

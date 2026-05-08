@@ -58,7 +58,7 @@ export default function ReservationsPage() {
                   <td className="font-bold">{row.cliente}</td>
                   <td>{row.creadoPor}</td>
                   <td><StatusBadge estado={row.estado} /></td>
-                  <td><div className="text-xs">0% Completo<div className="mt-1 h-1.5 w-24 rounded-full bg-slate-200"><div className={`h-1.5 rounded-full ${row.estado === "firmado" ? "w-full bg-emerald-500" : "w-0"}`} /></div></div></td>
+                  <td><SignatureProgress estado={row.estado} /></td>
                   <td>{formatDate(row.createdAt)}</td>
                   <td className="text-right">
                     <Link className="mr-2 inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs font-medium hover:bg-slate-50" href={`/reservas/${row.id}`}><Eye className="size-4" />Ver</Link>
@@ -86,5 +86,16 @@ function LabelText({ children }) { return <span className="mb-1 block text-xs fo
 function StatusBadge({ estado }) {
   const tone = estado === "firmado" ? "bg-emerald-100 text-emerald-700" : estado === "observado" ? "bg-yellow-100 text-yellow-700" : estado === "enviado_firma" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700";
   return <span className={`rounded-full px-2 py-1 text-xs font-bold ${tone}`}>{estado}</span>;
+}
+function SignatureProgress({ estado }) {
+  const percent = estado === "firmado" ? 100 : 0;
+  return (
+    <div className="text-xs">
+      {percent}% Completo
+      <div className="mt-1 h-1.5 w-24 rounded-full bg-slate-200">
+        <div className="h-1.5 rounded-full bg-emerald-500 transition-all" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
 }
 function formatDate(value) { return value ? new Date(value).toLocaleDateString("es-PE") : "-"; }

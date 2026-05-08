@@ -47,9 +47,30 @@ export async function GET(_request, { params }) {
       [id]
     );
     const [vins] = detail ? await pool.query(
-      `SELECT vin, numerofactura, preciocompra, precioventa FROM ventas_historial_carros WHERE precio_id=? ORDER BY created_at DESC`,
-      [detail.precio_id]
+      `SELECT h.vin, h.numerofactura, h.preciocompra, h.precioventa
+       FROM ventas_historial_carros h
+       WHERE h.precio_id=?
+         AND (
+           h.vin=?
+           OR NOT EXISTS (
+             SELECT 1
+             FROM ventas_reserva_detalles rd
+             WHERE rd.vin=h.vin AND rd.reserva_id<>?
+           )
+         )
+       ORDER BY h.created_at DESC`,
+      [detail.precio_id, detail.vin || "", id]
     ) : [[]];
+    const [[vinReleaseRequest]] = detail?.vin ? await pool.query(
+      `SELECT s.*, sp.fullname AS solicitado_por_nombre, ap.fullname AS autorizado_por_nombre
+       FROM ventas_reservas_liberar_vin_solicitudes s
+       INNER JOIN administracion_usuarios sp ON sp.id=s.solicitado_por
+       LEFT JOIN administracion_usuarios ap ON ap.id=s.autorizado_por
+       WHERE s.vin=? AND s.estado='pendiente'
+       ORDER BY s.fecha_solicitud DESC
+       LIMIT 1`,
+      [detail.vin]
+    ) : [[null]];
     const [accessories] = detail ? await pool.query(
       `SELECT ca.*, ad.detalle, ad.numero_parte
        FROM ventas_cotizaciones_accesorios ca
@@ -67,7 +88,12 @@ export async function GET(_request, { params }) {
       [detail.cotizacion_id]
     ) : [[]];
     const [[salesBoss]] = await pool.query(
-      `SELECT u.fullname FROM administracion_usuarios u LEFT JOIN roles r ON r.id=u.role_id WHERE LOWER(COALESCE(r.name,'')) LIKE '%jefe%venta%' OR LOWER(COALESCE(u.fullname,'')) LIKE '%jefe%venta%' ORDER BY u.id ASC LIMIT 1`
+      `SELECT u.fullname
+       FROM administracion_usuarios u
+       LEFT JOIN configuracion_roles r ON r.id=u.role_id
+       WHERE LOWER(COALESCE(r.name,'')) LIKE '%jefe%venta%' OR LOWER(COALESCE(u.fullname,'')) LIKE '%jefe%venta%'
+       ORDER BY u.id ASC
+       LIMIT 1`
     );
     return NextResponse.json({
       currentUser: { id: user.id, canViewAll: viewAll },
@@ -148,6 +174,15 @@ export async function GET(_request, { params }) {
         total: Number(row.total || 0),
       })),
       salesBossName: salesBoss?.fullname || "",
+      vinReleaseRequest: vinReleaseRequest ? {
+        id: Number(vinReleaseRequest.id),
+        vin: vinReleaseRequest.vin,
+        estado: vinReleaseRequest.estado,
+        motivo: vinReleaseRequest.motivo || "",
+        solicitadoPor: Number(vinReleaseRequest.solicitado_por),
+        solicitadoPorNombre: vinReleaseRequest.solicitado_por_nombre || "",
+        fechaSolicitud: vinReleaseRequest.fecha_solicitud,
+      } : null,
     });
   } catch (error) {
     console.error("Error loading reservation:", error);
@@ -164,6 +199,67 @@ export async function PUT(request, { params }) {
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
     const body = await request.json();
     await connection.beginTransaction();
+    const [[reservationState]] = await connection.query(`SELECT estado FROM ventas_reservas WHERE id=? LIMIT 1`, [id]);
+    if (!reservationState) {
+      await connection.rollback();
+      return NextResponse.json({ message: "Reserva no encontrada." }, { status: 404 });
+    }
+    if (body.vinReleaseAction) {
+      const action = body.vinReleaseAction;
+      if (action === "request") {
+        const [[detail]] = await connection.query(`SELECT vin FROM ventas_reserva_detalles WHERE reserva_id=? LIMIT 1`, [id]);
+        if (!detail?.vin) {
+          await connection.rollback();
+          return NextResponse.json({ message: "La reserva no tiene VIN asignado." }, { status: 400 });
+        }
+        const [[pending]] = await connection.query(`SELECT id FROM ventas_reservas_liberar_vin_solicitudes WHERE vin=? AND estado='pendiente' LIMIT 1`, [detail.vin]);
+        if (!pending) {
+          await connection.query(
+            `INSERT INTO ventas_reservas_liberar_vin_solicitudes (vin, solicitado_por, motivo) VALUES (?, ?, ?)`,
+            [detail.vin, user.id, body.motivo || "Solicitud para liberar VIN de reserva firmada"]
+          );
+        }
+      } else if (action === "cancel") {
+        await connection.query(
+          `UPDATE ventas_reservas_liberar_vin_solicitudes
+           SET estado='cancelado', fecha_resolucion=NOW(), comentario_resolucion=?
+           WHERE id=? AND solicitado_por=? AND estado='pendiente'`,
+          [body.comentario || "Cancelado por solicitante", body.requestId, user.id]
+        );
+      } else if (["approve", "reject"].includes(action)) {
+        if (!canSeeAll(user)) {
+          await connection.rollback();
+          return NextResponse.json({ message: "No tienes permiso para resolver la solicitud." }, { status: 403 });
+        }
+        const [[requestRow]] = await connection.query(
+          `SELECT id, vin FROM ventas_reservas_liberar_vin_solicitudes WHERE id=? AND estado='pendiente' LIMIT 1`,
+          [body.requestId]
+        );
+        if (!requestRow) {
+          await connection.rollback();
+          return NextResponse.json({ message: "Solicitud no encontrada." }, { status: 404 });
+        }
+        const nextState = action === "approve" ? "aprobado" : "rechazado";
+        await connection.query(
+          `UPDATE ventas_reservas_liberar_vin_solicitudes
+           SET estado=?, autorizado_por=?, fecha_resolucion=NOW(), comentario_resolucion=?
+           WHERE id=?`,
+          [nextState, user.id, body.comentario || null, requestRow.id]
+        );
+        if (action === "approve") {
+          await connection.query(
+            `UPDATE ventas_reserva_detalles SET vin=NULL, vin_existe=0 WHERE reserva_id=? AND vin=?`,
+            [id, requestRow.vin]
+          );
+        }
+      }
+      await connection.commit();
+      return NextResponse.json({ ok: true });
+    }
+    if (reservationState.estado === "firmado" && (body.detail || body.status)) {
+      await connection.rollback();
+      return NextResponse.json({ message: "La reserva firmada no se puede modificar." }, { status: 409 });
+    }
     if (body.status) {
       const allowed = canSeeAll(user) ? ["observado", "firmado", "enviado_firma"] : ["subsanado", "enviado_firma"];
       if (!allowed.includes(body.status)) return NextResponse.json({ message: "No tienes permiso para ese estado." }, { status: 403 });

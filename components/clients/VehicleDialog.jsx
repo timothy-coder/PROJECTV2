@@ -131,7 +131,7 @@ function VehicleDialogContent({ mode, vehicle, client, options, onClose, onSubmi
               />
               {clase ? <p className="text-xs font-medium text-slate-500">Clase: {clase.name}</p> : null}
             </div>
-            <Field label="Anio" value={form.anio} onChange={(value) => updateField("anio", value)} />
+            <Field label="Año" value={form.anio} onChange={(value) => updateField("anio", value)} />
             <Field label="Color" value={form.color} onChange={(value) => updateField("color", value)} />
             <Field label="Kilometraje" value={form.kilometraje} onChange={(value) => updateField("kilometraje", value)} />
             <Field type="date" label="Ultima visita" value={form.fechaUltimaVisita} onChange={(value) => updateField("fechaUltimaVisita", value)} />

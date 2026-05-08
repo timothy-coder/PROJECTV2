@@ -74,6 +74,20 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
+  function updateDocumentType(value) {
+    setForm((current) => ({
+      ...current,
+      tipoIdentificacion: value,
+      identificacionFiscal: normalizeDocument(current.identificacionFiscal, value),
+      nombreComercial: value === "RUC" ? current.nombreComercial : "",
+    }));
+  }
+  function updateDocument(value) {
+    setForm((current) => ({
+      ...current,
+      identificacionFiscal: normalizeDocument(value, current.tipoIdentificacion),
+    }));
+  }
   const departamentoOptions = (options?.departamentos || []).map((item) => ({
     value: item.id,
     label: item.nombre,
@@ -90,6 +104,11 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
 
     if (!form.nombre.trim() && !form.nombreComercial.trim()) {
       setError("Ingresa nombre o nombre comercial.");
+      return;
+    }
+    const documentError = validateDocument(form.tipoIdentificacion, form.identificacionFiscal);
+    if (documentError) {
+      setError(documentError);
       return;
     }
 
@@ -130,10 +149,17 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
                   options={identificationOptions}
                   placeholder="Selecciona tipo"
                   searchPlaceholder="Buscar tipo..."
-                  onChange={(value) => updateField("tipoIdentificacion", value)}
+                  onChange={updateDocumentType}
                 />
               </div>
-              <Field label="Numero de documento" value={form.identificacionFiscal} onChange={(value) => updateField("identificacionFiscal", value)} />
+              <Field
+                label="Numero de documento"
+                value={form.identificacionFiscal}
+                onChange={updateDocument}
+                inputMode={form.tipoIdentificacion === "PASAPORTE" ? "text" : "numeric"}
+                maxLength={documentMaxLength(form.tipoIdentificacion)}
+                placeholder={documentPlaceholder(form.tipoIdentificacion)}
+              />
               {form.tipoIdentificacion === "RUC" ? (
                 <Field label="Nombre comercial" value={form.nombreComercial} onChange={(value) => updateField("nombreComercial", value)} />
               ) : null}
@@ -205,11 +231,45 @@ export function ClientDialog({ open, mode, client, options, onClose, onSubmit })
   );
 }
 
-function Field({ label, value, onChange, type = "text" }) {
+function Field({ label, value, onChange, type = "text", inputMode, maxLength, placeholder }) {
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input type={type} value={value || ""} onChange={(event) => onChange(event.target.value)} className="h-9 bg-white" />
+      <Input
+        type={type}
+        value={value || ""}
+        inputMode={inputMode}
+        maxLength={maxLength || undefined}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 bg-white"
+      />
     </div>
   );
+}
+
+function documentMaxLength(type) {
+  if (type === "DNI") return 9;
+  if (type === "RUC") return 11;
+  return undefined;
+}
+
+function documentPlaceholder(type) {
+  if (type === "DNI") return "Max. 9 digitos";
+  if (type === "RUC") return "11 digitos";
+  return "Numero de documento";
+}
+
+function normalizeDocument(value, type) {
+  const clean = type === "PASAPORTE" ? String(value || "") : String(value || "").replace(/\D/g, "");
+  const max = documentMaxLength(type);
+  return max ? clean.slice(0, max) : clean;
+}
+
+function validateDocument(type, value) {
+  const clean = String(value || "").trim();
+  if (!clean) return "";
+  if (type === "DNI" && clean.length !== 9) return "El DNI debe tener 9 digitos.";
+  if (type === "RUC" && clean.length !== 11) return "El RUC debe tener 11 digitos.";
+  return "";
 }

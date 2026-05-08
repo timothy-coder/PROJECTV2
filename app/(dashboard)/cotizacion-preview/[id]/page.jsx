@@ -1,13 +1,14 @@
 ﻿import Link from "next/link";
-import { ArrowRight, Download, Eye, UserRound, MapPin, Check, CalendarDays, Plus, Pencil, Trash2 } from "lucide-react";
+import { ArrowRight, UserRound, MapPin, Check, CalendarDays, Plus, Pencil, Trash2 } from "lucide-react";
 
 import { pool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 import { hasPerm } from "@/lib/permissions";
 import { QuotePreviewItems, QuoteVehicleDiscountEditor } from "@/components/quotes/QuotePreviewItems";
+import { QuotePreviewActions } from "@/components/quotes/QuotePreviewActions";
 
 function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`;
+  return `$${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export default async function Page({ params }) {
@@ -79,10 +80,10 @@ export default async function Page({ params }) {
     const grandTotal = vehicleFinal + accessoriesTotal + giftsTotal;
     return (
       <main className="min-h-full bg-slate-50 p-4 text-slate-950">
-        <div className="mx-auto max-w-6xl space-y-5">
+        <div id="quote-preview-root" className="mx-auto max-w-6xl space-y-5">
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold">Resumen de CotizaciÃ³n</h1>
+              <h1 className="text-3xl font-bold">Resumen de CotizaciÃn</h1>
               <p className="text-sm text-slate-600">Q-{String(quote.id).padStart(6, "0")}</p>
             </div>
             <div className="flex gap-2">
@@ -168,7 +169,7 @@ export default async function Page({ params }) {
               <p className="text-xs font-bold text-slate-600">GRAN TOTAL (CON IGV Y DESC.)</p>
               <p className="mt-3 text-5xl font-bold text-emerald-700">{money(grandTotal)}</p>
               <div className="mt-3 space-y-1 text-xs text-slate-500">
-                <p>Incluye vehÃƒÂ­culo, accesorios y regalos</p>
+                <p>Incluye vehiculo, accesorios y regalos</p>
                 <p>Con todos los descuentos aplicados</p>
                 <p>IGV incluido en el total</p>
               </div>
@@ -188,10 +189,11 @@ export default async function Page({ params }) {
                 </div>
               </div>
             </div>
-            <div className="mt-5 flex justify-center gap-3">
-              <button className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white"><Download className="size-4" />Descargar PDF</button>
-              {publicLink ? <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white" href={`/cotizacion/${publicLink.token}`}><Eye className="size-4" />Ver Enlace PÃºblico</Link> : null}
-            </div>
+            <QuotePreviewActions
+              publicToken={publicLink?.token || ""}
+              fileName={`cotizacion-Q-${String(quote.id).padStart(6, "0")}-${quote.cliente || "cliente"}`}
+              advisorName={user.fullname || quote.creado || "Asesor"}
+            />
           </section>
         </div>
       </main>
