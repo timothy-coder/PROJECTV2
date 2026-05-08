@@ -142,7 +142,7 @@ function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, o
               <DialogDescription>Completa los datos, actividades y agenda de la oportunidad.</DialogDescription>
             </DialogHeader>
           </div>
-          <div className="grid gap-4 p-5 lg:grid-cols-[1fr_360px]">
+          <div className="grid p-5">
             <div className="space-y-4">
               <section className="rounded-lg border border-violet-200 bg-violet-50/30 p-4">
                 <h3 className="mb-3 font-bold text-violet-700">Informacion general</h3>
@@ -159,6 +159,10 @@ function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, o
                 <h3 className="mb-3 font-bold text-blue-800">Nueva actividad</h3>
                 <Textarea disabled={readOnly} value={form.activityText} onChange={(event) => setForm((current) => ({ ...current, activityText: event.target.value }))} placeholder="Describe que accion se realizo..." className="min-h-28 bg-white" />
                 {!readOnly ? <Button type="button" className="mt-3 w-full" onClick={() => setForm((current) => ({ ...current, activities: current.activityText ? [...current.activities, { detalle: current.activityText }] : current.activities, activityText: "" }))}><Plus className="size-4" />Agregar actividad</Button> : null}
+              <HistoryBox title={`Actividades (${existingActivities.length + form.activities.length})`} empty="No hay actividades">
+                {existingActivities.map((activity) => <HistoryItem key={`old-${activity.id}`} title={activity.detalle} subtitle={`${activity.createdByNombre || ""} ${formatShortDate(activity.createdAt)}`} />)}
+                {form.activities.map((activity, index) => <HistoryItem key={`new-${index}`} title={activity.detalle} subtitle="Nueva actividad" />)}
+              </HistoryBox>
               </section>
               <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <h3 className="mb-3 font-bold text-emerald-800">Nueva agenda</h3>
@@ -167,17 +171,12 @@ function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, o
                   <Field label="Hora agenda"><Input disabled={readOnly} type="time" value={form.horaAgenda} onChange={(event) => setForm((current) => ({ ...current, horaAgenda: event.target.value }))} /></Field>
                 </div>
                 {state.item && !readOnly ? <p className="mt-2 text-xs font-semibold text-emerald-700">Si ya existe una agenda previa, al guardar se marcara como Reprogramado si esa etapa existe.</p> : null}
-              </section>
-            </div>
-            <aside className="space-y-4">
-              <HistoryBox title={`Actividades (${existingActivities.length + form.activities.length})`} empty="No hay actividades">
-                {existingActivities.map((activity) => <HistoryItem key={`old-${activity.id}`} title={activity.detalle} subtitle={`${activity.createdByNombre || ""} ${formatShortDate(activity.createdAt)}`} />)}
-                {form.activities.map((activity, index) => <HistoryItem key={`new-${index}`} title={activity.detalle} subtitle="Nueva actividad" />)}
-              </HistoryBox>
               <HistoryBox title={`Agendas (${existingDetails.length})`} empty="No hay agendas registradas">
                 {existingDetails.map((detail) => <HistoryItem key={detail.id} title={`${detail.fechaAgenda || "-"} ${detail.horaAgenda || ""}`} subtitle={formatShortDate(detail.createdAt)} />)}
               </HistoryBox>
-            </aside>
+              </section>
+            </div>
+            
           </div>
           <DialogFooter className="sticky bottom-0 border-t border-slate-200 bg-white px-5 py-4">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
