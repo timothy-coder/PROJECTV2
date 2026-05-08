@@ -29,7 +29,7 @@ export default function LoginCard() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleGoToPortal = () => router.push("/portal");
+  const handleGoToPortal = () => router.push("/home");
 
   const handleLogout = async () => {
     setError("");

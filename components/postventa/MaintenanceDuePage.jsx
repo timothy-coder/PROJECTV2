@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, RefreshCw, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { PostventaOpportunityDialog } from "@/components/postventa/PostventaOpportunityDialog";
@@ -109,7 +110,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
           </table>
         </div>
       </section>
-      {dialogVehicle ? <PostventaOpportunityDialog open vehicle={dialogVehicle} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} onClose={() => setDialogVehicle(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); setDialogVehicle(null); }} /> : null}
+      {dialogVehicle ? <PostventaOpportunityDialog open vehicle={dialogVehicle} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} onClose={() => setDialogVehicle(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); toast.success("Oportunidad de PostVenta creada"); setDialogVehicle(null); }} /> : null}
     </div>
   );
 }

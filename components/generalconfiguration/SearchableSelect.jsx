@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 
@@ -17,6 +17,8 @@ export function SearchableSelect({
   onChange,
 }) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState(null);
+  const triggerRef = useRef(null);
   const selected = useMemo(
     () => options.find((option) => String(option.value) === String(value)),
     [options, value]
@@ -25,10 +27,30 @@ export function SearchableSelect({
   return (
     <div className="relative w-full">
       <Button
+        ref={triggerRef}
         type="button"
         variant="outline"
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          const rect = triggerRef.current?.getBoundingClientRect();
+          if (rect) {
+            const gap = 4;
+            const desiredHeight = 300;
+            const bottomSpace = window.innerHeight - rect.bottom - gap;
+            const topSpace = rect.top - gap;
+            const openUp = bottomSpace < 220 && topSpace > bottomSpace;
+            const maxHeight = Math.max(180, Math.min(desiredHeight, openUp ? topSpace : bottomSpace));
+            setPosition({
+              top: openUp ? rect.top - maxHeight - gap : rect.bottom + gap,
+              left: rect.left,
+              width: rect.width,
+              maxHeight,
+            });
+          } else {
+            setPosition(null);
+          }
+          setOpen((current) => !current);
+        }}
         className="h-9 w-full justify-between bg-white px-3 text-left text-sm font-medium text-slate-950"
       >
         <span className={cn("truncate", !selected && "text-slate-500")}>
@@ -45,7 +67,10 @@ export function SearchableSelect({
             className="fixed inset-0 z-[80] cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute z-[90] mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+          <div
+            className="fixed z-[90] max-h-[min(320px,calc(100svh-1rem))] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg"
+            style={position ? { top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight } : undefined}
+          >
             <Command className="bg-white">
               <div className="flex h-9 items-center gap-2 border-b border-slate-200 px-3">
                 <Search className="size-4 text-slate-400" />

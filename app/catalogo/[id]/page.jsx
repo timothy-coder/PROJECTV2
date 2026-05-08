@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { FileText, Printer } from "lucide-react";
+import { FileText } from "lucide-react";
 
+import { CatalogPrintButton } from "@/components/catalog/CatalogPrintButton";
 import { pool } from "@/lib/db";
 
 export default async function Page({ params }) {
@@ -35,7 +36,7 @@ export default async function Page({ params }) {
       <div className="mx-auto max-w-4xl rounded-xl bg-white p-6 shadow-sm print:shadow-none">
         <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-4 print:hidden">
           <div className="flex items-center gap-2 text-violet-700"><FileText className="size-5" /><span className="font-bold">Ficha tecnica</span></div>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-md bg-violet-700 px-3 py-2 text-sm font-bold text-white"><Printer className="size-4" />Descargar PDF</button>
+          <CatalogPrintButton />
         </div>
         <header contentEditable suppressContentEditableWarning className="mb-6 rounded-lg border border-dashed border-violet-200 p-4 print:border-0">
           <p className="text-sm font-bold uppercase tracking-wide text-violet-700">Ficha tecnica vehicular</p>

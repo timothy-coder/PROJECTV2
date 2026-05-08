@@ -65,7 +65,8 @@ export async function GET(request) {
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
               e.nombre AS etapa_nombre, e.color AS etapa_color,
               au.fullname AS asignado_nombre, cu.fullname AS creado_nombre,
-              d.fecha_agenda, d.hora_agenda, d.created_at AS detalle_created_at
+              d.fecha_agenda, d.hora_agenda, d.created_at AS detalle_created_at,
+              a.detalle AS ultimo_detalle
        FROM ventas_oportunidades o
        INNER JOIN administracion_clientes c ON c.id=o.cliente_id
        INNER JOIN ventas_etapasconversion e ON e.id=o.etapasconversion_id
@@ -78,6 +79,13 @@ export async function GET(request) {
            SELECT oportunidad_padre_id, MAX(id) AS max_id FROM ventas_oportunidades_detalles GROUP BY oportunidad_padre_id
          ) x ON x.max_id=od.id
        ) d ON d.oportunidad_padre_id=o.id
+       LEFT JOIN (
+         SELECT act.*
+         FROM ventas_oportunidades_actividades act
+         INNER JOIN (
+           SELECT oportunidad_id, MAX(id) AS max_id FROM ventas_oportunidades_actividades GROUP BY oportunidad_id
+         ) ax ON ax.max_id=act.id
+       ) a ON a.oportunidad_id=o.id
        ${canAll ? "" : "WHERE o.created_by=? OR o.asignado_a=?"}
        ORDER BY COALESCE(d.fecha_agenda, o.created_at) ASC, COALESCE(d.hora_agenda, '00:00:00') ASC`,
       canAll ? [] : [user.id, user.id]
@@ -120,6 +128,7 @@ export async function GET(request) {
           createdBy: row.created_by,
           agendaDate,
           agendaTime,
+          detail: row.ultimo_detalle || "",
           timeState: timeState ? { nombre: timeState.nombre, color: timeState.color_hexadecimal, descripcion: timeState.descripcion || "" } : null,
         };
       }),

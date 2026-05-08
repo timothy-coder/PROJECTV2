@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight, Eye, Plus, RefreshCw, Search } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { useSalesAgenda } from "@/hooks/salesagenda/useSalesAgenda";
 import { hasPerm } from "@/lib/permissions";
 
 const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const dayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 export default function SalesAgendaPage({ userPermissions }) {
   const data = useSalesAgenda();
@@ -26,7 +27,10 @@ export default function SalesAgendaPage({ userPermissions }) {
   const [dialog, setDialog] = useState(null);
   const centerId = filters.centerId || (data.centers[0]?.id ? String(data.centers[0].id) : "");
   const schedule = data.schedules.find((item) => String(item.centroId) === String(centerId)) || data.schedules[0] || { slotMinutes: 30, week: {} };
-  const days = mode === "month" ? monthDays(baseDate) : weekDays(baseDate);
+  const days = useMemo(
+    () => filterActiveDays(mode === "month" ? monthDays(baseDate) : weekDays(baseDate), schedule.week),
+    [baseDate, mode, schedule.week]
+  );
   const slots = timeSlots(schedule.week, schedule.slotMinutes || 30);
   const filteredItems = useMemo(() => data.items.filter((item) => {
     const matchKind = filters.kind === "all" || item.kind === filters.kind;
@@ -71,7 +75,7 @@ export default function SalesAgendaPage({ userPermissions }) {
           ))}
         </div>
       </div>
-      {dialog ? <NewOpportunityDialog state={dialog} data={data} canViewAll={canViewAll} onClose={() => setDialog(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); setDialog(null); }} /> : null}
+      {dialog ? <NewOpportunityDialog state={dialog} data={data} canViewAll={canViewAll} onClose={() => setDialog(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); toast.success("Oportunidad creada en agenda"); setDialog(null); }} /> : null}
     </div>
   );
 }
@@ -82,12 +86,14 @@ function SlotRow({ slot, days, items, canCreate, nowTime, onCell }) {
       <div className="border-b border-r bg-slate-50 px-2 py-3 text-xs">{slot}</div>
       {days.map((day) => {
         const past = new Date(`${day.date}T${slot}`).getTime() < nowTime;
-        const cellItems = items.filter((item) => item.agendaDate === day.date && item.agendaTime === slot);
+        const cellItems = items.filter((item) => item.agendaDate === day.date && String(item.agendaTime || "").slice(0, 5) === slot);
         return (
-          <button key={`${day.date}-${slot}`} disabled={past} className={`min-h-16 border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-400" : "bg-white hover:bg-blue-50"}`} onClick={() => !cellItems.length && canCreate && onCell(day)}>
-            {cellItems.map((item) => <AgendaCard key={item.id} item={item} />)}
+          <div key={`${day.date}-${slot}`} className={`group relative min-h-16 border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!past && !cellItems.length && canCreate ? "cursor-pointer" : ""}`} onClick={() => !past && !cellItems.length && canCreate && onCell(day)}>
+            <div className="relative z-10 space-y-1">
+              {cellItems.map((item) => <AgendaCard key={item.id} item={item} />)}
+            </div>
             {!cellItems.length && !past && canCreate ? <span className="hidden rounded bg-white px-3 py-2 text-xs font-bold shadow group-hover:block">Nueva Oportunidad</span> : null}
-          </button>
+          </div>
         );
       })}
     </>
@@ -96,7 +102,21 @@ function SlotRow({ slot, days, items, canCreate, nowTime, onCell }) {
 
 function AgendaCard({ item }) {
   const href = item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
-  return <div className="mb-1 rounded border-l-4 bg-white p-2 text-xs shadow-sm" style={{ borderLeftColor: item.etapaColor, backgroundColor: `${item.etapaColor}18` }} onClick={(event) => { event.stopPropagation(); window.location.href = href; }}><div className="flex justify-between gap-1"><b>{item.code}</b><span>{item.kind === "lead" ? "LD" : "OP"}</span></div><p>{item.clienteNombre}</p><p className="text-[11px]">{item.etapaNombre}</p><p className="font-semibold text-blue-700">{item.asignadoNombre}</p></div>;
+  return (
+    <div
+      className="relative z-10 mb-1 rounded border bg-white p-1.5 text-left text-[11px] leading-tight shadow-sm"
+      style={{ borderLeft: `4px solid ${item.etapaColor}`, backgroundColor: `${item.etapaColor}18` }}
+      onClick={(event) => { event.stopPropagation(); window.location.href = href; }}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <b className="text-slate-950">{item.code}</b>
+        <span className="rounded bg-white/80 px-1 text-[10px] font-bold text-slate-900">{item.kind === "lead" ? "LD" : "OP"}</span>
+      </div>
+      <p className="mt-0.5 truncate font-semibold text-slate-900">{item.clienteNombre}</p>
+      <p className="mt-1 truncate text-[10px] font-bold text-blue-700">{item.asignadoNombre}</p>
+      {item.detail ? <p className="mt-1 line-clamp-2 italic text-red-700">{item.detail}</p> : null}
+    </div>
+  );
 }
 
 function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
@@ -130,10 +150,16 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
 function Field({ label, children }) { return <div className="min-w-40 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
 function weekDays(date) { const start = addDays(date, -date.getDay() + 1); return Array.from({ length: 7 }, (_, i) => dayObj(addDays(start, i))); }
 function monthDays(date) { const start = new Date(date.getFullYear(), date.getMonth(), 1); const end = new Date(date.getFullYear(), date.getMonth() + 1, 0); return Array.from({ length: end.getDate() }, (_, i) => dayObj(addDays(start, i))); }
-function dayObj(date) { return { date: formatDate(date), label: dayLabels[date.getDay()], day: String(date.getDate()).padStart(2, "0") }; }
+function dayObj(date) { return { date: formatDate(date), key: dayKeys[date.getDay()], label: dayLabels[date.getDay()], day: String(date.getDate()).padStart(2, "0") }; }
 function addDays(date, days) { const copy = new Date(date); copy.setDate(copy.getDate() + days); return copy; }
 function formatDate(date) { return date.toISOString().slice(0, 10); }
 function dateRangeLabel(days) { return days.length ? `${days[0].date} - ${days.at(-1).date}` : ""; }
+function filterActiveDays(days, week) {
+  const hasConfig = Object.values(week || {}).some((value) => value?.active);
+  if (!hasConfig) return days;
+  const activeDays = days.filter((day) => week?.[day.key]?.active);
+  return activeDays.length ? activeDays : days;
+}
 function timeSlots(week, step) {
   const active = Object.entries(week || {}).filter(([, value]) => value?.active);
   const start = active.map(([, value]) => value.start || "08:00").sort()[0] || "08:00";

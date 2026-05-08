@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { BookOpen, ChevronDown, Download, Edit3, ExternalLink, Layers, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -64,8 +65,10 @@ export default function CatalogPage({ userPermissions }) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
       const result = await data.importRows(rows);
       setMessage(`Importados ${result.imported} specs.`);
+      toast.success("Catalogo importado", { description: `Se importaron ${result.imported} especificaciones.` });
     } catch (error) {
       setMessage(error.message || "No se pudo importar el catalogo.");
+      toast.error("No se pudo importar", { description: error.message || "Revisa el formato del archivo." });
     } finally {
       event.target.value = "";
     }
@@ -117,7 +120,7 @@ export default function CatalogPage({ userPermissions }) {
                     <Button size="sm" variant="outline" onClick={() => window.open(`/catalogo/${price.id}`, "_blank", "noopener,noreferrer")}><ExternalLink className="size-4" />Ficha tecnica</Button>
                     {canCreate ? <Button size="sm" onClick={() => setGroupDialog({ open: true, price, item: null })}><Plus className="size-4" />Nuevo Grupo</Button> : null}
                   </div>
-                  {price.groups.map((group) => <GroupCard key={group.id} group={group} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} onEditGroup={() => setGroupDialog({ open: true, price, item: group })} onDeleteGroup={() => data.deleteGroup(group.id)} onNewItem={() => setItemDialog({ open: true, group, item: null })} onEditItem={(item) => setItemDialog({ open: true, group, item })} onDeleteItem={(item) => data.deleteItem(item.id)} />)}
+                  {price.groups.map((group) => <GroupCard key={group.id} group={group} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} onEditGroup={() => setGroupDialog({ open: true, price, item: group })} onDeleteGroup={async () => { await data.deleteGroup(group.id); toast.success("Grupo eliminado"); }} onNewItem={() => setItemDialog({ open: true, group, item: null })} onEditItem={(item) => setItemDialog({ open: true, group, item })} onDeleteItem={async (item) => { await data.deleteItem(item.id); toast.success("Spec eliminada"); }} />)}
                   {!price.groups.length ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Sin grupos de especificaciones.</p> : null}
                 </div>
               ) : null}
@@ -125,8 +128,8 @@ export default function CatalogPage({ userPermissions }) {
           );
         })}
       </section>
-      {groupDialog.open ? <GroupDialog state={groupDialog} onClose={() => setGroupDialog({ open: false, price: null, item: null })} onSubmit={async (payload) => { if (groupDialog.item) await data.updateGroup(groupDialog.item.id, payload); else await data.createGroup(payload); setGroupDialog({ open: false, price: null, item: null }); }} /> : null}
-      {itemDialog.open ? <ItemDialog state={itemDialog} onClose={() => setItemDialog({ open: false, group: null, item: null })} onSubmit={async (payload) => { if (itemDialog.item) await data.updateItem(itemDialog.item.id, payload); else await data.createItem(payload); setItemDialog({ open: false, group: null, item: null }); }} /> : null}
+      {groupDialog.open ? <GroupDialog state={groupDialog} onClose={() => setGroupDialog({ open: false, price: null, item: null })} onSubmit={async (payload) => { if (groupDialog.item) { await data.updateGroup(groupDialog.item.id, payload); toast.success("Grupo actualizado"); } else { await data.createGroup(payload); toast.success("Grupo creado"); } setGroupDialog({ open: false, price: null, item: null }); }} /> : null}
+      {itemDialog.open ? <ItemDialog state={itemDialog} onClose={() => setItemDialog({ open: false, group: null, item: null })} onSubmit={async (payload) => { if (itemDialog.item) { await data.updateItem(itemDialog.item.id, payload); toast.success("Spec actualizada"); } else { await data.createItem(payload); toast.success("Spec creada"); } setItemDialog({ open: false, group: null, item: null }); }} /> : null}
     </div>
   );
 }
@@ -161,7 +164,23 @@ function ItemDialog({ state, onClose, onSubmit }) {
 }
 
 function EntityDialog({ title, children, onClose, onSubmit }) {
-  return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="max-w-[min(94vw,480px)] bg-white text-slate-950"><form onSubmit={(event) => { event.preventDefault(); onSubmit(); }} className="space-y-3"><DialogHeader><DialogTitle className="text-violet-700">{title}</DialogTitle><DialogDescription>Completa la informacion.</DialogDescription></DialogHeader>{children}<DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar</Button></DialogFooter></form></DialogContent></Dialog>;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] max-w-[min(94vw,560px)] overflow-hidden rounded-xl bg-white p-0 text-slate-950 shadow-2xl">
+        <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }} className="flex max-h-[92svh] flex-col">
+          <DialogHeader className="border-b border-slate-200 px-5 py-4">
+            <DialogTitle className="text-xl font-bold text-violet-700">{title}</DialogTitle>
+            <DialogDescription>Completa la informacion.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 overflow-y-auto px-5 py-4">{children}</div>
+          <DialogFooter className="border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" className="bg-violet-700 text-white hover:bg-violet-800">Guardar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function Stat({ label, value }) {
