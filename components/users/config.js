@@ -16,7 +16,7 @@ export const USER_PERMISSION_GROUPS = [
   { key: "regalosventa", label: "Regalos Venta", actions: ["view", "create", "edit", "delete"] },
   { key: "prospeccion", label: "Auto prospeccion", actions: ["view", "create", "edit", "delete"] },
   { key: "citas", label: "Citas", actions: ["view", "create", "edit", "delete", "viewall"] },
-  { key: "oportunidadespv", label: "Oportunidades PostVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
+  { key: "oportunidadespv", label: "Oportunidades PosVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "leadspv", label: "Leads PostVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "cotizacion", label: "Cotizacion", actions: ["view", "create", "edit", "delete"] },
   { key: "agenda", label: "Agenda", actions: ["view", "create", "edit", "viewall"] },

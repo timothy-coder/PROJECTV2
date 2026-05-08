@@ -33,7 +33,7 @@ export default function PostventaAgendaPage({ userPermissions }) {
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white"><Calendar className="size-5" /></div>
-          <div><h1 className="text-2xl font-bold">Agenda PostVenta</h1><p className="text-xs text-slate-500">{canViewAll ? "Vista completa" : "Mi vista"} - {dateRangeLabel(days)}</p></div>
+          <div><h1 className="text-2xl font-bold">Agenda PosVenta</h1><p className="text-xs text-slate-500">{canViewAll ? "Vista completa" : "Mi vista"} - {dateRangeLabel(days)}</p></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => setBaseDate(addDays(baseDate, mode === "month" ? -30 : -7))}><ChevronLeft className="size-4" /></Button>

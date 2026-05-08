@@ -169,16 +169,16 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
   const canSubmit = Boolean(form.clienteId && form.origenId && activities.length && agendas.length);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] w-[min(96vw,1100px)] max-w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto bg-white p-0 text-slate-950">
         <DialogHeader className="border-b border-slate-200 p-5">
           <DialogTitle className="text-2xl font-bold text-violet-700">Nueva oportunidad</DialogTitle>
           <p className="text-sm text-slate-500">Completa los datos, actividades y agenda de la oportunidad.</p>
         </DialogHeader>
-        <div className="grid gap-4 p-5 lg:grid-cols-[280px_1fr]">
-          <div className="space-y-4">
+        <div className="grid min-w-0 gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-4">
             <section className="rounded-lg border border-violet-200 bg-violet-50/40 p-4">
               <h3 className="mb-3 text-sm font-bold text-violet-700">Informacion general</h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+              <div className="grid min-w-0 gap-3 md:grid-cols-2">
                 <Field label="Cliente *"><SearchableSelect value={form.clienteId} options={clientOptions} placeholder="Buscar cliente" onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} /></Field>
                 <Field label="Creado por"><Input disabled value={data.currentUser?.fullname || "Usuario"} /></Field>
                 <Field label="Origen *"><SearchableSelect value={form.origenId} options={originOptions} placeholder="Buscar origen" onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
@@ -194,14 +194,14 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
             </section>
             <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
               <h3 className="mb-3 text-sm font-bold text-emerald-800">Nueva agenda</h3>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-3 md:grid-cols-2">
                 <Field label="Fecha agenda"><Input type="date" value={form.fechaAgenda} onChange={(e) => setForm((current) => ({ ...current, fechaAgenda: e.target.value }))} /></Field>
                 <Field label="Hora agenda"><Input type="time" value={form.horaAgenda} onChange={(e) => setForm((current) => ({ ...current, horaAgenda: e.target.value }))} /></Field>
               </div>
               <Button type="button" className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={!form.fechaAgenda || !form.horaAgenda} onClick={() => setAgendas((current) => [...current, { fechaAgenda: form.fechaAgenda, horaAgenda: form.horaAgenda }])}><Plus className="size-4" />Agregar agenda</Button>
             </section>
           </div>
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h3 className="mb-3 font-bold">Actividades ({activities.length})</h3>
               <div className="space-y-2">{activities.length ? activities.map((item, index) => <div key={index} className="rounded-md border bg-slate-50 p-3 text-sm">{item.detalle}</div>) : <div className="rounded-lg border border-dashed p-8 text-center text-slate-500">No hay actividades registradas</div>}</div>
@@ -221,7 +221,7 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
   );
 }
 
-function Field({ label, children }) { return <div className="min-w-40 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
+function Field({ label, children }) { return <div className="min-w-0 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
 function weekDays(date) { const start = addDays(date, -date.getDay() + 1); return Array.from({ length: 7 }, (_, i) => dayObj(addDays(start, i))); }
 function monthDays(date) { const start = new Date(date.getFullYear(), date.getMonth(), 1); const end = new Date(date.getFullYear(), date.getMonth() + 1, 0); return Array.from({ length: end.getDate() }, (_, i) => dayObj(addDays(start, i))); }
 function monthCalendarDays(date) {

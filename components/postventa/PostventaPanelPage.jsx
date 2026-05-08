@@ -28,7 +28,7 @@ export default function PostventaPanelPage({ userPermissions }) {
     <div className="min-w-0 bg-slate-50 p-4 text-slate-950">
       <header className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-violet-700">Panel de PostVenta</h1>
+          <h1 className="text-3xl font-bold text-violet-700">Panel de PosVenta</h1>
           <p className="text-sm text-slate-500">{canViewAll ? "Vista completa" : "Mi vista"}</p>
         </div>
         <Button variant="outline" size="icon" onClick={() => { opportunitiesData.reload(); leadsData.reload(); }}><RefreshCw className="size-4" /></Button>

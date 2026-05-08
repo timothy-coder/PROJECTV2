@@ -83,7 +83,7 @@ export default async function Page({ params }) {
         <div id="quote-preview-root" className="mx-auto max-w-6xl space-y-5">
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold">Resumen de CotizaciÃn</h1>
+              <h1 className="text-3xl font-bold">Resumen de Cotización</h1>
               <p className="text-sm text-slate-600">Q-{String(quote.id).padStart(6, "0")}</p>
             </div>
             <div className="flex gap-2">
@@ -92,20 +92,20 @@ export default async function Page({ params }) {
             </div>
           </header>
           <section className="rounded-xl border border-violet-200 bg-violet-50 p-5">
-            <h2 className="mb-8 font-bold text-violet-800">InformaciÃ³n de la Oportunidad</h2>
+            <h2 className="mb-8 font-bold text-violet-800">Información de la Oportunidad</h2>
             <div className="grid gap-6 md:grid-cols-3">
               <IconInfo icon={UserRound} label="Cliente" value={quote.cliente} sub={quote.email} />
               <IconInfo icon={MapPin} label="Oportunidad" value={quote.oportunidad_id} sub={quote.origen || "-"} />
-              <IconInfo icon={Check} label="Etapa" value="CotizaciÃ³n" />
+              <IconInfo icon={Check} label="Etapa" value="Cotización" />
               <IconInfo icon={UserRound} label="Creado por" value={quote.creado || "-"} />
               <IconInfo icon={UserRound} label="Asignado a" value={quote.asignado || "-"} />
               <IconInfo icon={CalendarDays} label="Fecha Agendada" value={formatDate(quote.fecha_agenda)} />
             </div>
           </section>
           <section className="rounded-xl border bg-white p-5 shadow-sm">
-            <h2 className="mb-10 font-bold">InformaciÃ³n General - VehÃ­culo</h2>
+            <h2 className="mb-10 font-bold">Información General - Vehí­culo</h2>
             <div className="grid gap-8 md:grid-cols-4">
-              <Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="VersiÃ³n" value={quote.version} /><Info label="AÃ±o" value={quote.anio || "-"} />
+              <Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Versión" value={quote.version} /><Info label="Año" value={quote.anio || "-"} />
               <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="SKU" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
             </div>
           </section>
@@ -117,21 +117,21 @@ export default async function Page({ params }) {
               ))}
               {!specGroups.length ? (
                 <div className="col-span-full rounded-lg border border-blue-200 bg-white p-8 text-center text-sm font-medium text-slate-500">
-                  No hay especificaciones registradas para esta marca, modelo y versiÃƒÂ³n.
+                  No hay especificaciones registradas para esta marca, modelo y versión.
                 </div>
               ) : null}
             </div>
           </section>
           <section className="rounded-xl border border-orange-200 bg-orange-50 p-5">
-            <h2 className="mb-8 font-bold text-orange-900">Precio del VehÃ­culo</h2>
+            <h2 className="mb-8 font-bold text-orange-900">Precio del Vehí­culo</h2>
             <div className="grid gap-4 md:grid-cols-4">
-              <InfoBox label="Modelo/VersiÃ³n" value={`${quote.modelo} ${quote.version}`} />
+              <InfoBox label="Modelo/Versión" value={`${quote.modelo} ${quote.version}`} />
               <InfoBox label="Stock" value={quote.en_stock ? "Disponible" : "Bajo pedido"} green={quote.en_stock} />
-              <InfoBox label="Entrega (dÃ­as)" value={quote.tiempo_entrega_dias || 0} />
+              <InfoBox label="Entrega (dí­as)" value={quote.tiempo_entrega_dias || 0} />
               <InfoBox label="$ Precio" value={money(quote.precio_base)} orange />
             </div>
             {vehicleDiscount ? <div className="mt-5 rounded-lg border border-orange-300 bg-orange-100 p-3 text-sm font-bold text-orange-900">Descuento aplicado: -{money(vehicleDiscount)} ({Number(quote["descuento_veh\u00edculo_porcentaje"] || 0).toFixed(2)}%)</div> : null}
-            <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehÃ­culo:</p><p className="text-xl font-bold text-blue-800">{money(vehicleFinal)}</p></div>
+            <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehí­culo:</p><p className="text-xl font-bold text-blue-800">{money(vehicleFinal)}</p></div>
             <QuoteVehicleDiscountEditor quoteId={id} discountAmount={Number(quote["descuento_veh\u00edculo"] || 0)} discountPercentage={Number(quote["descuento_veh\u00edculo_porcentaje"] || 0)} />
           </section>
           <QuotePreviewItems
@@ -178,12 +178,12 @@ export default async function Page({ params }) {
               <p className="mb-3 text-xs font-bold text-blue-900">Desglose Detallado:</p>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <SummaryDetail label="VehÃƒÂ­culo S/IGV:" value={money(vehicleNet)} blue />
+                  <SummaryDetail label="Vehí­culo S/IGV:" value={money(vehicleNet)} blue />
                   <SummaryDetail label="Accesorios S/IGV:" value={money(accessoriesNet)} blue />
                   <SummaryDetail label="Regalos S/IGV:" value={money(giftsNet)} blue />
                 </div>
                 <div className="space-y-2">
-                  <SummaryDetail label="VehÃƒÂ­culo IGV:" value={money(vehicleFinal - vehicleNet)} green />
+                  <SummaryDetail label="Vehí­culo IGV:" value={money(vehicleFinal - vehicleNet)} green />
                   <SummaryDetail label="Accesorios IGV:" value={money(accessoriesTotal - accessoriesNet)} green />
                   <SummaryDetail label="Regalos IGV:" value={money(giftsTotal - giftsNet)} green />
                 </div>

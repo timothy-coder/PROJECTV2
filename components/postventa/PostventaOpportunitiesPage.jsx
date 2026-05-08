@@ -23,8 +23,8 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   const canCreate = hasPerm(userPermissions, [perm, "create"]);
   const canOpenMaintenance = Boolean(hasPerm(userPermissions, ["oportunidadespv", "view"]) || hasPerm(userPermissions, ["oportunidadespv", "viewall"]));
   const copy = kind === "lead"
-    ? { title: "Leads PostVenta", subtitle: "Gestiona los leads de PostVenta" }
-    : { title: "Oportunidades PostVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };
+    ? { title: "Leads PosVenta", subtitle: "Gestiona los leads de PosVenta" }
+    : { title: "Oportunidades PosVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };
   const rows = useMemo(() => {
     const text = query.trim().toLowerCase();
     return data.opportunities.filter((item) => {
