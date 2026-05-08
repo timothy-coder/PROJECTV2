@@ -1,0 +1,146 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Calendar, ChevronLeft, ChevronRight, Eye, Plus, RefreshCw, Search } from "lucide-react";
+
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useSalesAgenda } from "@/hooks/salesagenda/useSalesAgenda";
+import { hasPerm } from "@/lib/permissions";
+
+const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export default function SalesAgendaPage({ userPermissions }) {
+  const data = useSalesAgenda();
+  const canViewAll = Boolean(hasPerm(userPermissions, ["agenda", "viewall"]) || hasPerm(userPermissions, ["oportunidades", "viewall"]) || data.currentUser?.canViewAll);
+  const canCreate = hasPerm(userPermissions, ["oportunidades", "create"]);
+  const [nowTime] = useState(() => Date.now());
+  const [baseDate, setBaseDate] = useState(new Date());
+  const [mode, setMode] = useState("week");
+  const [filters, setFilters] = useState({ createdBy: "", assignedTo: "", client: "", kind: "all", centerId: "" });
+  const [dialog, setDialog] = useState(null);
+  const centerId = filters.centerId || (data.centers[0]?.id ? String(data.centers[0].id) : "");
+  const schedule = data.schedules.find((item) => String(item.centroId) === String(centerId)) || data.schedules[0] || { slotMinutes: 30, week: {} };
+  const days = mode === "month" ? monthDays(baseDate) : weekDays(baseDate);
+  const slots = timeSlots(schedule.week, schedule.slotMinutes || 30);
+  const filteredItems = useMemo(() => data.items.filter((item) => {
+    const matchKind = filters.kind === "all" || item.kind === filters.kind;
+    const matchCreated = !filters.createdBy || Number(item.createdBy) === Number(filters.createdBy);
+    const matchAssigned = !filters.assignedTo || Number(item.asignadoA) === Number(filters.assignedTo);
+    const matchClient = !filters.client || item.clienteNombre.toLowerCase().includes(filters.client.toLowerCase()) || item.code.toLowerCase().includes(filters.client.toLowerCase());
+    return matchKind && matchCreated && matchAssigned && matchClient;
+  }), [data.items, filters]);
+  const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
+  const centerOptions = data.centers.map((item) => ({ value: item.id, label: item.nombre }));
+  return (
+    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white"><Calendar className="size-5" /></div>
+          <div><h1 className="text-2xl font-bold">Agenda</h1><p className="text-xs text-slate-500">{dateRangeLabel(days)}</p></div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => setBaseDate(addDays(baseDate, mode === "month" ? -30 : -7))}><ChevronLeft className="size-4" /></Button>
+          <Button variant="outline" size="icon" onClick={() => setBaseDate(addDays(baseDate, mode === "month" ? 30 : 7))}><ChevronRight className="size-4" /></Button>
+          <Button variant="outline" onClick={() => setBaseDate(new Date())}>Hoy</Button>
+          <SearchableSelect value={mode} options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]} onChange={setMode} />
+          <div className="w-48"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></div>
+          {canCreate ? <Button onClick={() => setDialog({ date: formatDate(new Date()), time: "" })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nueva</Button> : null}
+          <Button variant="outline" size="icon" onClick={data.reload}><RefreshCw className="size-4" /></Button>
+        </div>
+      </header>
+      <section className="mb-3 flex flex-wrap items-end gap-2">
+        {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
+        {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
+        <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
+        <div className="flex rounded-lg border bg-white p-1">
+          {[["all", "Todos"], ["opportunity", "OP"], ["lead", "LD"]].map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${filters.kind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
+        </div>
+      </section>
+      <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+        <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
+          <div className="border-b border-r bg-slate-50" />
+          {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}
+          {slots.map((slot) => (
+            <SlotRow key={slot} slot={slot} days={days} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: slot })} />
+          ))}
+        </div>
+      </div>
+      {dialog ? <NewOpportunityDialog state={dialog} data={data} canViewAll={canViewAll} onClose={() => setDialog(null)} onSubmit={async (payload) => { await data.createOpportunity(payload); setDialog(null); }} /> : null}
+    </div>
+  );
+}
+
+function SlotRow({ slot, days, items, canCreate, nowTime, onCell }) {
+  return (
+    <>
+      <div className="border-b border-r bg-slate-50 px-2 py-3 text-xs">{slot}</div>
+      {days.map((day) => {
+        const past = new Date(`${day.date}T${slot}`).getTime() < nowTime;
+        const cellItems = items.filter((item) => item.agendaDate === day.date && item.agendaTime === slot);
+        return (
+          <button key={`${day.date}-${slot}`} disabled={past} className={`min-h-16 border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-400" : "bg-white hover:bg-blue-50"}`} onClick={() => !cellItems.length && canCreate && onCell(day)}>
+            {cellItems.map((item) => <AgendaCard key={item.id} item={item} />)}
+            {!cellItems.length && !past && canCreate ? <span className="hidden rounded bg-white px-3 py-2 text-xs font-bold shadow group-hover:block">Nueva Oportunidad</span> : null}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function AgendaCard({ item }) {
+  const href = item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
+  return <div className="mb-1 rounded border-l-4 bg-white p-2 text-xs shadow-sm" style={{ borderLeftColor: item.etapaColor, backgroundColor: `${item.etapaColor}18` }} onClick={(event) => { event.stopPropagation(); window.location.href = href; }}><div className="flex justify-between gap-1"><b>{item.code}</b><span>{item.kind === "lead" ? "LD" : "OP"}</span></div><p>{item.clienteNombre}</p><p className="text-[11px]">{item.etapaNombre}</p><p className="font-semibold text-blue-700">{item.asignadoNombre}</p></div>;
+}
+
+function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
+  const [form, setForm] = useState({ clienteId: "", origenId: "", suborigenId: "", asignadoA: canViewAll ? "" : String(data.currentUser?.id || ""), detalle: "", fechaAgenda: state.date, horaAgenda: state.time });
+  const clientOptions = data.options.clients.map((item) => ({ value: item.id, label: item.nombre }));
+  const originOptions = data.options.origins.map((item) => ({ value: item.id, label: item.name }));
+  const suboriginOptions = data.options.suborigins.filter((item) => !form.origenId || Number(item.origenId) === Number(form.origenId)).map((item) => ({ value: item.id, label: item.name }));
+  const userOptions = [{ value: "", label: "Sin asignar" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl bg-white text-slate-950">
+        <DialogHeader><DialogTitle>Nueva oportunidad</DialogTitle></DialogHeader>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Cliente *"><SearchableSelect value={form.clienteId} options={clientOptions} placeholder="Buscar cliente" onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} /></Field>
+          <Field label="Origen *"><SearchableSelect value={form.origenId} options={originOptions} placeholder="Buscar origen" onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
+          <Field label="Suborigen"><SearchableSelect value={form.suborigenId} options={suboriginOptions} placeholder="Buscar suborigen" onChange={(value) => setForm((current) => ({ ...current, suborigenId: value }))} /></Field>
+          <Field label="Asignado a"><SearchableSelect disabled={!canViewAll} value={form.asignadoA} options={userOptions} onChange={(value) => setForm((current) => ({ ...current, asignadoA: value }))} /></Field>
+          <Field label="Fecha agenda *"><Input type="date" value={form.fechaAgenda} onChange={(e) => setForm((current) => ({ ...current, fechaAgenda: e.target.value }))} /></Field>
+          <Field label="Hora agenda *"><Input type="time" value={form.horaAgenda} onChange={(e) => setForm((current) => ({ ...current, horaAgenda: e.target.value }))} /></Field>
+          <div className="sm:col-span-2"><Field label="Detalle obligatorio"><Textarea value={form.detalle} onChange={(e) => setForm((current) => ({ ...current, detalle: e.target.value }))} /></Field></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!form.clienteId || !form.origenId || !form.fechaAgenda || !form.horaAgenda || !form.detalle} onClick={() => onSubmit({ clienteId: form.clienteId, origenId: form.origenId, suborigenId: form.suborigenId, asignadoA: form.asignadoA, activities: [{ detalle: form.detalle }], detail: { fechaAgenda: form.fechaAgenda, horaAgenda: form.horaAgenda } })}>Crear oportunidad</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children }) { return <div className="min-w-40 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
+function weekDays(date) { const start = addDays(date, -date.getDay() + 1); return Array.from({ length: 7 }, (_, i) => dayObj(addDays(start, i))); }
+function monthDays(date) { const start = new Date(date.getFullYear(), date.getMonth(), 1); const end = new Date(date.getFullYear(), date.getMonth() + 1, 0); return Array.from({ length: end.getDate() }, (_, i) => dayObj(addDays(start, i))); }
+function dayObj(date) { return { date: formatDate(date), label: dayLabels[date.getDay()], day: String(date.getDate()).padStart(2, "0") }; }
+function addDays(date, days) { const copy = new Date(date); copy.setDate(copy.getDate() + days); return copy; }
+function formatDate(date) { return date.toISOString().slice(0, 10); }
+function dateRangeLabel(days) { return days.length ? `${days[0].date} - ${days.at(-1).date}` : ""; }
+function timeSlots(week, step) {
+  const active = Object.entries(week || {}).filter(([, value]) => value?.active);
+  const start = active.map(([, value]) => value.start || "08:00").sort()[0] || "08:00";
+  const end = active.map(([, value]) => value.end || "18:00").sort().at(-1) || "18:00";
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const slots = [];
+  for (let m = sh * 60 + sm; m <= eh * 60 + em; m += Number(step || 30)) slots.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  return slots;
+}

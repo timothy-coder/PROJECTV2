@@ -1,0 +1,264 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Box, Car, Coins, Edit3, Filter, Loader2, Plus, Search, Tags, Trash2 } from "lucide-react";
+
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAccessories } from "@/hooks/accessories/useAccessories";
+import { hasPerm } from "@/lib/permissions";
+
+export default function AccessoriesPage({ userPermissions }) {
+  const data = useAccessories();
+  const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", monedaId: "" });
+  const [dialog, setDialog] = useState({ open: false, item: null });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
+  const canView = hasPerm(userPermissions, ["accesoriosventa", "view"]);
+  const canCreate = hasPerm(userPermissions, ["accesoriosventa", "create"]);
+  const canEdit = hasPerm(userPermissions, ["accesoriosventa", "edit"]);
+  const canDelete = hasPerm(userPermissions, ["accesoriosventa", "delete"]);
+
+  const filteredAccessories = useMemo(() => {
+    const query = filters.query.trim().toLowerCase();
+    return data.accessories.filter((item) => {
+      const matchesQuery = !query || `${item.detalle} ${item.numeroParte}`.toLowerCase().includes(query);
+      const matchesBrand = !filters.marcaId || Number(filters.marcaId) === item.marcaId;
+      const matchesModel = !filters.modeloId || Number(filters.modeloId) === item.modeloId;
+      const matchesCurrency = !filters.monedaId || Number(filters.monedaId) === item.monedaId;
+      return matchesQuery && matchesBrand && matchesModel && matchesCurrency;
+    });
+  }, [data.accessories, filters]);
+
+  const brandOptions = [{ value: "", label: "Todas" }, ...data.options.brands.map((item) => ({ value: item.id, label: item.name }))];
+  const modelOptions = [
+    { value: "", label: "Todos" },
+    ...data.options.models
+      .filter((item) => !filters.marcaId || Number(item.marcaId) === Number(filters.marcaId))
+      .map((item) => ({ value: item.id, label: item.name })),
+  ];
+  const currencyOptions = [{ value: "", label: "Todas" }, ...data.options.currencies.map((item) => ({ value: item.id, label: item.codigo }))];
+
+  if (!canView) {
+    return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver accesorios.</div>;
+  }
+
+  return (
+    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
+      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Box className="size-8 text-violet-700" />
+          <div>
+            <h1 className="text-3xl font-bold leading-none text-violet-700">Accesorios</h1>
+            <p className="mt-1 text-xs font-medium text-slate-500">Gestiona todos los accesorios disponibles</p>
+          </div>
+        </div>
+        {canCreate ? (
+          <Button onClick={() => setDialog({ open: true, item: null })} className="bg-violet-700 text-white hover:bg-violet-800">
+            <Plus className="size-4" />
+            Nuevo Accesorio
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="mb-4 grid gap-3 md:grid-cols-5">
+        <Stat label="Total" value={data.stats.total} icon={Box} />
+        <Stat label="Marcas" value={data.stats.brands} icon={Tags} />
+        <Stat label="Modelos" value={data.stats.models} icon={Car} tone="green" />
+        <Stat label="Monedas" value={data.stats.currencies} icon={Coins} tone="orange" />
+        <Stat label="Impuestos" value={data.stats.taxes} icon={Filter} tone="orange" />
+      </div>
+
+      <section className="mb-4 rounded-lg border border-violet-200 bg-white shadow-sm">
+        <div className="bg-violet-50/40 px-4 py-3">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Filter className="size-5" />Filtros</h2>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="space-y-1.5">
+            <Label>Buscar</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Detalle, numero de parte..." className="h-9 bg-white pl-9" />
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-4">
+            <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
+            <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
+            <Field label="Moneda"><SearchableSelect value={filters.monedaId} options={currencyOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, monedaId: value }))} /></Field>
+            <div className="flex items-end"><Button variant="outline" className="h-9 w-full" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "" })}>Limpiar</Button></div>
+          </div>
+          <p className="text-sm font-medium text-slate-500">Mostrando {filteredAccessories.length} de {data.accessories.length} accesorios</p>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+              <tr>
+                <th className="px-3 py-3">ID</th>
+                <th className="px-3 py-3">Detalle</th>
+                <th className="px-3 py-3">N Parte</th>
+                <th className="px-3 py-3">Marca</th>
+                <th className="px-3 py-3">Modelo</th>
+                <th className="px-3 py-3">Precio Compra</th>
+                <th className="px-3 py-3">Precio Venta</th>
+                <th className="px-3 py-3">Impuesto</th>
+                <th className="px-3 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {data.loading ? (
+                <tr><td colSpan={9} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+              ) : filteredAccessories.map((item) => (
+                <tr key={item.id}>
+                  <td className="px-3 py-3 font-bold text-violet-700">#{item.id}</td>
+                  <td className="px-3 py-3 font-medium">{item.detalle}</td>
+                  <td className="px-3 py-3">{item.numeroParte}</td>
+                  <td className="px-3 py-3"><Badge>{item.marcaName}</Badge></td>
+                  <td className="px-3 py-3"><Badge>{item.modeloName}</Badge></td>
+                  <td className="px-3 py-3 font-bold text-emerald-700">{item.monedaSimbolo} {item.precio.toFixed(2)}</td>
+                  <td className="px-3 py-3 font-bold text-blue-700">{item.monedaSimbolo} {(item.precioVenta ?? 0).toFixed(2)}</td>
+                  <td className="px-3 py-3">{item.impuestoName ? `${item.impuestoName} (${item.impuestoPorcentaje}%)` : "Sin impuesto"}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex justify-end gap-2">
+                      {canEdit ? <Button variant="outline" size="icon" onClick={() => setDialog({ open: true, item })}><Edit3 className="size-4" /></Button> : null}
+                      {canDelete ? <Button variant="destructive" size="icon" onClick={() => setDeleteDialog({ open: true, item })}><Trash2 className="size-4" /></Button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {dialog.open ? (
+        <AccessoryDialog
+          key={dialog.item?.id || "new"}
+          state={dialog}
+          options={data.options}
+          onClose={() => setDialog({ open: false, item: null })}
+          onSubmit={async (payload) => {
+            if (dialog.item) await data.update(dialog.item.id, payload);
+            else await data.create(payload);
+            setDialog({ open: false, item: null });
+          }}
+        />
+      ) : null}
+      <DeleteDialog
+        state={deleteDialog}
+        onClose={() => setDeleteDialog({ open: false, item: null })}
+        onConfirm={async () => {
+          await data.delete(deleteDialog.item.id);
+          setDeleteDialog({ open: false, item: null });
+        }}
+      />
+    </div>
+  );
+}
+
+function AccessoryDialog({ state, options, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    marcaId: state.item?.marcaId ? String(state.item.marcaId) : "",
+    modeloId: state.item?.modeloId ? String(state.item.modeloId) : "",
+    detalle: state.item?.detalle || "",
+    numeroParte: state.item?.numeroParte || "",
+    precio: state.item?.precio ?? "",
+    precioVenta: state.item?.precioVenta ?? "",
+    impuestoId: state.item?.impuestoId ? String(state.item.impuestoId) : "",
+    monedaId: state.item?.monedaId ? String(state.item.monedaId) : "",
+  });
+  const [error, setError] = useState("");
+  const brandOptions = options.brands.map((item) => ({ value: item.id, label: item.name }));
+  const modelOptions = options.models.filter((item) => !form.marcaId || Number(item.marcaId) === Number(form.marcaId)).map((item) => ({ value: item.id, label: item.name }));
+  const currencyOptions = options.currencies.map((item) => ({ value: item.id, label: `${item.codigo} ${item.simbolo}` }));
+  const taxOptions = [{ value: "", label: "Sin impuesto" }, ...options.taxes.map((item) => ({ value: item.id, label: `${item.nombre} (${item.porcentaje}%)` }))];
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    try {
+      await onSubmit(form);
+    } catch (err) {
+      setError(err.message || "No se pudo guardar el accesorio.");
+    }
+  }
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white text-slate-950">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-violet-700">{state.item ? "Editar accesorio" : "Nuevo accesorio"}</DialogTitle>
+            <DialogDescription>Completa los datos del accesorio.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Marca *"><SearchableSelect value={form.marcaId} options={brandOptions} placeholder="Seleccionar marca" onChange={(value) => setForm((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
+            <Field label="Modelo *"><SearchableSelect value={form.modeloId} options={modelOptions} placeholder="Seleccionar modelo" onChange={(value) => setForm((current) => ({ ...current, modeloId: value }))} /></Field>
+            <Field label="Detalle *"><Input value={form.detalle} onChange={(event) => setForm((current) => ({ ...current, detalle: event.target.value }))} required /></Field>
+            <Field label="Numero de parte *"><Input value={form.numeroParte} onChange={(event) => setForm((current) => ({ ...current, numeroParte: event.target.value }))} required /></Field>
+            <Field label="Precio compra *"><Input type="number" step="0.01" value={form.precio} onChange={(event) => setForm((current) => ({ ...current, precio: event.target.value }))} required /></Field>
+            <Field label="Precio venta"><Input type="number" step="0.01" value={form.precioVenta} onChange={(event) => setForm((current) => ({ ...current, precioVenta: event.target.value }))} /></Field>
+            <Field label="Moneda *"><SearchableSelect value={form.monedaId} options={currencyOptions} placeholder="Seleccionar moneda" onChange={(value) => setForm((current) => ({ ...current, monedaId: value }))} /></Field>
+            <Field label="Impuesto"><SearchableSelect value={form.impuestoId} options={taxOptions} placeholder="Sin impuesto" onChange={(value) => setForm((current) => ({ ...current, impuestoId: value }))} /></Field>
+          </div>
+          {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" className="bg-violet-700 text-white hover:bg-violet-800">Guardar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteDialog({ state, onClose, onConfirm }) {
+  if (!state.open) return null;
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold text-red-600">Eliminar accesorio</DialogTitle>
+          <DialogDescription>Se eliminara {state.item?.detalle}.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="destructive" onClick={onConfirm}>Eliminar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Stat({ label, value, icon: Icon, tone = "purple" }) {
+  const tones = {
+    purple: "border-violet-200 bg-violet-50 text-violet-700",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    orange: "border-orange-200 bg-orange-50 text-orange-700",
+  };
+  return (
+    <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
+      <div><p className="text-xs font-bold">{label}</p><p className="mt-3 text-2xl font-bold text-violet-700">{value}</p></div>
+      <Icon className="size-8 opacity-45" />
+    </div>
+  );
+}
+
+function Badge({ children }) {
+  return <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-950">{children}</span>;
+}
+
+function Field({ label, children }) {
+  return <div className="space-y-1.5"><Label className="text-xs font-bold text-slate-600">{label}</Label>{children}</div>;
+}

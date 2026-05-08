@@ -1,0 +1,205 @@
+import { NextResponse } from "next/server";
+
+import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
+
+function canSeeAll(user) {
+  return Boolean(hasPerm(user.permissions, ["reservas", "viewall"]) || hasPerm(user.permissions, ["reservas", "review"]));
+}
+
+export async function GET(_request, { params }) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    const viewAll = canSeeAll(user);
+    const [[reservation]] = await pool.query(
+      `SELECT r.*, o.oportunidad_id AS oportunidad_code,
+              CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
+              c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal, c.fecha_nacimiento,
+              c.ocupacion, c.domicilio, c.nombre_comercial, c.nombreconyugue, c.dniconyugue,
+              dep.nombre AS departamento, prov.nombre AS provincia, dis.nombre AS distrito,
+              u.fullname AS creado_por
+       FROM ventas_reservas r
+       LEFT JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
+       LEFT JOIN administracion_clientes c ON c.id=o.cliente_id
+       LEFT JOIN departamentos dep ON dep.id=c.departamento_id
+       LEFT JOIN provincias prov ON prov.id=c.provincia_id
+       LEFT JOIN distritos dis ON dis.id=c.distrito_id
+       LEFT JOIN administracion_usuarios u ON u.id=r.created_by
+       WHERE r.id=? ${viewAll ? "" : "AND r.created_by=?"} LIMIT 1`,
+      viewAll ? [id] : [id, user.id]
+    );
+    if (!reservation) return NextResponse.json({ message: "Reserva no encontrada." }, { status: 404 });
+    const [[detail]] = await pool.query(
+      `SELECT d.*, q.anio, q.sku, q.color_externo, q.color_interno,
+              p.id AS precio_id, p.version, p.precio_base, p.marca_id, p.modelo_id,
+              ma.name AS marca, mo.name AS modelo, cl.name AS clase
+       FROM ventas_reserva_detalles d
+       INNER JOIN ventas_cotizaciones q ON q.id=d.cotizacion_id
+       INNER JOIN ventas_precios p ON p.id=q.precio_id
+       INNER JOIN administracion_marcas ma ON ma.id=p.marca_id
+       INNER JOIN administracion_modelos mo ON mo.id=p.modelo_id
+       LEFT JOIN administracion_clases cl ON cl.id=mo.clase_id
+       WHERE d.reserva_id=? LIMIT 1`,
+      [id]
+    );
+    const [vins] = detail ? await pool.query(
+      `SELECT vin, numerofactura, preciocompra, precioventa FROM ventas_historial_carros WHERE precio_id=? ORDER BY created_at DESC`,
+      [detail.precio_id]
+    ) : [[]];
+    const [accessories] = detail ? await pool.query(
+      `SELECT ca.*, ad.detalle, ad.numero_parte
+       FROM ventas_cotizaciones_accesorios ca
+       INNER JOIN ventas_accesorios_disponibles ad ON ad.id=ca.accesorio_id
+       WHERE ca.cotizacion_id=?
+       ORDER BY ca.id ASC`,
+      [detail.cotizacion_id]
+    ) : [[]];
+    const [gifts] = detail ? await pool.query(
+      `SELECT cr.*, rd.detalle, rd.lote
+       FROM ventas_cotizaciones_regalos cr
+       INNER JOIN ventas_regalos_disponibles rd ON rd.id=cr.regalo_id
+       WHERE cr.cotizacion_id=?
+       ORDER BY cr.id ASC`,
+      [detail.cotizacion_id]
+    ) : [[]];
+    const [[salesBoss]] = await pool.query(
+      `SELECT u.fullname FROM administracion_usuarios u LEFT JOIN roles r ON r.id=u.role_id WHERE LOWER(COALESCE(r.name,'')) LIKE '%jefe%venta%' OR LOWER(COALESCE(u.fullname,'')) LIKE '%jefe%venta%' ORDER BY u.id ASC LIMIT 1`
+    );
+    return NextResponse.json({
+      currentUser: { id: user.id, canViewAll: viewAll },
+      reservation: {
+        id: reservation.id,
+        estado: reservation.estado || "borrador",
+        observaciones: reservation.observaciones || "",
+        oportunidadId: reservation.oportunidad_id,
+        oportunidadCode: reservation.oportunidad_code || "-",
+        createdAt: reservation.created_at,
+        creadoPor: reservation.creado_por || "-",
+        cliente: String(reservation.cliente || "").trim() || "-",
+        email: reservation.email || "",
+        celular: reservation.celular || "",
+        tipoIdentificacion: reservation.tipo_identificacion || "",
+        documento: reservation.identificacion_fiscal || "",
+        fechaNacimiento: reservation.fecha_nacimiento,
+        ocupacion: reservation.ocupacion || "",
+        domicilio: reservation.domicilio || "",
+        departamento: reservation.departamento || "",
+        provincia: reservation.provincia || "",
+        distrito: reservation.distrito || "",
+        nombreComercial: reservation.nombre_comercial || "",
+        nombreConyugue: reservation.nombreconyugue || "",
+        dniConyugue: reservation.dniconyugue || "",
+      },
+      detail: detail ? {
+        id: detail.id,
+        cotizacionId: detail.cotizacion_id,
+        marca: detail.marca,
+        modelo: detail.modelo,
+        clase: detail.clase || "-",
+        version: detail.version,
+        anio: detail.anio || "",
+        precioId: detail.precio_id,
+        precioBase: Number(detail.precio_base || detail.precio_unitario || 0),
+        tipoComprobante: detail.tipo_comprobante || "",
+        numeroMotor: detail.numero_motor || "",
+        tcReferencial: detail.tc_referencial || "",
+        total: Number(detail.total || 0),
+        vin: detail.vin || "",
+        vinExiste: Boolean(detail.vin_existe),
+        usoVehiculo: detail.usovehiculo || "",
+        placa: detail.placa || "",
+        descuentoTienda: Number(detail.dsctotienda || 0),
+        descuentoTiendaPorcentaje: detail.dsctotiendaporcentaje || "",
+        bonoRetoma: Number(detail.dsctobonoretoma || 0),
+        descuentoNper: Number(detail.dsctonper || 0),
+        glp: Number(detail.glp || 0),
+        tarjetaPlaca: Number(detail.tarjetaplaca || 0),
+        flete: Number(detail.flete || 0),
+        cuotaInicial: detail.cuota_inicial || "",
+        cantidad: Number(detail.cantidad || 1),
+        precioUnitario: Number(detail.precio_unitario || 0),
+        descripcion: detail.descripcion || "",
+        colorExterno: detail.color_externo || "",
+        colorInterno: detail.color_interno || "",
+      } : null,
+      vins: vins.map((row) => ({ value: row.vin, label: row.vin, ...row })),
+      accessories: accessories.map((row) => ({
+        id: row.id,
+        detalle: row.detalle,
+        numeroParte: row.numero_parte || "",
+        cantidad: Number(row.cantidad || 0),
+        precioUnitario: Number(row.precio_unitario || 0),
+        subtotal: Number(row.subtotal || 0),
+        descuentoMonto: Number(row.descuento_monto || 0),
+        total: Number(row.total || 0),
+      })),
+      gifts: gifts.map((row) => ({
+        id: row.id,
+        detalle: row.detalle,
+        lote: row.lote || "",
+        cantidad: Number(row.cantidad || 0),
+        precioUnitario: Number(row.precio_unitario || 0),
+        subtotal: Number(row.subtotal || 0),
+        descuentoMonto: Number(row.descuento_monto || 0),
+        total: Number(row.total || 0),
+      })),
+      salesBossName: salesBoss?.fullname || "",
+    });
+  } catch (error) {
+    console.error("Error loading reservation:", error);
+    return NextResponse.json({ message: "No se pudo cargar la reserva." }, { status: 500 });
+  }
+}
+
+export async function PUT(request, { params }) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
+  const connection = await pool.getConnection();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    const body = await request.json();
+    await connection.beginTransaction();
+    if (body.status) {
+      const allowed = canSeeAll(user) ? ["observado", "firmado", "enviado_firma"] : ["subsanado", "enviado_firma"];
+      if (!allowed.includes(body.status)) return NextResponse.json({ message: "No tienes permiso para ese estado." }, { status: 403 });
+      await connection.query(`UPDATE ventas_reservas SET estado=?, observaciones=COALESCE(?, observaciones) WHERE id=?`, [body.status, body.observaciones ?? null, id]);
+    }
+    if (body.detail) {
+      const d = body.detail;
+      const total = Number(d.precioUnitario || 0) * Number(d.cantidad || 1)
+        - Number(d.descuentoTienda || 0)
+        - Number(d.bonoRetoma || 0)
+        - Number(d.descuentoNper || 0)
+        + Number(d.glp || 0)
+        + Number(d.tarjetaPlaca || 0)
+        + Number(d.flete || 0);
+      await connection.query(
+        `UPDATE ventas_reserva_detalles
+         SET tipo_comprobante=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,
+             dsctotienda=?, dsctotiendaporcentaje=?, dsctobonoretoma=?, dsctonper=?, glp=?, tarjetaplaca=?, flete=?,
+             cuota_inicial=?, cantidad=?, precio_unitario=?, descripcion=?
+         WHERE reserva_id=?`,
+        [
+          d.tipoComprobante || null, d.numeroMotor || null, d.tcReferencial || null, total,
+          d.vinExiste ? d.vin || null : null, d.vinExiste ? 1 : 0, d.usoVehiculo || null, d.placa || null,
+          d.descuentoTienda || 0, d.descuentoTiendaPorcentaje || null, d.bonoRetoma || 0, d.descuentoNper || 0,
+          d.glp || 0, d.tarjetaPlaca || 0, d.flete || 0, d.cuotaInicial || null, d.cantidad || 1,
+          d.precioUnitario || 0, d.descripcion || null, id,
+        ]
+      );
+    }
+    await connection.commit();
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error saving reservation:", error);
+    return NextResponse.json({ message: "No se pudo guardar la reserva." }, { status: 500 });
+  } finally {
+    connection.release();
+  }
+}
