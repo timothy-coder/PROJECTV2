@@ -84,14 +84,14 @@ function NavLinks({ menu, pathname, onNavigate, activeGroupKey }) {
          - Controlado con `value`.
          - Si activeGroupKey = "" => todas cerradas.
       */}
-      <Accordion type="single" value={openGroupKey} onValueChange={(value) => setOpenGroupKey(value || "")} className="px-2 pb-4">
+      <Accordion type="single" value={openGroupKey} onValueChange={(value) => setOpenGroupKey(value || "")} className="border-0 bg-transparent px-2 pb-4">
         {menu.map((section) => (
-          <AccordionItem key={section.key} value={section.key} className="border-white/10">
-            <AccordionTrigger className="px-3 py-2 text-slate-300 hover:text-white">
+          <AccordionItem key={section.key} value={section.key} className="border-white/10 bg-transparent data-open:bg-slate-800/40">
+            <AccordionTrigger className="rounded-lg px-3 py-2 text-slate-300 hover:bg-white/5 hover:text-white hover:no-underline">
               {section.label}
             </AccordionTrigger>
 
-            <AccordionContent className="space-y-1 px-1 pb-2">
+            <AccordionContent className="space-y-1 rounded-lg bg-slate-950/30 px-1 pb-2 [&_a]:no-underline [&_a]:hover:text-white">
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.to || pathname.startsWith(item.to + "/");
