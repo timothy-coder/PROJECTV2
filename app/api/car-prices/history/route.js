@@ -10,11 +10,14 @@ export async function POST(request) {
     }
     await pool.query(
       `INSERT INTO ventas_historial_carros
-       (vin, precio_id, numerofactura, preciocompra, precioventa, created_at_facturacion, created_at_llegadaalcentro, created_at_entrega)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (vin, precio_id, color_externo, color_interno, numero_motor, numerofactura, preciocompra, precioventa, created_at_facturacion, created_at_llegadaalcentro, created_at_entrega)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         String(body.vin).trim(),
         Number(body.precioId),
+        body.colorExterno || null,
+        body.colorInterno || null,
+        body.numeroMotor || null,
         body.numeroFactura || null,
         body.precioCompra === "" || body.precioCompra === undefined ? null : Number(body.precioCompra),
         body.precioVenta === "" || body.precioVenta === undefined ? null : Number(body.precioVenta),

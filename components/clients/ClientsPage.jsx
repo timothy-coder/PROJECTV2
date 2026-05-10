@@ -41,6 +41,8 @@ export default function ClientsPage({ userPermissions }) {
   const canCreate = hasPerm(userPermissions, ["clientes", "create"]);
   const canEdit = hasPerm(userPermissions, ["clientes", "edit"]);
   const canDelete = hasPerm(userPermissions, ["clientes", "delete"]);
+  const canViewVehicles = hasPerm(userPermissions, ["clientes", "vehicles"]);
+  const tableColSpan = canViewVehicles ? 7 : 6;
   const filteredClients = useMemo(() => {
     const clean = query.trim().toLowerCase();
     if (!clean) return clients;
@@ -49,6 +51,7 @@ export default function ClientsPage({ userPermissions }) {
         client.nombre,
         client.apellido,
         client.nombreComercial,
+        client.idLead,
         client.identificacionFiscal,
         client.celular,
         client.email,
@@ -103,16 +106,17 @@ export default function ClientsPage({ userPermissions }) {
               <tr>
                 <th className="px-3 py-2.5">Nombre</th>
                 <th className="px-3 py-2.5">Apellido</th>
+                <th className="px-3 py-2.5">ID Lead</th>
                 <th className="px-3 py-2.5">Celular</th>
                 <th className="px-3 py-2.5">DNI</th>
-                <th className="px-3 py-2.5">Vehículos</th>
+                {canViewVehicles ? <th className="px-3 py-2.5">Vehículos</th> : null}
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={tableColSpan} className="px-3 py-10 text-center text-slate-500">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="size-4 animate-spin" />
                       Cargando clientes...
@@ -125,9 +129,10 @@ export default function ClientsPage({ userPermissions }) {
                     <tr className="text-slate-800">
                       <td className="px-3 py-3 font-semibold">{client.nombre || client.nombreComercial || "-"}</td>
                       <td className="px-3 py-3">{client.apellido || "-"}</td>
+                      <td className="px-3 py-3">{client.idLead || "-"}</td>
                       <td className="px-3 py-3">{client.celular || "-"}</td>
                       <td className="px-3 py-3">{client.identificacionFiscal || "-"}</td>
-                      <td className="px-3 py-3">
+                      {canViewVehicles ? <td className="px-3 py-3">
                         <button
                           type="button"
                           onClick={() => setExpandedId(expandedId === client.id ? null : client.id)}
@@ -135,12 +140,12 @@ export default function ClientsPage({ userPermissions }) {
                         >
                           {client.vehicles.length}
                         </button>
-                      </td>
+                      </td> : null}
                       <td className="px-3 py-3">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => setExpandedId(expandedId === client.id ? null : client.id)} title="Ver vehículos">
+                          {canViewVehicles ? <Button variant="ghost" size="icon" onClick={() => setExpandedId(expandedId === client.id ? null : client.id)} title="Ver vehículos">
                             <Car className="size-4" />
-                          </Button>
+                          </Button> : null}
                           {canEdit ? (
                             <Button variant="ghost" size="icon" onClick={() => setClientDialog({ mode: "edit", client })} title="Editar cliente">
                               <Edit3 className="size-4" />
@@ -154,9 +159,9 @@ export default function ClientsPage({ userPermissions }) {
                         </div>
                       </td>
                     </tr>
-                    {expandedId === client.id ? (
+                    {canViewVehicles && expandedId === client.id ? (
                       <tr>
-                        <td colSpan={6} className="bg-white p-0">
+                        <td colSpan={tableColSpan} className="bg-white p-0">
                           <VehiclesPanel
                             client={client}
                             canCreate={canCreate}
@@ -173,7 +178,7 @@ export default function ClientsPage({ userPermissions }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-slate-500">
+                  <td colSpan={tableColSpan} className="px-3 py-10 text-center text-slate-500">
                     No hay clientes para mostrar.
                   </td>
                 </tr>

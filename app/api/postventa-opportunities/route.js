@@ -14,6 +14,10 @@ function canSeeAll(user, permission) {
   return Boolean(hasPerm(user.permissions, [permission, "viewall"]) || hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"]));
 }
 
+function canSeeAllClients(user) {
+  return Boolean(hasPerm(user.permissions, ["clientes", "viewall"]));
+}
+
 function datePart(value) {
   if (!value) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -135,6 +139,15 @@ export async function POST(request) {
     }
     if (!body.clienteId || !body.vehiculoId || !body.origenId || !body.fechaAgenda || !body.horaAgenda) {
       return NextResponse.json({ message: "Completa cliente, vehiculo, origen y agenda." }, { status: 400 });
+    }
+    if (!canSeeAllClients(user)) {
+      const [clientRows] = await connection.query(
+        `SELECT id FROM administracion_clientes WHERE id = ? AND created_by = ? LIMIT 1`,
+        [Number(body.clienteId), user.id]
+      );
+      if (!clientRows.length) {
+        return NextResponse.json({ message: "No tienes permiso para usar este cliente." }, { status: 403 });
+      }
     }
     const canAll = canSeeAll(user, config.permission);
     const assignedTo = canAll ? (body.asignadoA ? Number(body.asignadoA) : null) : user.id;

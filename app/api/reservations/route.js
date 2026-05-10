@@ -5,7 +5,7 @@ import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function canSeeAll(user) {
-  return Boolean(hasPerm(user.permissions, ["reservas", "viewall"]) || hasPerm(user.permissions, ["reservas", "review"]));
+  return Boolean(hasPerm(user.permissions, ["reservas", "viewall"]));
 }
 
 export async function GET() {

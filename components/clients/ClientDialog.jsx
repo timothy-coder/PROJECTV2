@@ -25,6 +25,7 @@ const identificationOptions = [
 
 function emptyClient() {
   return {
+    idLead: "",
     nombre: "",
     apellido: "",
     email: "",
@@ -46,6 +47,7 @@ function emptyClient() {
 function formFromClient(client) {
   if (!client) return emptyClient();
   return {
+    idLead: client.idLead || "",
     nombre: client.nombre || "",
     apellido: client.apellido || "",
     email: client.email || "",
@@ -184,6 +186,7 @@ function ClientDialogBody({ mode, client, options, onClose, onSubmit }) {
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Nombre *" value={form.nombre} onChange={(value) => updateField("nombre", value)} />
               <Field label="Apellido *" value={form.apellido} onChange={(value) => updateField("apellido", value)} />
+              <Field label="ID Lead" value={form.idLead} onChange={(value) => updateField("idLead", value)} placeholder="Ej: LD-2026-001" />
               <Field label="Celular *" inputMode="numeric" maxLength={9} value={form.celular} onChange={updatePhone} placeholder="999999999" />
               <Field type="email" label="Email *" value={form.email} onChange={(value) => updateField("email", value)} />
               <div className="space-y-2">

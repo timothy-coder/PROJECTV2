@@ -5,7 +5,118 @@ import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function canSeeAll(user) {
-  return Boolean(hasPerm(user.permissions, ["reservas", "viewall"]) || hasPerm(user.permissions, ["reservas", "review"]));
+  return Boolean(hasPerm(user.permissions, ["reservas", "viewall"]));
+}
+
+const RESERVATION_STATUS_TRANSITIONS = {
+  borrador: {
+    enviado_firma: "send_signature",
+  },
+  enviado_firma: {
+    observado: "observe",
+    firmado: "sign",
+  },
+  observado: {
+    subsanado: "subsanate",
+    firmado: "sign",
+  },
+  subsanado: {
+    observado: "observe",
+    firmado: "sign",
+  },
+};
+
+function canChangeReservationStatus(user, fromStatus, toStatus) {
+  const requiredPermission = RESERVATION_STATUS_TRANSITIONS[fromStatus]?.[toStatus];
+  if (!requiredPermission) return false;
+  return Boolean(hasPerm(user.permissions, ["reservas", requiredPermission]));
+}
+
+function normalizeDiscounts(discounts) {
+  return (Array.isArray(discounts) ? discounts : [])
+    .map((discount, index) => ({
+      nombre: String(discount.nombre || "").trim(),
+      tipo: String(discount.tipo || "MONTO").toUpperCase() === "PORCENTAJE" ? "PORCENTAJE" : "MONTO",
+      valor: Number(discount.valor || 0),
+      orden: Number(discount.orden ?? index),
+      nota: String(discount.nota || "").trim() || null,
+    }))
+    .filter((discount) => discount.nombre && discount.valor > 0);
+}
+
+function normalizeDeposits(deposits) {
+  return (Array.isArray(deposits) ? deposits : [])
+    .map((deposit) => ({
+      entidadFinanciera: String(deposit.entidadFinanciera || "").trim() || null,
+      numeroOperacion: String(deposit.numeroOperacion || "").trim() || null,
+      monto: Number(deposit.monto || 0),
+      fechaDeposito: deposit.fechaDeposito ? String(deposit.fechaDeposito).replace("T", " ").slice(0, 19) : null,
+      observacion: String(deposit.observacion || "").trim() || null,
+    }))
+    .filter((deposit) => deposit.monto > 0 || deposit.entidadFinanciera || deposit.numeroOperacion || deposit.fechaDeposito || deposit.observacion);
+}
+
+function getDiscountAmount(discount, base) {
+  if (discount.tipo === "PORCENTAJE") return Number(base || 0) * Number(discount.valor || 0) / 100;
+  return Number(discount.valor || 0);
+}
+
+function itemDiscountValues(subtotal, type, value) {
+  const discount = Math.max(Number(value || 0), 0);
+  const porcentaje = type === "percentage" ? discount : null;
+  const monto = type === "amount" ? discount : 0;
+  const total = Math.max(Number(subtotal || 0) - monto - (porcentaje ? Number(subtotal || 0) * porcentaje / 100 : 0), 0);
+  return { porcentaje, monto, total };
+}
+
+function normalizeDateTime(value) {
+  return value ? String(value).replace("T", " ").slice(0, 19) : null;
+}
+
+async function quoteItemsTotal(connection, cotizacionId) {
+  if (!cotizacionId) return 0;
+  const [[row]] = await connection.query(
+    `SELECT
+       COALESCE((SELECT SUM(COALESCE(total, 0)) FROM ventas_cotizaciones_accesorios WHERE cotizacion_id=?), 0) AS accesorios_total,
+       COALESCE((SELECT SUM(COALESCE(total, 0)) FROM ventas_cotizaciones_regalos WHERE cotizacion_id=?), 0) AS regalos_total`,
+    [cotizacionId, cotizacionId]
+  );
+  return Number(row?.accesorios_total || 0) + Number(row?.regalos_total || 0);
+}
+
+async function recalcReservationTotal(connection, reservationId, override = {}) {
+  const [[detail]] = await connection.query(
+    `SELECT d.id, d.cotizacion_id, d.precio_unitario, d.cantidad, d.dsctotienda, d.dsctobonoretoma,
+            d.dsctonper, d.glp, d.tarjetaplaca, d.flete, d.cuota_inicial
+     FROM ventas_reserva_detalles d
+     WHERE d.reserva_id=?
+     LIMIT 1`,
+    [reservationId]
+  );
+  if (!detail) return 0;
+  const [discountRows] = await connection.query(
+    `SELECT nombre, tipo, valor, orden, nota
+     FROM ventas_reserva_detalles_descuentos
+     WHERE detalle_id=?
+     ORDER BY orden ASC, id ASC`,
+    [detail.id]
+  );
+  const merged = { ...detail, ...override };
+  const base = Number(merged.precio_unitario || 0) * Number(merged.cantidad || 1);
+  const extraDiscountTotal = discountRows.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
+  const itemsTotal = await quoteItemsTotal(connection, merged.cotizacion_id);
+  const total = base
+    - Number(merged.dsctotienda || 0)
+    - Number(merged.dsctobonoretoma || 0)
+    - Number(merged.dsctonper || 0)
+    - extraDiscountTotal
+    + Number(merged.glp || 0)
+    + Number(merged.tarjetaplaca || 0)
+    + Number(merged.flete || 0)
+    - Number(merged.cuota_inicial || 0)
+    + itemsTotal;
+  await connection.query(`UPDATE ventas_reserva_detalles SET total=? WHERE id=?`, [total, detail.id]);
+  return total;
 }
 
 export async function GET(_request, { params }) {
@@ -34,11 +145,13 @@ export async function GET(_request, { params }) {
     );
     if (!reservation) return NextResponse.json({ message: "Reserva no encontrada." }, { status: 404 });
     const [[detail]] = await pool.query(
-      `SELECT d.*, q.anio, q.sku, q.color_externo, q.color_interno,
+      `SELECT d.*, q.anio, q.sku, q.color_externo, q.color_interno, o.cliente_id,
               p.id AS precio_id, p.version, p.precio_base, p.marca_id, p.modelo_id,
               ma.name AS marca, mo.name AS modelo, cl.name AS clase
        FROM ventas_reserva_detalles d
        INNER JOIN ventas_cotizaciones q ON q.id=d.cotizacion_id
+       INNER JOIN ventas_reservas r ON r.id=d.reserva_id
+       LEFT JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
        INNER JOIN ventas_precios p ON p.id=q.precio_id
        INNER JOIN administracion_marcas ma ON ma.id=p.marca_id
        INNER JOIN administracion_modelos mo ON mo.id=p.modelo_id
@@ -47,7 +160,8 @@ export async function GET(_request, { params }) {
       [id]
     );
     const [vins] = detail ? await pool.query(
-      `SELECT h.vin, h.numerofactura, h.preciocompra, h.precioventa
+      `SELECT h.vin, h.color_externo, h.color_interno, h.numero_motor,
+              h.numerofactura, h.preciocompra, h.precioventa
        FROM ventas_historial_carros h
        WHERE h.precio_id=?
          AND (
@@ -87,6 +201,41 @@ export async function GET(_request, { params }) {
        ORDER BY cr.id ASC`,
       [detail.cotizacion_id]
     ) : [[]];
+    const [accessoryOptions] = detail ? await pool.query(
+      `SELECT id, detalle, numero_parte, COALESCE(precio_venta, precio, 0) AS precio, moneda_id
+       FROM ventas_accesorios_disponibles
+       WHERE marca_id=? AND modelo_id=?
+       ORDER BY detalle ASC`,
+      [detail.marca_id, detail.modelo_id]
+    ) : [[]];
+    const [giftOptions] = detail ? await pool.query(
+      `SELECT id, detalle, lote, COALESCE(precio_venta, precio_compra, 0) AS precio, moneda_id
+       FROM ventas_regalos_disponibles
+       ORDER BY detalle ASC`
+    ) : [[]];
+    const [discountRows] = detail ? await pool.query(
+      `SELECT id, detalle_id, nombre, tipo, valor, orden, nota
+       FROM ventas_reserva_detalles_descuentos
+       WHERE detalle_id=?
+       ORDER BY orden ASC, id ASC`,
+      [detail.id]
+    ) : [[]];
+    const [depositRows] = detail ? await pool.query(
+      `SELECT id, detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion
+       FROM ventas_reserva_depositos
+       WHERE detalle_id=?
+       ORDER BY COALESCE(fecha_deposito, created_at) ASC, id ASC`,
+      [detail.id]
+    ) : [[]];
+    const [[carEvent]] = detail?.vin ? await pool.query(
+      `SELECT id, vin, numero_factura, fecha_facturacion, fecha_entrega_cliente, fecha_entrega_placa,
+              placa, kilometraje, observacion
+       FROM ventas_historial_carros_eventos
+       WHERE vin=?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [detail.vin]
+    ) : [[null]];
     const [[salesBoss]] = await pool.query(
       `SELECT u.fullname
        FROM administracion_usuarios u
@@ -96,7 +245,17 @@ export async function GET(_request, { params }) {
        LIMIT 1`
     );
     return NextResponse.json({
-      currentUser: { id: user.id, canViewAll: viewAll },
+      currentUser: {
+        id: user.id,
+        canViewAll: viewAll,
+        canCarData: hasPerm(user.permissions, ["reservas", "car_data"]),
+        reservationStatusActions: {
+          sendSignature: hasPerm(user.permissions, ["reservas", "send_signature"]),
+          observe: hasPerm(user.permissions, ["reservas", "observe"]),
+          subsanate: hasPerm(user.permissions, ["reservas", "subsanate"]),
+          sign: hasPerm(user.permissions, ["reservas", "sign"]),
+        },
+      },
       reservation: {
         id: reservation.id,
         estado: reservation.estado || "borrador",
@@ -122,7 +281,10 @@ export async function GET(_request, { params }) {
       },
       detail: detail ? {
         id: detail.id,
+        clienteId: detail.cliente_id,
         cotizacionId: detail.cotizacion_id,
+        marcaId: detail.marca_id,
+        modeloId: detail.modelo_id,
         marca: detail.marca,
         modelo: detail.modelo,
         clase: detail.clase || "-",
@@ -151,28 +313,84 @@ export async function GET(_request, { params }) {
         descripcion: detail.descripcion || "",
         colorExterno: detail.color_externo || "",
         colorInterno: detail.color_interno || "",
+        descuentos: discountRows.map((row) => ({
+          id: Number(row.id),
+          nombre: row.nombre,
+          tipo: row.tipo,
+          valor: Number(row.valor || 0),
+          orden: Number(row.orden || 0),
+          nota: row.nota || "",
+        })),
+        depositos: depositRows.map((row) => ({
+          id: Number(row.id),
+          entidadFinanciera: row.entidad_financiera || "",
+          numeroOperacion: row.numero_operacion || "",
+          monto: Number(row.monto || 0),
+          fechaDeposito: row.fecha_deposito,
+          observacion: row.observacion || "",
+        })),
+        carEvent: carEvent ? {
+          id: Number(carEvent.id),
+          vin: carEvent.vin,
+          numeroFactura: carEvent.numero_factura || "",
+          fechaFacturacion: carEvent.fecha_facturacion,
+          fechaEntregaCliente: carEvent.fecha_entrega_cliente,
+          fechaEntregaPlaca: carEvent.fecha_entrega_placa,
+          placa: carEvent.placa || "",
+          kilometraje: carEvent.kilometraje === null ? "" : Number(carEvent.kilometraje),
+          observacion: carEvent.observacion || "",
+        } : null,
       } : null,
-      vins: vins.map((row) => ({ value: row.vin, label: row.vin, ...row })),
+      vins: vins.map((row) => ({
+        value: row.vin,
+        label: row.vin,
+        colorExterno: row.color_externo || "",
+        colorInterno: row.color_interno || "",
+        numeroMotor: row.numero_motor || "",
+        numeroFactura: row.numerofactura || "",
+        precioCompra: row.preciocompra === null ? null : Number(row.preciocompra),
+        precioVenta: row.precioventa === null ? null : Number(row.precioventa),
+      })),
       accessories: accessories.map((row) => ({
         id: row.id,
+        accesorioId: row.accesorio_id,
         detalle: row.detalle,
         numeroParte: row.numero_parte || "",
         cantidad: Number(row.cantidad || 0),
         precioUnitario: Number(row.precio_unitario || 0),
         subtotal: Number(row.subtotal || 0),
+        descuentoPorcentaje: Number(row.descuento_porcentaje || 0),
         descuentoMonto: Number(row.descuento_monto || 0),
         total: Number(row.total || 0),
+        notas: row.notas || "",
       })),
       gifts: gifts.map((row) => ({
         id: row.id,
+        regaloId: row.regalo_id,
         detalle: row.detalle,
         lote: row.lote || "",
         cantidad: Number(row.cantidad || 0),
         precioUnitario: Number(row.precio_unitario || 0),
         subtotal: Number(row.subtotal || 0),
+        descuentoPorcentaje: Number(row.descuento_porcentaje || 0),
         descuentoMonto: Number(row.descuento_monto || 0),
         total: Number(row.total || 0),
+        notas: row.notas || "",
       })),
+      options: {
+        accessories: accessoryOptions.map((row) => ({
+          value: row.id,
+          label: `${row.detalle}${row.numero_parte ? ` - ${row.numero_parte}` : ""}`,
+          price: Number(row.precio || 0),
+          monedaId: row.moneda_id,
+        })),
+        gifts: giftOptions.map((row) => ({
+          value: row.id,
+          label: `${row.detalle}${row.lote ? ` - ${row.lote}` : ""}`,
+          price: Number(row.precio || 0),
+          monedaId: row.moneda_id,
+        })),
+      },
       salesBossName: salesBoss?.fullname || "",
       vinReleaseRequest: vinReleaseRequest ? {
         id: Number(vinReleaseRequest.id),
@@ -248,7 +466,7 @@ export async function PUT(request, { params }) {
         );
         if (action === "approve") {
           await connection.query(
-            `UPDATE ventas_reserva_detalles SET vin=NULL, vin_existe=0 WHERE reserva_id=? AND vin=?`,
+            `UPDATE ventas_reserva_detalles SET vin=NULL, vin_existe=0, numero_motor=NULL WHERE reserva_id=? AND vin=?`,
             [id, requestRow.vin]
           );
         }
@@ -256,25 +474,179 @@ export async function PUT(request, { params }) {
       await connection.commit();
       return NextResponse.json({ ok: true });
     }
-    if (reservationState.estado === "firmado" && (body.detail || body.status)) {
+    if (body.action === "car-data") {
+      if (!hasPerm(user.permissions, ["reservas", "car_data"])) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No tienes permiso para datos del carro." }, { status: 403 });
+      }
+      if (reservationState.estado !== "firmado") {
+        await connection.rollback();
+        return NextResponse.json({ message: "La reserva debe estar firmada." }, { status: 409 });
+      }
+      const [[detail]] = await connection.query(
+        `SELECT d.id, d.vin, d.cotizacion_id, q.anio, q.color_externo, p.marca_id, p.modelo_id, o.cliente_id
+         FROM ventas_reserva_detalles d
+         INNER JOIN ventas_cotizaciones q ON q.id=d.cotizacion_id
+         INNER JOIN ventas_precios p ON p.id=q.precio_id
+         INNER JOIN ventas_reservas r ON r.id=d.reserva_id
+         INNER JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
+         WHERE d.reserva_id=?
+         LIMIT 1`,
+        [id]
+      );
+      if (!detail?.vin) {
+        await connection.rollback();
+        return NextResponse.json({ message: "La reserva no tiene VIN." }, { status: 400 });
+      }
+      const event = body.carEvent || {};
+      const eventPayload = [
+        event.numeroFactura || null,
+        normalizeDateTime(event.fechaFacturacion),
+        normalizeDateTime(event.fechaEntregaCliente),
+        normalizeDateTime(event.fechaEntregaPlaca),
+        event.placa || null,
+        event.kilometraje === "" || event.kilometraje === null || event.kilometraje === undefined ? null : Number(event.kilometraje),
+        event.observacion || null,
+      ];
+      const [[existingEvent]] = await connection.query(`SELECT id FROM ventas_historial_carros_eventos WHERE vin=? ORDER BY id DESC LIMIT 1`, [detail.vin]);
+      if (existingEvent) {
+        await connection.query(
+          `UPDATE ventas_historial_carros_eventos
+           SET numero_factura=?, fecha_facturacion=?, fecha_entrega_cliente=?, fecha_entrega_placa=?, placa=?, kilometraje=?, observacion=?
+           WHERE id=?`,
+          [...eventPayload, existingEvent.id]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO ventas_historial_carros_eventos
+           (vin, numero_factura, fecha_facturacion, fecha_entrega_cliente, fecha_entrega_placa, placa, kilometraje, observacion)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [detail.vin, ...eventPayload]
+        );
+      }
+      if (event.fechaEntregaCliente && event.kilometraje !== "" && event.kilometraje !== null && event.kilometraje !== undefined) {
+        const fechaVisita = String(event.fechaEntregaCliente).slice(0, 10);
+        const [[vehicle]] = await connection.query(`SELECT id FROM administracion_vehiculos WHERE vin=? AND deleted_at IS NULL LIMIT 1`, [detail.vin]);
+        if (vehicle) {
+          await connection.query(
+            `UPDATE administracion_vehiculos
+             SET cliente_id=?, placas=?, marca_id=?, modelo_id=?, anio=?, color=?, kilometraje=?, fecha_ultima_visita=?
+             WHERE id=?`,
+            [detail.cliente_id || null, event.placa || null, detail.marca_id || null, detail.modelo_id || null, detail.anio || null, detail.color_externo || null, Number(event.kilometraje || 0), fechaVisita, vehicle.id]
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO administracion_vehiculos
+             (cliente_id, placas, vin, marca_id, modelo_id, anio, color, kilometraje, fecha_ultima_visita, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())`,
+            [detail.cliente_id || null, event.placa || null, detail.vin, detail.marca_id || null, detail.modelo_id || null, detail.anio || null, detail.color_externo || null, Number(event.kilometraje || 0), fechaVisita]
+          );
+        }
+      }
+      await connection.commit();
+      return NextResponse.json({ ok: true });
+    }
+    if (reservationState.estado === "firmado" && (body.detail || body.status || body.quoteItem)) {
       await connection.rollback();
       return NextResponse.json({ message: "La reserva firmada no se puede modificar." }, { status: 409 });
     }
+    if (body.quoteItem) {
+      if (!hasPerm(user.permissions, ["reservas", "edit"]) && !hasPerm(user.permissions, ["cotizacion", "edit"]) && !canSeeAll(user)) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No tienes permiso para modificar accesorios o regalos." }, { status: 403 });
+      }
+      const [[detail]] = await connection.query(
+        `SELECT d.cotizacion_id, p.marca_id, p.modelo_id
+         FROM ventas_reserva_detalles d
+         INNER JOIN ventas_cotizaciones q ON q.id=d.cotizacion_id
+         INNER JOIN ventas_precios p ON p.id=q.precio_id
+         WHERE d.reserva_id=?
+         LIMIT 1`,
+        [id]
+      );
+      if (!detail?.cotizacion_id) {
+        await connection.rollback();
+        return NextResponse.json({ message: "La reserva no tiene cotizacion asociada." }, { status: 404 });
+      }
+      const item = body.quoteItem;
+      const isGift = item.type === "gift";
+      if (item.mode === "delete") {
+        const table = isGift ? "ventas_cotizaciones_regalos" : "ventas_cotizaciones_accesorios";
+        await connection.query(`DELETE FROM ${table} WHERE id=? AND cotizacion_id=?`, [Number(item.itemId), detail.cotizacion_id]);
+        await recalcReservationTotal(connection, id);
+        await connection.commit();
+        return NextResponse.json({ ok: true });
+      }
+      const catalogId = Number(item.catalogId);
+      const cantidad = Math.max(Number(item.cantidad || 1), 1);
+      const [[catalog]] = isGift
+        ? await connection.query(`SELECT id, precio_compra, precio_venta, moneda_id FROM ventas_regalos_disponibles WHERE id=?`, [catalogId])
+        : await connection.query(
+          `SELECT id, precio, precio_venta, moneda_id
+           FROM ventas_accesorios_disponibles
+           WHERE id=? AND marca_id=? AND modelo_id=?`,
+          [catalogId, detail.marca_id, detail.modelo_id]
+        );
+      if (!catalog) {
+        await connection.rollback();
+        return NextResponse.json({ message: isGift ? "Regalo no encontrado." : "Accesorio no disponible para esta version." }, { status: 404 });
+      }
+      const unit = Number(isGift ? (catalog.precio_venta ?? catalog.precio_compra ?? 0) : (catalog.precio_venta ?? catalog.precio ?? 0));
+      const subtotal = unit * cantidad;
+      const { porcentaje, monto, total } = itemDiscountValues(subtotal, item.discountType, item.discountValue);
+      if (item.mode === "update") {
+        const table = isGift ? "ventas_cotizaciones_regalos" : "ventas_cotizaciones_accesorios";
+        const fk = isGift ? "regalo_id" : "accesorio_id";
+        await connection.query(
+          `UPDATE ${table}
+           SET ${fk}=?, cantidad=?, precio_unitario=?, moneda_id=?, subtotal=?, descuento_porcentaje=?, descuento_monto=?, total=?, notas=?
+           WHERE id=? AND cotizacion_id=?`,
+          [catalog.id, cantidad, unit, catalog.moneda_id, subtotal, porcentaje, monto, total, item.notas || null, Number(item.itemId), detail.cotizacion_id]
+        );
+      } else if (isGift) {
+        await connection.query(
+          `INSERT INTO ventas_cotizaciones_regalos (cotizacion_id, regalo_id, cantidad, precio_unitario, moneda_id, subtotal, descuento_porcentaje, descuento_monto, total, notas)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [detail.cotizacion_id, catalog.id, cantidad, unit, catalog.moneda_id, subtotal, porcentaje, monto, total, item.notas || null]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO ventas_cotizaciones_accesorios (cotizacion_id, accesorio_id, cantidad, precio_unitario, moneda_id, subtotal, descuento_porcentaje, descuento_monto, total, notas)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [detail.cotizacion_id, catalog.id, cantidad, unit, catalog.moneda_id, subtotal, porcentaje, monto, total, item.notas || null]
+        );
+      }
+      await recalcReservationTotal(connection, id);
+      await connection.commit();
+      return NextResponse.json({ ok: true });
+    }
     if (body.status) {
-      const allowed = canSeeAll(user) ? ["observado", "firmado", "enviado_firma"] : ["subsanado", "enviado_firma"];
-      if (!allowed.includes(body.status)) return NextResponse.json({ message: "No tienes permiso para ese estado." }, { status: 403 });
+      const nextStatus = String(body.status || "");
+      const currentStatus = String(reservationState.estado || "borrador");
+      if (!canChangeReservationStatus(user, currentStatus, nextStatus)) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No tienes permiso para ese cambio de estado o la transicion no es valida." }, { status: 403 });
+      }
       await connection.query(`UPDATE ventas_reservas SET estado=?, observaciones=COALESCE(?, observaciones) WHERE id=?`, [body.status, body.observaciones ?? null, id]);
     }
     if (body.detail) {
       const d = body.detail;
-      const total = Number(d.precioUnitario || 0) * Number(d.cantidad || 1)
+      const base = Number(d.precioUnitario || 0) * Number(d.cantidad || 1);
+      const extraDiscounts = normalizeDiscounts(d.descuentos);
+      const deposits = normalizeDeposits(d.depositos);
+      const extraDiscountTotal = extraDiscounts.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
+      const itemsTotal = await quoteItemsTotal(connection, d.cotizacionId);
+      const total = base
         - Number(d.descuentoTienda || 0)
         - Number(d.bonoRetoma || 0)
         - Number(d.descuentoNper || 0)
+        - extraDiscountTotal
         + Number(d.glp || 0)
         + Number(d.tarjetaPlaca || 0)
-        + Number(d.flete || 0);
-      await connection.query(
+        + Number(d.flete || 0)
+        - Number(d.cuotaInicial || 0)
+        + itemsTotal;
+      const [detailUpdate] = await connection.query(
         `UPDATE ventas_reserva_detalles
          SET tipo_comprobante=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,
              dsctotienda=?, dsctotiendaporcentaje=?, dsctobonoretoma=?, dsctonper=?, glp=?, tarjetaplaca=?, flete=?,
@@ -288,6 +660,51 @@ export async function PUT(request, { params }) {
           d.precioUnitario || 0, d.descripcion || null, id,
         ]
       );
+      const detailId = Number(d.id || 0);
+      if (detailId) {
+        await connection.query(`DELETE FROM ventas_reserva_detalles_descuentos WHERE detalle_id=?`, [detailId]);
+        if (extraDiscounts.length) {
+          await connection.query(
+            `INSERT INTO ventas_reserva_detalles_descuentos (detalle_id, nombre, tipo, valor, orden, nota)
+             VALUES ${extraDiscounts.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+            extraDiscounts.flatMap((discount) => [detailId, discount.nombre, discount.tipo, discount.valor, discount.orden, discount.nota])
+          );
+        }
+        await connection.query(`DELETE FROM ventas_reserva_depositos WHERE detalle_id=?`, [detailId]);
+        if (deposits.length) {
+          await connection.query(
+            `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion)
+             VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+            deposits.flatMap((deposit) => [detailId, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.fechaDeposito, deposit.observacion])
+          );
+        }
+      } else if (detailUpdate.affectedRows) {
+        const [[savedDetail]] = await connection.query(`SELECT id FROM ventas_reserva_detalles WHERE reserva_id=? LIMIT 1`, [id]);
+        if (savedDetail?.id) {
+          await connection.query(`DELETE FROM ventas_reserva_detalles_descuentos WHERE detalle_id=?`, [savedDetail.id]);
+          if (extraDiscounts.length) {
+            await connection.query(
+              `INSERT INTO ventas_reserva_detalles_descuentos (detalle_id, nombre, tipo, valor, orden, nota)
+               VALUES ${extraDiscounts.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+              extraDiscounts.flatMap((discount) => [savedDetail.id, discount.nombre, discount.tipo, discount.valor, discount.orden, discount.nota])
+            );
+          }
+          await connection.query(`DELETE FROM ventas_reserva_depositos WHERE detalle_id=?`, [savedDetail.id]);
+          if (deposits.length) {
+            await connection.query(
+              `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion)
+               VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+              deposits.flatMap((deposit) => [savedDetail.id, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.fechaDeposito, deposit.observacion])
+            );
+          }
+        }
+      }
+      if (d.cotizacionId) {
+        await connection.query(
+          `UPDATE ventas_cotizaciones SET color_externo=?, color_interno=? WHERE id=?`,
+          [d.colorExterno || null, d.colorInterno || null, d.cotizacionId]
+        );
+      }
     }
     await connection.commit();
     return NextResponse.json({ ok: true });

@@ -17,6 +17,10 @@ function canSeeAll(user, permission = "oportunidades") {
   );
 }
 
+function canSeeAllClients(user) {
+  return Boolean(hasPerm(user.permissions, ["clientes", "viewall"]));
+}
+
 function datePart(value) {
   if (!value) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -49,6 +53,19 @@ async function getStageId(connection, name, fallback = true) {
   return fallbackRows[0]?.id || null;
 }
 
+async function isAdvisorUser(connection, userId) {
+  if (!userId) return true;
+  const [rows] = await connection.query(
+    `SELECT u.id
+     FROM administracion_usuarios u
+     INNER JOIN configuracion_roles r ON r.id = u.role_id
+     WHERE u.id = ? AND u.is_active = 1 AND LOWER(TRIM(r.name)) = 'asesor'
+     LIMIT 1`,
+    [Number(userId)]
+  );
+  return rows.length > 0;
+}
+
 export async function GET(request) {
   try {
     const user = await getCurrentUser();
@@ -58,6 +75,7 @@ export async function GET(request) {
       return NextResponse.json({ message: `No tienes permiso para ver ${config.label}.` }, { status: 403 });
     }
     const canViewAll = canSeeAll(user, config.permission);
+    const canViewAllClients = canSeeAllClients(user);
     const prefixFilter = `${config.prefix}-%`;
     const [opportunityRows] = await pool.query(
       `SELECT o.id, o.oportunidad_id, o.cliente_id, o.origen_id, o.suborigen_id, o.etapasconversion_id,
@@ -94,11 +112,24 @@ export async function GET(request) {
       detailRows = details;
       activityRows = activities;
     }
-    const [clients] = await pool.query(`SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre FROM administracion_clientes ORDER BY nombre ASC LIMIT 1000`);
+    const [clients] = await pool.query(
+      `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre
+       FROM administracion_clientes
+       ${canViewAllClients ? "" : "WHERE created_by = ?"}
+       ORDER BY nombre ASC
+       LIMIT 1000`,
+      canViewAllClients ? [] : [user.id]
+    );
     const [origins] = await pool.query(`SELECT id, name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [suborigins] = await pool.query(`SELECT id, origen_id, name FROM configuracion_suborigenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [stages] = await pool.query(`SELECT id, nombre, descripcion, color, sort_order FROM ventas_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`);
-    const [users] = await pool.query(`SELECT id, fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
+    const [users] = await pool.query(
+      `SELECT u.id, u.fullname
+       FROM administracion_usuarios u
+       INNER JOIN configuracion_roles r ON r.id = u.role_id
+       WHERE u.is_active=1 AND LOWER(TRIM(r.name)) = 'asesor'
+       ORDER BY u.fullname ASC`
+    );
     const [timeStates] = await pool.query(
       `SELECT id, nombre, estado, minutos_desde, minutos_hasta, color_hexadecimal, descripcion
        FROM ventas_configuracion_estados_tiempo
@@ -183,8 +214,18 @@ export async function POST(request) {
       return NextResponse.json({ message: `No tienes permiso para crear ${config.label}.` }, { status: 403 });
     }
     const canViewAll = canSeeAll(user, config.permission);
+    const canViewAllClients = canSeeAllClients(user);
     const clienteId = Number(body.clienteId);
     if (!clienteId || !body.origenId) return NextResponse.json({ message: "Completa cliente y origen." }, { status: 400 });
+    if (!canViewAllClients) {
+      const [clientRows] = await connection.query(
+        `SELECT id FROM administracion_clientes WHERE id = ? AND created_by = ? LIMIT 1`,
+        [clienteId, user.id]
+      );
+      if (!clientRows.length) {
+        return NextResponse.json({ message: "No tienes permiso para usar este cliente." }, { status: 403 });
+      }
+    }
     const [openRows] = await connection.query(
       `SELECT o.id, o.oportunidad_id, e.nombre AS etapa_nombre
        FROM ventas_oportunidades o INNER JOIN ventas_etapasconversion e ON e.id=o.etapasconversion_id
@@ -194,6 +235,9 @@ export async function POST(request) {
     const open = openRows.find((row) => !isClosed(row.etapa_nombre));
     if (open) return NextResponse.json({ code: "OPEN_OPPORTUNITY", message: "El cliente tiene una oportunidad abierta.", opportunity: open }, { status: 409 });
     const assignedTo = canViewAll ? (body.asignadoA ? Number(body.asignadoA) : null) : user.id;
+    if (assignedTo && !(await isAdvisorUser(connection, assignedTo))) {
+      return NextResponse.json({ message: "Solo se puede asignar a usuarios con rol Asesor." }, { status: 400 });
+    }
     const stageId = canViewAll ? await getStageId(connection, assignedTo ? "Asignado" : "Nuevo") : await getStageId(connection, "Asignado");
     await connection.beginTransaction();
     const code = await nextCode(connection, config.prefix);

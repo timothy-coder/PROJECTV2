@@ -2,11 +2,19 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 
+const FUELS = new Set(["GASOLINA", "DIESEL", "BICOMBUSTIBLE"]);
+
+function normalizeFuel(value) {
+  const fuel = String(value || "GASOLINA").trim().toUpperCase();
+  return FUELS.has(fuel) ? fuel : "GASOLINA";
+}
+
 function payloadFromBody(body) {
   return {
     marcaId: Number(body.marcaId),
     modeloId: Number(body.modeloId),
     version: String(body.version || "").trim(),
+    combustible: normalizeFuel(body.combustible),
     monedaId: Number(body.monedaId),
     precioBase: Number(body.precioBase || 0),
     enStock: Boolean(body.enStock),
@@ -26,9 +34,9 @@ export async function PUT(request, { params }) {
 
     await pool.query(
       `UPDATE ventas_precios
-       SET marca_id = ?, modelo_id = ?, version = ?, moneda_id = ?, precio_base = ?, en_stock = ?, existe = ?, tiempo_entrega_dias = ?
+       SET marca_id = ?, modelo_id = ?, version = ?, combustible = ?, moneda_id = ?, precio_base = ?, en_stock = ?, existe = ?, tiempo_entrega_dias = ?
        WHERE id = ?`,
-      [payload.marcaId, payload.modeloId, payload.version, payload.monedaId, payload.precioBase, payload.enStock ? 1 : 0, payload.existe ? 1 : 0, payload.tiempoEntregaDias, id]
+      [payload.marcaId, payload.modeloId, payload.version, payload.combustible, payload.monedaId, payload.precioBase, payload.enStock ? 1 : 0, payload.existe ? 1 : 0, payload.tiempoEntregaDias, id]
     );
 
     return NextResponse.json({ ok: true });

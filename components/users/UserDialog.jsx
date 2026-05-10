@@ -30,9 +30,19 @@ const permissionActionLabels = {
   edit: "Editar",
   delete: "Eliminar",
   viewall: "Ver todo",
+  vehicles: "Ver vehiculos",
+  history: "Ver historial",
+  history_create: "Crear carro",
+  pending_purchase: "Pendientes de compra",
+  status: "Cambiar estado",
   asignar: "Asignar",
   notify: "Notificar",
   firm: "Firmar",
+  car_data: "Datos del carro",
+  send_signature: "Enviar a firma",
+  observe: "Observar",
+  subsanate: "Subsanar",
+  sign: "Marcar firmado",
 };
 
 function emptyForm() {

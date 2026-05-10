@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 
 function normalizeClient(body) {
   return {
+    idLead: String(body.idLead || "").trim() || null,
     nombre: String(body.nombre || "").trim() || null,
     apellido: String(body.apellido || "").trim() || null,
     email: String(body.email || "").trim() || null,
@@ -34,13 +35,14 @@ export async function PUT(request, { params }) {
 
     const [result] = await pool.query(
       `UPDATE administracion_clientes
-       SET nombre = ?, apellido = ?, email = ?, celular = ?,
+       SET id_lead = ?, nombre = ?, apellido = ?, email = ?, celular = ?,
            tipo_identificacion = ?, identificacion_fiscal = ?,
            fecha_nacimiento = ?, ocupacion = ?, domicilio = ?,
            departamento_id = ?, provincia_id = ?, distrito_id = ?,
            nombreconyugue = ?, dniconyugue = ?, nombre_comercial = ?
        WHERE id = ?`,
       [
+        payload.idLead,
         payload.nombre,
         payload.apellido,
         payload.email,

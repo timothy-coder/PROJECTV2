@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
 export function usePostInventory() {
-  const [data, setData] = useState({ products: [], stocks: [], options: { types: [], centers: [], workshops: [], counters: [] } });
+  const [data, setData] = useState({ products: [], combos: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [] } });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -20,9 +20,11 @@ export function usePostInventory() {
     }
     setData({
       products: next.products || [],
+      combos: next.combos || [],
       stocks: next.stocks || [],
       options: {
         types: next.options?.types || [],
+        currencies: next.options?.currencies || [],
         centers: next.options?.centers || [],
         workshops: next.options?.workshops || [],
         counters: next.options?.counters || [],
@@ -46,6 +48,7 @@ export function usePostInventory() {
     }, 0);
     return {
       products: data.products.length,
+      combos: data.combos.length,
       totalStock,
       lowStock: 0,
       totalValue,
@@ -56,6 +59,9 @@ export function usePostInventory() {
     createProduct: async (payload) => { await postInventoryApi.createProduct(payload); await reload(); },
     updateProduct: async (id, payload) => { await postInventoryApi.updateProduct(id, payload); await reload(); },
     deleteProduct: async (id) => { await postInventoryApi.deleteProduct(id); await reload(); },
+    createCombo: async (payload) => { await postInventoryApi.createCombo(payload); await reload(); },
+    updateCombo: async (id, payload) => { await postInventoryApi.updateCombo(id, payload); await reload(); },
+    deleteCombo: async (id) => { await postInventoryApi.deleteCombo(id); await reload(); },
     createStock: async (payload) => { await postInventoryApi.createStock(payload); await reload(); },
     updateStock: async (id, payload) => { await postInventoryApi.updateStock(id, payload); await reload(); },
     deleteStock: async (id) => { await postInventoryApi.deleteStock(id); await reload(); },

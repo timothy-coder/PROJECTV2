@@ -12,6 +12,7 @@ export async function POST(request) {
     const stockTotal = Number(body.stockTotal || 0);
     const precioCompra = Number(body.precioCompra || 0);
     const precioVenta = Number(body.precioVenta || 0);
+    const monedaId = body.monedaId ? Number(body.monedaId) : null;
 
     if (!numeroParte || !descripcion) {
       return NextResponse.json({ message: "Numero de parte y descripcion son obligatorios." }, { status: 400 });
@@ -19,9 +20,9 @@ export async function POST(request) {
 
     const [result] = await pool.query(
       `INSERT INTO posventa_productos
-       (numero_parte, descripcion, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-      [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta]
+       (numero_parte, descripcion, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta, monedaId]
     );
 
     return NextResponse.json({ ok: true, id: result.insertId }, { status: 201 });

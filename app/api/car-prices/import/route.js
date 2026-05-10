@@ -12,6 +12,13 @@ function boolValue(value, fallback = true) {
   return ["1", "true", "si", "sí", "yes"].includes(normalize(value));
 }
 
+const FUELS = new Set(["GASOLINA", "DIESEL", "BICOMBUSTIBLE"]);
+
+function fuelValue(value) {
+  const fuel = String(value || "GASOLINA").trim().toUpperCase();
+  return FUELS.has(fuel) ? fuel : "GASOLINA";
+}
+
 export async function POST(request) {
   const connection = await pool.getConnection();
   try {
@@ -36,6 +43,7 @@ export async function POST(request) {
       const modeloId = Number(row.modelo_id || row.modeloId) || models.get(`${marcaId}:${normalize(row.modelo || row.modeloName)}`);
       const monedaId = Number(row.moneda_id || row.monedaId) || currencies.get(normalize(row.moneda || row.monedaCodigo));
       const version = String(row.version || "").trim();
+      const combustible = fuelValue(row.combustible);
       const precioBase = Number(row.precio_base ?? row.precioBase ?? 0);
       const enStock = boolValue(row.en_stock ?? row.enStock, true);
       const existe = boolValue(row.existe, true);
@@ -48,11 +56,11 @@ export async function POST(request) {
 
       const [result] = await connection.query(
         `INSERT INTO ventas_precios
-         (marca_id, modelo_id, version, moneda_id, precio_base, en_stock, existe, tiempo_entrega_dias)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE moneda_id = VALUES(moneda_id), precio_base = VALUES(precio_base),
+         (marca_id, modelo_id, version, combustible, moneda_id, precio_base, en_stock, existe, tiempo_entrega_dias)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE combustible = VALUES(combustible), moneda_id = VALUES(moneda_id), precio_base = VALUES(precio_base),
            en_stock = VALUES(en_stock), existe = VALUES(existe), tiempo_entrega_dias = VALUES(tiempo_entrega_dias)`,
-        [marcaId, modeloId, version, monedaId, precioBase, enStock ? 1 : 0, existe ? 1 : 0, tiempoEntregaDias]
+        [marcaId, modeloId, version, combustible, monedaId, precioBase, enStock ? 1 : 0, existe ? 1 : 0, tiempoEntregaDias]
       );
       imported += 1;
       if (result.affectedRows === 2) updated += 1;

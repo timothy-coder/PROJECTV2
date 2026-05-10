@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { carPricesApi } from "@/app/api/car-prices.api";
 
 export function useCarPrices() {
-  const [data, setData] = useState({ prices: [], history: [], options: { brands: [], models: [], currencies: [] } });
+  const [data, setData] = useState({ prices: [], history: [], pendingPurchases: [], options: { brands: [], models: [], currencies: [] } });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -29,7 +29,8 @@ export function useCarPrices() {
     stock: data.prices.filter((item) => item.enStock && item.existe).length,
     pedido: data.prices.filter((item) => !item.enStock && item.existe).length,
     history: data.history.length,
-  }), [data.history.length, data.prices]);
+    pendingPurchases: data.pendingPurchases.length,
+  }), [data.history.length, data.pendingPurchases.length, data.prices]);
 
   const actions = useMemo(() => ({
     create: async (payload) => { await carPricesApi.create(payload); await reload(); },

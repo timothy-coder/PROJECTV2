@@ -8,6 +8,10 @@ function canSeeAll(user) {
   return Boolean(hasPerm(user.permissions, ["agenda", "viewall"]) || hasPerm(user.permissions, ["oportunidades", "viewall"]) || hasPerm(user.permissions, ["leads", "viewall"]));
 }
 
+function canSeeAllClients(user) {
+  return Boolean(hasPerm(user.permissions, ["clientes", "viewall"]));
+}
+
 function datePart(value) {
   if (!value) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -47,6 +51,7 @@ export async function GET(request) {
       return NextResponse.json({ message: "No tienes permiso para ver la agenda." }, { status: 403 });
     }
     const canAll = canSeeAll(user);
+    const canAllClients = canSeeAllClients(user);
     const [assignedCenters] = await pool.query(
       `SELECT c.id, c.nombre
        FROM configuracion_centros c
@@ -90,7 +95,14 @@ export async function GET(request) {
        ORDER BY COALESCE(d.fecha_agenda, o.created_at) ASC, COALESCE(d.hora_agenda, '00:00:00') ASC`,
       canAll ? [] : [user.id, user.id]
     );
-    const [clients] = await pool.query(`SELECT id, CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,'')) AS nombre FROM administracion_clientes ORDER BY nombre ASC LIMIT 1000`);
+    const [clients] = await pool.query(
+      `SELECT id, CONCAT(COALESCE(nombre,''),' ',COALESCE(apellido,'')) AS nombre
+       FROM administracion_clientes
+       ${canAllClients ? "" : "WHERE created_by = ?"}
+       ORDER BY nombre ASC
+       LIMIT 1000`,
+      canAllClients ? [] : [user.id]
+    );
     const [origins] = await pool.query(`SELECT id, name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [suborigins] = await pool.query(`SELECT id, origen_id, name FROM configuracion_suborigenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await pool.query(`SELECT id, fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);

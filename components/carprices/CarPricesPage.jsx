@@ -32,14 +32,22 @@ export default function CarPricesPage({ userPermissions }) {
   const canCreate = hasPerm(userPermissions, ["inventariocarros", "create"]);
   const canEdit = hasPerm(userPermissions, ["inventariocarros", "edit"]);
   const canDelete = hasPerm(userPermissions, ["inventariocarros", "delete"]);
-  const canImport = hasPerm(userPermissions, ["inventariocarros", "import"]) || canCreate || canEdit;
-  const canExport = hasPerm(userPermissions, ["inventariocarros", "export"]) || canView;
-  const canHistory = hasPerm(userPermissions, ["inventariocarros", "history"]) || canView;
+  const canImport = hasPerm(userPermissions, ["inventariocarros", "import"]);
+  const canExport = hasPerm(userPermissions, ["inventariocarros", "export"]);
+  const canHistory = hasPerm(userPermissions, ["inventariocarros", "history"]);
+  const canCreateHistory = hasPerm(userPermissions, ["inventariocarros", "history_create"]);
+  const canPendingPurchase = hasPerm(userPermissions, ["inventariocarros", "pending_purchase"]);
+  const availableViews = useMemo(() => [
+    canView ? "prices" : null,
+    canHistory ? "history" : null,
+    canPendingPurchase ? "pending" : null,
+  ].filter(Boolean), [canHistory, canPendingPurchase, canView]);
+  const activeView = availableViews.includes(view) ? view : availableViews[0] || "prices";
 
   const filteredPrices = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
     return data.prices.filter((item) => {
-      const matchesQuery = !query || `${item.marcaName} ${item.modeloName} ${item.version}`.toLowerCase().includes(query);
+      const matchesQuery = !query || `${item.marcaName} ${item.modeloName} ${item.version} ${item.combustible}`.toLowerCase().includes(query);
       const matchesBrand = !filters.marcaId || Number(filters.marcaId) === item.marcaId;
       const matchesModel = !filters.modeloId || Number(filters.modeloId) === item.modeloId;
       const matchesCurrency = !filters.monedaId || Number(filters.monedaId) === item.monedaId;
@@ -61,6 +69,7 @@ export default function CarPricesPage({ userPermissions }) {
       modelo_id: item.modeloId,
       modelo: item.modeloName,
       version: item.version,
+      combustible: item.combustible || "GASOLINA",
       moneda_id: item.monedaId,
       moneda: item.monedaCodigo,
       precio_base: item.precioBase,
@@ -68,7 +77,7 @@ export default function CarPricesPage({ userPermissions }) {
       existe: item.existe ? 1 : 0,
       tiempo_entrega_dias: item.tiempoEntregaDias,
     }));
-    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ marca_id: "", marca: "", modelo_id: "", modelo: "", version: "", moneda_id: "", moneda: "", precio_base: "", en_stock: 1, existe: 1, tiempo_entrega_dias: 0 }]);
+    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ marca_id: "", marca: "", modelo_id: "", modelo: "", version: "", combustible: "GASOLINA", moneda_id: "", moneda: "", precio_base: "", en_stock: 1, existe: 1, tiempo_entrega_dias: 0 }]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "precios_carros");
     XLSX.writeFile(workbook, "precios_carros.xlsx");
@@ -109,8 +118,8 @@ export default function CarPricesPage({ userPermissions }) {
         <div className="flex flex-wrap gap-2">
           {canExport ? <Button variant="outline" onClick={exportPrices}><Download className="size-4" />Exportar</Button> : null}
           {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
-          {canHistory ? <Button variant="outline" onClick={() => setView((current) => current === "history" ? "prices" : "history")}><History className="size-4" />Historial</Button> : null}
-          {canCreate ? <Button variant="outline" onClick={() => setHistoryDialog({ open: true })}><Plus className="size-4" />Crear carro</Button> : null}
+          {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Historial</Button> : null}
+          {canHistory && canCreateHistory ? <Button variant="outline" onClick={() => setHistoryDialog({ open: true })}><Plus className="size-4" />Crear carro</Button> : null}
           {canCreate ? (
             <Button onClick={() => setDialog({ open: true, item: null })} className="bg-violet-700 text-white hover:bg-violet-800">
               <Plus className="size-4" />
@@ -132,12 +141,13 @@ export default function CarPricesPage({ userPermissions }) {
 
       <div className="mb-4 w-full overflow-x-auto rounded-lg bg-slate-100 p-1">
         <div className="flex min-w-max gap-1">
-          <button className={`h-8 rounded-md px-6 text-xs font-bold ${view === "prices" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("prices")}>Precios</button>
-          <button className={`h-8 rounded-md px-6 text-xs font-bold ${view === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Historial</button>
+          {canView ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "prices" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("prices")}>Precios</button> : null}
+          {canHistory ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Historial</button> : null}
+          {canPendingPurchase ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "pending" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("pending")}>Pendientes de compra</button> : null}
         </div>
       </div>
 
-      {view === "prices" ? <section className="mb-4 rounded-lg border border-violet-200 bg-white shadow-sm">
+      {activeView === "prices" ? <section className="mb-4 rounded-lg border border-violet-200 bg-white shadow-sm">
         <div className="bg-violet-50/40 px-4 py-3">
           <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Filter className="size-5" />Filtros</h2>
         </div>
@@ -159,7 +169,7 @@ export default function CarPricesPage({ userPermissions }) {
         </div>
       </section> : null}
 
-      {view === "prices" ? <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+      {activeView === "prices" ? <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[1040px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
@@ -168,6 +178,7 @@ export default function CarPricesPage({ userPermissions }) {
                 <th className="px-3 py-3">Marca</th>
                 <th className="px-3 py-3">Modelo</th>
                 <th className="px-3 py-3">Version</th>
+                <th className="px-3 py-3">Combustible</th>
                 <th className="px-3 py-3">Precio Base</th>
                 <th className="px-3 py-3">En Stock</th>
                 <th className="px-3 py-3">Existe</th>
@@ -177,13 +188,14 @@ export default function CarPricesPage({ userPermissions }) {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {data.loading ? (
-                <tr><td colSpan={9} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={10} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : filteredPrices.map((item) => (
                 <tr key={item.id}>
                   <td className="px-3 py-3 font-bold text-violet-700">#{item.id}</td>
                   <td className="px-3 py-3 font-medium">{item.marcaName}</td>
                   <td className="px-3 py-3">{item.modeloName}</td>
                   <td className="px-3 py-3 font-semibold">{item.version}</td>
+                  <td className="px-3 py-3"><FuelBadge value={item.combustible} /></td>
                   <td className="px-3 py-3 font-bold text-emerald-700">{formatMoney(item.monedaSimbolo, item.precioBase)}</td>
                   <td className="px-3 py-3"><StockBadge active={item.enStock} /></td>
                   <td className="px-3 py-3"><OfferBadge active={item.existe} /></td>
@@ -199,7 +211,10 @@ export default function CarPricesPage({ userPermissions }) {
             </tbody>
           </table>
         </div>
-      </section> : <HistorySection loading={data.loading} history={data.history} />}
+      </section> : null}
+
+      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} /> : null}
+      {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
         <CarPriceDialog
@@ -215,7 +230,7 @@ export default function CarPricesPage({ userPermissions }) {
         />
       ) : null}
       <DeleteDialog state={deleteDialog} onClose={() => setDeleteDialog({ open: false, item: null })} onConfirm={async () => { await data.delete(deleteDialog.item.id); setDeleteDialog({ open: false, item: null }); }} />
-      {historyDialog.open ? (
+      {historyDialog.open && canHistory && canCreateHistory ? (
         <HistoryDialog
           prices={data.prices}
           onClose={() => setHistoryDialog({ open: false })}
@@ -231,7 +246,7 @@ export default function CarPricesPage({ userPermissions }) {
 }
 
 function HistoryDialog({ prices, onClose, onSubmit }) {
-  const [form, setForm] = useState({ vin: "", precioId: "", numeroFactura: "", precioCompra: "", precioVenta: "", facturacionAt: "", llegadaCentroAt: "", entregaAt: "" });
+  const [form, setForm] = useState({ vin: "", precioId: "", colorExterno: "", colorInterno: "", numeroMotor: "", numeroFactura: "", precioCompra: "", precioVenta: "", facturacionAt: "", llegadaCentroAt: "", entregaAt: "" });
   const priceOptions = prices.map((item) => ({ value: item.id, label: `${item.marcaName} ${item.modeloName} ${item.version}` }));
   const selected = prices.find((item) => Number(item.id) === Number(form.precioId));
   return (
@@ -246,6 +261,9 @@ function HistoryDialog({ prices, onClose, onSubmit }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="VIN *"><Input value={form.vin} onChange={(event) => setForm((current) => ({ ...current, vin: event.target.value }))} required /></Field>
               <Field label="Vehiculo *"><SearchableSelect value={form.precioId} options={priceOptions} placeholder="Seleccionar vehiculo" onChange={(value) => setForm((current) => ({ ...current, precioId: value, precioVenta: selected?.precioBase ?? current.precioVenta }))} /></Field>
+              <Field label="Color externo"><Input value={form.colorExterno} onChange={(event) => setForm((current) => ({ ...current, colorExterno: event.target.value }))} placeholder="Ej: Blanco" /></Field>
+              <Field label="Color interno"><Input value={form.colorInterno} onChange={(event) => setForm((current) => ({ ...current, colorInterno: event.target.value }))} placeholder="Ej: Negro" /></Field>
+              <Field label="Numero de motor"><Input value={form.numeroMotor} onChange={(event) => setForm((current) => ({ ...current, numeroMotor: event.target.value }))} placeholder="Numero de motor" /></Field>
               <Field label="Factura"><Input value={form.numeroFactura} onChange={(event) => setForm((current) => ({ ...current, numeroFactura: event.target.value }))} /></Field>
               <Field label="Precio compra"><Input type="number" step="0.01" value={form.precioCompra} onChange={(event) => setForm((current) => ({ ...current, precioCompra: event.target.value }))} /></Field>
               <Field label="Precio venta"><Input type="number" step="0.01" value={form.precioVenta} onChange={(event) => setForm((current) => ({ ...current, precioVenta: event.target.value }))} /></Field>
@@ -269,6 +287,7 @@ function CarPriceDialog({ state, options, onClose, onSubmit }) {
     marcaId: state.item?.marcaId ? String(state.item.marcaId) : "",
     modeloId: state.item?.modeloId ? String(state.item.modeloId) : "",
     version: state.item?.version || "",
+    combustible: state.item?.combustible || "GASOLINA",
     monedaId: state.item?.monedaId ? String(state.item.monedaId) : "",
     precioBase: state.item?.precioBase ?? "",
     enStock: state.item?.enStock ?? true,
@@ -279,6 +298,11 @@ function CarPriceDialog({ state, options, onClose, onSubmit }) {
   const brandOptions = options.brands.map((item) => ({ value: item.id, label: item.name }));
   const modelOptions = options.models.filter((item) => !form.marcaId || Number(form.marcaId) === item.marcaId).map((item) => ({ value: item.id, label: item.name }));
   const currencyOptions = options.currencies.map((item) => ({ value: item.id, label: `${item.codigo} ${item.simbolo}` }));
+  const fuelOptions = [
+    { value: "GASOLINA", label: "Gasolina" },
+    { value: "DIESEL", label: "Diesel" },
+    { value: "BICOMBUSTIBLE", label: "Bicombustible" },
+  ];
 
   async function submit(event) {
     event.preventDefault();
@@ -304,6 +328,7 @@ function CarPriceDialog({ state, options, onClose, onSubmit }) {
               <Field label="Marca *"><SearchableSelect value={form.marcaId} options={brandOptions} placeholder="Seleccionar marca" onChange={(value) => setForm((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
               <Field label="Modelo *"><SearchableSelect value={form.modeloId} options={modelOptions} placeholder="Seleccionar modelo" onChange={(value) => setForm((current) => ({ ...current, modeloId: value }))} /></Field>
               <Field label="Version *"><Input value={form.version} onChange={(event) => setForm((current) => ({ ...current, version: event.target.value }))} placeholder="Ej: LTZ 4x2" required /></Field>
+              <Field label="Combustible *"><SearchableSelect value={form.combustible} options={fuelOptions} placeholder="Seleccionar combustible" onChange={(value) => setForm((current) => ({ ...current, combustible: value }))} /></Field>
               <Field label="Moneda *"><SearchableSelect value={form.monedaId} options={currencyOptions} placeholder="Seleccionar moneda" onChange={(value) => setForm((current) => ({ ...current, monedaId: value }))} /></Field>
             </div>
           </div>
@@ -363,6 +388,9 @@ function HistorySection({ loading, history }) {
             <tr>
               <th className="px-3 py-3">VIN</th>
               <th className="px-3 py-3">Vehiculo</th>
+              <th className="px-3 py-3">Color Ext.</th>
+              <th className="px-3 py-3">Color Int.</th>
+              <th className="px-3 py-3">Motor</th>
               <th className="px-3 py-3">Factura</th>
               <th className="px-3 py-3">Compra</th>
               <th className="px-3 py-3">Venta</th>
@@ -370,15 +398,19 @@ function HistorySection({ loading, history }) {
               <th className="px-3 py-3">Facturacion</th>
               <th className="px-3 py-3">Llegada</th>
               <th className="px-3 py-3">Entrega</th>
+              <th className="px-3 py-3">Reserva</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {loading ? (
-              <tr><td colSpan={9} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+              <tr><td colSpan={13} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
             ) : history.map((item) => (
               <tr key={item.vin}>
                 <td className="px-3 py-3 font-bold text-violet-700">{item.vin}</td>
                 <td className="px-3 py-3">{item.marcaName} {item.modeloName} <span className="font-semibold">{item.version}</span></td>
+                <td className="px-3 py-3">{item.colorExterno || "-"}</td>
+                <td className="px-3 py-3">{item.colorInterno || "-"}</td>
+                <td className="px-3 py-3">{item.numeroMotor || "-"}</td>
                 <td className="px-3 py-3">{item.numeroFactura || "-"}</td>
                 <td className="px-3 py-3 font-bold text-emerald-700">{formatMoney(item.monedaSimbolo, item.precioCompra)}</td>
                 <td className="px-3 py-3 font-bold text-blue-700">{formatMoney(item.monedaSimbolo, item.precioVenta)}</td>
@@ -386,9 +418,63 @@ function HistorySection({ loading, history }) {
                 <td className="px-3 py-3">{formatDate(item.facturacionAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.llegadaCentroAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.entregaAt)}</td>
+                <td className="px-3 py-3"><ReservationUsageBadge item={item} /></td>
               </tr>
             ))}
-            {!loading && history.length === 0 ? <tr><td colSpan={9} className="py-10 text-center text-slate-500">No hay historial registrado.</td></tr> : null}
+            {!loading && history.length === 0 ? <tr><td colSpan={13} className="py-10 text-center text-slate-500">No hay historial registrado.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function PendingPurchasesSection({ loading, rows }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Car className="size-5" />Carros pendientes de compra</h2>
+          <p className="text-xs font-medium text-slate-500">Reservas sin VIN asignado que requieren compra o asignacion de unidad</p>
+        </div>
+        <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{rows.length} pendientes</span>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full min-w-[1040px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+            <tr>
+              <th className="px-3 py-3">Reserva</th>
+              <th className="px-3 py-3">Oportunidad</th>
+              <th className="px-3 py-3">Cliente</th>
+              <th className="px-3 py-3">Marca</th>
+              <th className="px-3 py-3">Modelo</th>
+              <th className="px-3 py-3">Version</th>
+              <th className="px-3 py-3">Año</th>
+              <th className="px-3 py-3">Color Ext.</th>
+              <th className="px-3 py-3">Color Int.</th>
+              <th className="px-3 py-3">Estado</th>
+              <th className="px-3 py-3">Fecha</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {loading ? (
+              <tr><td colSpan={11} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+            ) : rows.map((item) => (
+              <tr key={`${item.reservaId}-${item.precioId}`}>
+                <td className="px-3 py-3 font-bold text-violet-700">#{item.reservaId}</td>
+                <td className="px-3 py-3">{item.oportunidadCode}</td>
+                <td className="px-3 py-3 font-medium">{item.cliente}</td>
+                <td className="px-3 py-3">{item.marcaName}</td>
+                <td className="px-3 py-3">{item.modeloName}</td>
+                <td className="px-3 py-3 font-semibold">{item.version}</td>
+                <td className="px-3 py-3">{item.anio || "-"}</td>
+                <td className="px-3 py-3">{item.colorExterno || "-"}</td>
+                <td className="px-3 py-3">{item.colorInterno || "-"}</td>
+                <td className="px-3 py-3"><span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-bold text-orange-700">{item.estado || "pendiente"}</span></td>
+                <td className="px-3 py-3">{formatDate(item.createdAt)}</td>
+              </tr>
+            ))}
+            {!loading && rows.length === 0 ? <tr><td colSpan={11} className="py-10 text-center text-slate-500">No hay carros pendientes de compra.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -429,6 +515,29 @@ function StockBadge({ active }) {
 
 function OfferBadge({ active }) {
   return <span className={`rounded-full border px-2 py-1 text-xs font-bold ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-red-200 bg-red-50 text-red-700"}`}>{active ? "Si" : "No"}</span>;
+}
+
+function ReservationUsageBadge({ item }) {
+  if (!item.enReserva) {
+    return <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">Libre</span>;
+  }
+  return (
+    <span className="inline-flex flex-col rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">
+      <span>Reserva #{item.reservaId}</span>
+      <span className="font-medium text-violet-600">{item.oportunidadCode || item.reservaEstado || "En uso"}</span>
+    </span>
+  );
+}
+
+function FuelBadge({ value }) {
+  const labels = { GASOLINA: "Gasolina", DIESEL: "Diesel", BICOMBUSTIBLE: "Bicombustible" };
+  const tones = {
+    GASOLINA: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    DIESEL: "border-slate-200 bg-slate-50 text-slate-700",
+    BICOMBUSTIBLE: "border-violet-200 bg-violet-50 text-violet-700",
+  };
+  const normalized = value || "GASOLINA";
+  return <span className={`rounded-full border px-2 py-1 text-xs font-bold ${tones[normalized] || tones.GASOLINA}`}>{labels[normalized] || normalized}</span>;
 }
 
 function formatMoney(symbol, value) {

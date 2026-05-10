@@ -14,6 +14,7 @@ export async function PUT(request, { params }) {
     const stockTotal = Number(body.stockTotal || 0);
     const precioCompra = Number(body.precioCompra || 0);
     const precioVenta = Number(body.precioVenta || 0);
+    const monedaId = body.monedaId ? Number(body.monedaId) : null;
 
     if (!id || !numeroParte || !descripcion) {
       return NextResponse.json({ message: "Producto invalido." }, { status: 400 });
@@ -29,9 +30,9 @@ export async function PUT(request, { params }) {
     await pool.query(
       `UPDATE posventa_productos
        SET numero_parte = ?, descripcion = ?, tipo_inventario_id = ?, fecha_ingreso = ?,
-           stock_total = ?, stock_usado = ?, stock_disponible = ?, precio_compra = ?, precio_venta = ?
+           stock_total = ?, stock_usado = ?, stock_disponible = ?, precio_compra = ?, precio_venta = ?, moneda_id = ?
        WHERE id = ?`,
-      [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockUsado, stockDisponible, precioCompra, precioVenta, id]
+      [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockUsado, stockDisponible, precioCompra, precioVenta, monedaId, id]
     );
 
     return NextResponse.json({ ok: true });

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function mapClient(row) {
   return {
     id: row.id,
+    idLead: row.id_lead || "",
+    createdBy: row.created_by,
     nombre: row.nombre || "",
     apellido: row.apellido || "",
     email: row.email || "",
@@ -105,6 +109,7 @@ async function loadOptions() {
 
 function normalizeClient(body) {
   return {
+    idLead: String(body.idLead || "").trim() || null,
     nombre: String(body.nombre || "").trim() || null,
     apellido: String(body.apellido || "").trim() || null,
     email: String(body.email || "").trim() || null,
@@ -125,13 +130,26 @@ function normalizeClient(body) {
 
 export async function GET() {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ message: "No autenticado." }, { status: 401 });
+    }
+
+    const userPermissions = user?.permissions || {};
+    const canViewAll = hasPerm(userPermissions, ["clientes", "viewall"]);
+
+    const ownershipWhere = canViewAll ? "" : "WHERE c.created_by = ?";
+    const ownershipParams = canViewAll ? [] : [user.id];
+
     const [clientRows] = await pool.query(
-      `SELECT id, nombre, apellido, email, celular, tipo_identificacion,
+      `SELECT c.id, c.id_lead, c.nombre, c.apellido, c.email, c.celular, c.tipo_identificacion,
               identificacion_fiscal, fecha_nacimiento, ocupacion, domicilio,
               departamento_id, provincia_id, distrito_id, nombreconyugue,
-              dniconyugue, nombre_comercial, created_at
-       FROM administracion_clientes
-       ORDER BY id DESC`
+              dniconyugue, nombre_comercial, created_at, created_by
+       FROM administracion_clientes c
+       ${ownershipWhere}
+       ORDER BY c.id DESC`,
+      ownershipParams
     );
     const [vehicleRows] = await pool.query(
       `SELECT v.id, v.cliente_id, v.placas, v.vin, v.marca_id, v.modelo_id,
@@ -167,6 +185,11 @@ export async function GET() {
 
 export async function POST(request) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ message: "No autenticado." }, { status: 401 });
+    }
+
     const payload = normalizeClient(await request.json());
 
     if (!payload.nombre && !payload.nombreComercial) {
@@ -178,11 +201,12 @@ export async function POST(request) {
 
     const [result] = await pool.query(
       `INSERT INTO administracion_clientes
-       (nombre, apellido, email, celular, tipo_identificacion, identificacion_fiscal,
+       (id_lead, nombre, apellido, email, celular, tipo_identificacion, identificacion_fiscal,
         fecha_nacimiento, ocupacion, domicilio, departamento_id, provincia_id,
-        distrito_id, nombreconyugue, dniconyugue, nombre_comercial, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE())`,
+        distrito_id, nombreconyugue, dniconyugue, nombre_comercial, created_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE(), ?)`,
       [
+        payload.idLead,
         payload.nombre,
         payload.apellido,
         payload.email,
@@ -198,6 +222,7 @@ export async function POST(request) {
         payload.nombreConyugue,
         payload.dniConyugue,
         payload.nombreComercial,
+        user.id,
       ]
     );
 
