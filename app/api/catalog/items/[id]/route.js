@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { encodeSpecValue } from "@/app/api/catalog/valueUtils";
 
 function payload(body) {
-  return { groupId: Number(body.groupId), clave: String(body.clave || "").trim(), valor: String(body.valor || "").trim(), orden: Number(body.orden || 0), isActive: body.isActive === undefined ? true : Boolean(body.isActive) };
+  return {
+    groupId: Number(body.groupId),
+    clave: String(body.clave || "").trim(),
+    valor: encodeSpecValue(body),
+    orden: Number(body.orden || 0),
+    isActive: body.isActive === undefined ? true : Boolean(body.isActive),
+  };
 }
 
 export async function PUT(request, { params }) {

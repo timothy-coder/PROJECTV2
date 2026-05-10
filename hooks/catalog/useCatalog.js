@@ -33,6 +33,7 @@ export function useCatalog() {
     updateItem: async (id, payload) => { await catalogApi.updateItem(id, payload); await reload(); },
     deleteItem: async (id) => { await catalogApi.deleteItem(id); await reload(); },
     importRows: async (rows) => { const result = await catalogApi.import(rows); await reload(); return result; },
+    upload: catalogApi.upload,
   }), [reload]);
 
   return { ...data, loading, stats, reload, ...actions };

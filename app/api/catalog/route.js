@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
 
 export async function GET() {
   try {
@@ -22,7 +23,7 @@ export async function GET() {
     const itemsByGroup = itemRows.reduce((acc, row) => {
       const key = row.group_id;
       acc[key] = acc[key] || [];
-      acc[key].push({ id: row.id, groupId: row.group_id, clave: row.clave, valor: row.valor, orden: row.orden, isActive: Boolean(row.is_active) });
+      acc[key].push({ id: row.id, groupId: row.group_id, clave: row.clave, ...decodeSpecValue(row.valor), orden: row.orden, isActive: Boolean(row.is_active) });
       return acc;
     }, {});
     const groupsByPrice = groupRows.reduce((acc, row) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { BookOpen, ChevronDown, Download, Edit3, ExternalLink, Layers, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import { BookOpen, ChevronDown, Download, Edit3, ExternalLink, Layers, Loader2, Plus, Search, Send, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export default function CatalogPage({ userPermissions }) {
   const [expanded, setExpanded] = useState({});
   const [groupDialog, setGroupDialog] = useState({ open: false, price: null, item: null });
   const [itemDialog, setItemDialog] = useState({ open: false, group: null, item: null });
+  const [sendDialog, setSendDialog] = useState({ open: false, price: null });
   const [message, setMessage] = useState("");
   const canView = hasPerm(userPermissions, ["catalogoventa", "view"]);
   const canCreate = hasPerm(userPermissions, ["catalogoventa", "create"]);
@@ -74,6 +75,10 @@ export default function CatalogPage({ userPermissions }) {
     }
   }
 
+  function openTechnicalSheetPdf(price) {
+    window.open(`/api/catalog/pdf/${price.id}`, "_blank", "noopener,noreferrer");
+  }
+
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver catalogo.</div>;
 
   return (
@@ -118,6 +123,8 @@ export default function CatalogPage({ userPermissions }) {
                 <div className="space-y-3 p-3">
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => window.open(`/catalogo/${price.id}`, "_blank", "noopener,noreferrer")}><ExternalLink className="size-4" />Ficha tecnica</Button>
+                    <Button size="sm" variant="outline" onClick={() => openTechnicalSheetPdf(price)}><Download className="size-4" />Descargar PDF</Button>
+                    <Button size="sm" variant="outline" onClick={() => setSendDialog({ open: true, price })}><Send className="size-4" />Enviar a</Button>
                     {canCreate ? <Button size="sm" onClick={() => setGroupDialog({ open: true, price, item: null })}><Plus className="size-4" />Nuevo Grupo</Button> : null}
                   </div>
                   {price.groups.map((group) => <GroupCard key={group.id} group={group} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} onEditGroup={() => setGroupDialog({ open: true, price, item: group })} onDeleteGroup={async () => { await data.deleteGroup(group.id); toast.success("Grupo eliminado"); }} onNewItem={() => setItemDialog({ open: true, group, item: null })} onEditItem={(item) => setItemDialog({ open: true, group, item })} onDeleteItem={async (item) => { await data.deleteItem(item.id); toast.success("Spec eliminada"); }} />)}
@@ -129,8 +136,53 @@ export default function CatalogPage({ userPermissions }) {
         })}
       </section>
       {groupDialog.open ? <GroupDialog state={groupDialog} onClose={() => setGroupDialog({ open: false, price: null, item: null })} onSubmit={async (payload) => { if (groupDialog.item) { await data.updateGroup(groupDialog.item.id, payload); toast.success("Grupo actualizado"); } else { await data.createGroup(payload); toast.success("Grupo creado"); } setGroupDialog({ open: false, price: null, item: null }); }} /> : null}
-      {itemDialog.open ? <ItemDialog state={itemDialog} onClose={() => setItemDialog({ open: false, group: null, item: null })} onSubmit={async (payload) => { if (itemDialog.item) { await data.updateItem(itemDialog.item.id, payload); toast.success("Spec actualizada"); } else { await data.createItem(payload); toast.success("Spec creada"); } setItemDialog({ open: false, group: null, item: null }); }} /> : null}
+      {itemDialog.open ? <ItemDialog state={itemDialog} data={data} onClose={() => setItemDialog({ open: false, group: null, item: null })} onSubmit={async (payload) => { if (itemDialog.item) { await data.updateItem(itemDialog.item.id, payload); toast.success("Spec actualizada"); } else { await data.createItem(payload); toast.success("Spec creada"); } setItemDialog({ open: false, group: null, item: null }); }} /> : null}
+      {sendDialog.open ? <SendTechnicalSheetDialog state={sendDialog} onClose={() => setSendDialog({ open: false, price: null })} /> : null}
     </div>
+  );
+}
+
+function SendTechnicalSheetDialog({ state, onClose }) {
+  const price = state.price;
+  const fichaUrl = typeof window !== "undefined" ? `${window.location.origin}/catalogo/${price.id}` : `/catalogo/${price.id}`;
+  const [form, setForm] = useState({
+    phone: "",
+    text: `Hola, te comparto la ficha tecnica de ${price.marcaName} ${price.modeloName} ${price.version}: ${fichaUrl}`,
+  });
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const phone = form.phone.replace(/\D/g, "");
+    if (!phone) {
+      toast.error("Ingresa un numero de WhatsApp");
+      return;
+    }
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(form.text)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    onClose();
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(94vw,520px)] rounded-xl bg-white text-slate-950">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-violet-700">Enviar ficha tecnica</DialogTitle>
+            <DialogDescription>Completa el numero y mensaje para abrir WhatsApp.</DialogDescription>
+          </DialogHeader>
+          <Field label="Numero">
+            <Input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="51999999999" />
+          </Field>
+          <Field label="Mensaje">
+            <Textarea value={form.text} onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))} className="min-h-28" />
+          </Field>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" className="bg-violet-700 text-white hover:bg-violet-800"><Send className="size-4" />Abrir WhatsApp</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -144,7 +196,7 @@ function GroupCard({ group, canCreate, canEdit, canDelete, onEditGroup, onDelete
       <div className="divide-y divide-slate-200">
         {group.items.map((item) => (
           <div key={item.id} className="flex items-center justify-between px-3 py-2">
-            <div><p className="font-semibold">{item.clave}: <span className="font-normal text-slate-600">{item.valor}</span></p><p className="text-xs text-slate-500">Orden {item.orden} - {item.isActive ? "Activo" : "Inactivo"}</p></div>
+            <div className="min-w-0"><p className="font-semibold">{item.clave}: <SpecValuePreview item={item} /></p><p className="text-xs text-slate-500">Orden {item.orden} - {item.isActive ? "Activo" : "Inactivo"}</p></div>
             <div className="flex gap-2">{canEdit ? <Button size="icon" variant="outline" onClick={() => onEditItem(item)}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" onClick={() => onDeleteItem(item)}><Trash2 className="size-4" /></Button> : null}</div>
           </div>
         ))}
@@ -158,9 +210,68 @@ function GroupDialog({ state, onClose, onSubmit }) {
   return <EntityDialog title={state.item ? "Editar grupo" : "Nuevo grupo"} onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Grupo"><Input value={form.nombre} onChange={(event) => setForm((current) => ({ ...current, nombre: event.target.value }))} required /></Field><Field label="Orden"><Input type="number" value={form.orden} onChange={(event) => setForm((current) => ({ ...current, orden: event.target.value }))} /></Field><Toggle label="Activo" checked={form.isActive} onCheckedChange={(checked) => setForm((current) => ({ ...current, isActive: Boolean(checked) }))} /></EntityDialog>;
 }
 
-function ItemDialog({ state, onClose, onSubmit }) {
-  const [form, setForm] = useState({ groupId: state.group.id, clave: state.item?.clave || "", valor: state.item?.valor || "", orden: state.item?.orden ?? 0, isActive: state.item?.isActive ?? true });
-  return <EntityDialog title={state.item ? "Editar spec" : "Nueva spec"} onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Clave"><Input value={form.clave} onChange={(event) => setForm((current) => ({ ...current, clave: event.target.value }))} required /></Field><Field label="Valor"><Textarea value={form.valor} onChange={(event) => setForm((current) => ({ ...current, valor: event.target.value }))} /></Field><Field label="Orden"><Input type="number" value={form.orden} onChange={(event) => setForm((current) => ({ ...current, orden: event.target.value }))} /></Field><Toggle label="Activo" checked={form.isActive} onCheckedChange={(checked) => setForm((current) => ({ ...current, isActive: Boolean(checked) }))} /></EntityDialog>;
+function ItemDialog({ state, data, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    groupId: state.group.id,
+    clave: state.item?.clave || "",
+    valorTipo: state.item?.valorTipo || "TEXTO",
+    valor: state.item?.valor || "",
+    valorUrl: state.item?.valorUrl || "",
+    valorPath: state.item?.valorPath || "",
+    orden: state.item?.orden ?? 0,
+    isActive: state.item?.isActive ?? true,
+  });
+  const [uploading, setUploading] = useState(false);
+
+  async function handleUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const uploaded = await data.upload(file);
+      setForm((current) => ({ ...current, valorPath: uploaded.path, valor: current.valor || file.name }));
+      toast.success("Archivo subido");
+    } catch (error) {
+      toast.error("No se pudo subir", { description: error.message });
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  return (
+    <EntityDialog title={state.item ? "Editar spec" : "Nueva spec"} onClose={onClose} onSubmit={() => onSubmit(form)}>
+      <Field label="Clave"><Input value={form.clave} onChange={(event) => setForm((current) => ({ ...current, clave: event.target.value }))} required /></Field>
+      <Field label="Tipo de valor">
+        <select value={form.valorTipo} onChange={(event) => setForm((current) => ({ ...current, valorTipo: event.target.value, valorUrl: "", valorPath: "" }))} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm">
+          <option value="TEXTO">Texto</option>
+          <option value="LINK">Link</option>
+          <option value="IMAGEN">Imagen</option>
+          <option value="VIDEO">Video</option>
+        </select>
+      </Field>
+      <Field label={form.valorTipo === "LINK" ? "Texto del enlace" : form.valorTipo === "TEXTO" ? "Valor" : "Descripcion"}>
+        {form.valorTipo === "TEXTO" ? <Textarea value={form.valor} onChange={(event) => setForm((current) => ({ ...current, valor: event.target.value }))} /> : <Input value={form.valor} onChange={(event) => setForm((current) => ({ ...current, valor: event.target.value }))} />}
+      </Field>
+      {form.valorTipo === "LINK" ? <Field label="URL"><Input value={form.valorUrl} placeholder="https://" onChange={(event) => setForm((current) => ({ ...current, valorUrl: event.target.value }))} /></Field> : null}
+      {["IMAGEN", "VIDEO"].includes(form.valorTipo) ? (
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <Field label={form.valorTipo === "IMAGEN" ? "Imagen" : "Video"}><Input type="file" accept={form.valorTipo === "IMAGEN" ? "image/*" : "video/*"} onChange={handleUpload} disabled={uploading} /></Field>
+          {form.valorPath ? <SpecValuePreview item={form} large /> : <p className="text-xs font-medium text-slate-500">{uploading ? "Subiendo..." : "Selecciona un archivo para guardarlo en el sistema."}</p>}
+        </div>
+      ) : null}
+      <Field label="Orden"><Input type="number" value={form.orden} onChange={(event) => setForm((current) => ({ ...current, orden: event.target.value }))} /></Field>
+      <Toggle label="Activo" checked={form.isActive} onCheckedChange={(checked) => setForm((current) => ({ ...current, isActive: Boolean(checked) }))} />
+    </EntityDialog>
+  );
+}
+
+function SpecValuePreview({ item, large = false }) {
+  const href = item.valorPath || item.valorUrl || item.valor;
+  if (item.valorTipo === "LINK") return <a href={href} onClick={(event) => event.stopPropagation()} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 underline">{item.valor || href}</a>;
+  if (item.valorTipo === "IMAGEN") return href ? <img src={href} alt={item.valor || "Imagen"} className={large ? "max-h-48 rounded-md border object-contain" : "ml-2 inline-block max-h-12 max-w-24 rounded border object-contain align-middle"} /> : <span className="font-normal text-slate-500">Imagen sin archivo</span>;
+  if (item.valorTipo === "VIDEO") return href ? <video src={href} controls={large} className={large ? "max-h-48 w-full rounded-md border" : "ml-2 inline-block h-12 w-24 rounded border align-middle"} /> : <span className="font-normal text-slate-500">Video sin archivo</span>;
+  return <span className="font-normal text-slate-600">{item.valor}</span>;
 }
 
 function EntityDialog({ title, children, onClose, onSubmit }) {

@@ -24,6 +24,7 @@ export const USER_PERMISSION_GROUPS = [
   { key: "leads", label: "Leads", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "reservas", label: "Reservas Venta", actions: ["view", "viewall", "review", "firm", "edit", "car_data", "send_signature", "observe", "subsanate", "sign"] },
   { key: "configagenda", label: "Config. Ventas", actions: ["view", "create", "edit", "delete"] },
+  { key: "config_ventas_plantillas", label: "Plantillas Venta", actions: ["view", "create", "edit", "delete"] },
   { key: "configcotizacion", label: "Config. Citas", actions: ["view", "create", "edit", "delete"] },
   { key: "mensajes", label: "Mensajes", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion", label: "Configuracion", actions: ["view", "create", "edit", "delete"] },
