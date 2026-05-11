@@ -118,7 +118,7 @@ export default function CarPricesPage({ userPermissions }) {
         <div className="flex flex-wrap gap-2">
           {canExport ? <Button variant="outline" onClick={exportPrices}><Download className="size-4" />Exportar</Button> : null}
           {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
-          {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Historial</Button> : null}
+          {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Inventario</Button> : null}
           {canHistory && canCreateHistory ? <Button variant="outline" onClick={() => setHistoryDialog({ open: true })}><Plus className="size-4" />Crear carro</Button> : null}
           {canCreate ? (
             <Button onClick={() => setDialog({ open: true, item: null })} className="bg-violet-700 text-white hover:bg-violet-800">
@@ -142,7 +142,7 @@ export default function CarPricesPage({ userPermissions }) {
       <div className="mb-4 w-full overflow-x-auto rounded-lg bg-slate-100 p-1">
         <div className="flex min-w-max gap-1">
           {canView ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "prices" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("prices")}>Precios</button> : null}
-          {canHistory ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Historial</button> : null}
+          {canHistory ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Inventario</button> : null}
           {canPendingPurchase ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "pending" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("pending")}>Pendientes de compra</button> : null}
         </div>
       </div>
@@ -254,7 +254,7 @@ function HistoryDialog({ prices, onClose, onSubmit }) {
       <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white text-slate-950">
         <form onSubmit={(event) => { event.preventDefault(); onSubmit(form); }} className="space-y-4">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-violet-700">Crear carro en historial</DialogTitle>
+            <DialogTitle className="text-lg font-bold text-violet-700">Crear carro en inventario</DialogTitle>
             <DialogDescription>Registra un VIN para una version de precio.</DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3">
@@ -377,7 +377,7 @@ function HistorySection({ loading, history }) {
     <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><History className="size-5" />Historial de Carros</h2>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><History className="size-5" />Inventario de Carros</h2>
           <p className="text-xs font-medium text-slate-500">Consulta VIN, factura, precios y fechas del carro</p>
         </div>
         <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{history.length} registros</span>
