@@ -16,6 +16,15 @@ function addMonths(date, months) {
   return next;
 }
 
+// Para calcar tu ejemplo: truncar días decimales
+function addDaysTrunc(date, days) {
+  const n = Number(days);
+  if (!Number.isFinite(n)) return null;
+  const next = new Date(date);
+  next.setDate(next.getDate() + Math.floor(n));
+  return next;
+}
+
 function daysBetween(from, to) {
   const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
@@ -24,35 +33,83 @@ function daysBetween(from, to) {
 
 function parseRanges(value) {
   try {
+    if (!value) return [];
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    const txt = String(value || "").trim();
+    if (!txt) return [];
+    return txt.split(",").map((s) => s.trim()).filter(Boolean);
   }
 }
 
 function yearMatches(year, ranges) {
   if (!year || !ranges.length) return true;
   return ranges.some((range) => {
-    const [start, end] = String(range).split("-").map(Number);
+    const [start, end] = String(range).split("-").map((n) => Number(String(n).trim()));
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
     return year >= start && year <= end;
   });
+}
+
+// 2 últimos registros con día distinto
+function pickT1T2DistinctDay(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return { t1: null, t2: null };
+
+  const t1 = rows[0];
+  const day1 = datePart(t1.fecha_visita_taller);
+
+  let t2 = null;
+  for (let i = 1; i < rows.length; i++) {
+    if (datePart(rows[i].fecha_visita_taller) !== day1) {
+      t2 = rows[i];
+      break;
+    }
+  }
+  return { t1, t2 };
+}
+
+/**
+ * ✅ Selección correcta para "próximo mantenimiento" respecto a HOY:
+ * - Si hay candidatos >= hoy => elige el menor (más cercano en el futuro)
+ * - Si todos están en pasado => elige el mayor (el más reciente pasado) para marcar vencido
+ */
+function pickProximoRespectoHoy(today, candidates) {
+  const valid = candidates.filter((c) => c?.date instanceof Date && !Number.isNaN(c.date.valueOf()));
+  if (!valid.length) return { date: null, calculo: "" };
+
+  const futureOrToday = valid.filter((c) => c.date >= today);
+  if (futureOrToday.length) {
+    futureOrToday.sort((a, b) => a.date - b.date); // más cercano futuro
+    return { date: futureOrToday[0].date, calculo: futureOrToday[0].calculo };
+  }
+
+  // todos vencidos: devolver el más reciente (máximo) para mostrar vencimiento
+  valid.sort((a, b) => b.date - a.date);
+  return { date: valid[0].date, calculo: valid[0].calculo };
 }
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
-    if (!hasPerm(user.permissions, ["oportunidadespv", "view"]) && !hasPerm(user.permissions, ["leadspv", "view"]) && !hasPerm(user.permissions, ["oportunidadespv", "viewall"])) {
+
+    if (
+      !hasPerm(user.permissions, ["oportunidadespv", "view"]) &&
+      !hasPerm(user.permissions, ["leadspv", "view"]) &&
+      !hasPerm(user.permissions, ["oportunidadespv", "viewall"])
+    ) {
       return NextResponse.json({ message: "No tienes permiso para ver proximos mantenimientos." }, { status: 403 });
     }
+
     const [vehicles] = await pool.query(
-      `SELECT v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita,
-              CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
-              ma.name AS marca_nombre, mo.name AS modelo_nombre,
-              av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
-              opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
-              od.fecha_agenda, od.hora_agenda
+      `SELECT
+          v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita,
+          CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+          ma.name AS marca_nombre, mo.name AS modelo_nombre,
+          av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
+          opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
+          od.fecha_agenda, od.hora_agenda
        FROM administracion_vehiculos v
        INNER JOIN administracion_clientes c ON c.id=v.cliente_id
        LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
@@ -62,24 +119,117 @@ export async function GET() {
        LEFT JOIN (
          SELECT d.*
          FROM posventa_oportunidades_detalles d
-         INNER JOIN (SELECT oportunidad_padre_id, MAX(id) AS max_id FROM posventa_oportunidades_detalles GROUP BY oportunidad_padre_id) x ON x.max_id=d.id
+         INNER JOIN (
+           SELECT oportunidad_padre_id, MAX(id) AS max_id
+           FROM posventa_oportunidades_detalles
+           GROUP BY oportunidad_padre_id
+         ) x ON x.max_id=d.id
        ) od ON od.oportunidad_padre_id=opp.id
        WHERE v.deleted_at IS NULL
        ORDER BY c.nombre ASC, v.id DESC`
     );
-    const [frequencies] = await pool.query(`SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`);
+
+    const [frequencies] = await pool.query(
+      `SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
+    );
+
+    const clienteIds = Array.from(new Set(vehicles.map((v) => v.cliente_id).filter(Boolean)));
+    const historyByClienteId = new Map();
+
+    if (clienteIds.length) {
+      const placeholders = clienteIds.map(() => "?").join(",");
+      const [historyRows] = await pool.query(
+        `
+        SELECT cliente_id, id, fecha_visita_taller, kilometraje_taller
+        FROM (
+          SELECT
+            h.cliente_id,
+            h.id,
+            h.fecha_visita_taller,
+            h.kilometraje_taller,
+            ROW_NUMBER() OVER (PARTITION BY h.cliente_id ORDER BY h.fecha_visita_taller DESC, h.id DESC) AS rn
+          FROM administracion_clientes_historial_mantenimientos h
+          WHERE h.cliente_id IN (${placeholders})
+        ) x
+        WHERE x.rn <= 30
+        ORDER BY x.cliente_id ASC, x.fecha_visita_taller DESC, x.id DESC
+        `,
+        clienteIds
+      );
+
+      for (const r of historyRows) {
+        if (!historyByClienteId.has(r.cliente_id)) historyByClienteId.set(r.cliente_id, []);
+        historyByClienteId.get(r.cliente_id).push(r);
+      }
+    }
+
     const today = new Date();
     const unique = new Map();
+
     for (const row of vehicles) {
       if (unique.has(row.id)) continue;
+
       const ranges = parseRanges(row.algoritmo_anios);
-      const validAlgorithm = row.algoritmo_meses && yearMatches(Number(row.anio), ranges);
-      const lastVisit = row.fecha_ultima_visita ? new Date(row.fecha_ultima_visita) : null;
-      const nextByTime = validAlgorithm && lastVisit ? addMonths(lastVisit, row.algoritmo_meses) : null;
-      const daysRemaining = nextByTime ? daysBetween(today, nextByTime) : null;
-      const matchedFrequency = daysRemaining === null ? null : frequencies.find((item) => daysRemaining <= Number(item.dias));
-      const reminderDate = nextByTime && matchedFrequency ? new Date(nextByTime) : null;
+      const yearOk = yearMatches(Number(row.anio), ranges);
+
+      const algoritmoMeses = row.algoritmo_meses != null ? Number(row.algoritmo_meses) : 0;
+      const algoritmoKm = row.algoritmo_km != null ? Number(row.algoritmo_km) : 0;
+
+      const hasAlgorithm = Boolean(yearOk && (algoritmoMeses > 0 || algoritmoKm > 0));
+
+      const history = historyByClienteId.get(row.cliente_id) || [];
+      const { t1, t2 } = pickT1T2DistinctDay(history);
+
+      const v1 = t1?.fecha_visita_taller ? new Date(t1.fecha_visita_taller) : null; // fecha actual (T1)
+      const v2 = t2?.fecha_visita_taller ? new Date(t2.fecha_visita_taller) : null; // fecha anterior (T2)
+      const k1 = t1?.kilometraje_taller != null ? Number(t1.kilometraje_taller) : null;
+      const k2 = t2?.kilometraje_taller != null ? Number(t2.kilometraje_taller) : null;
+
+      // Próximo por tiempo = T2 + meses
+      const nextByTime = hasAlgorithm && algoritmoMeses > 0 && v2 ? addMonths(v2, algoritmoMeses) : null;
+
+      // Próximo por KM = T2 + floor( algoritmoKm / ((k1-k2)/(v1-v2)) )
+      let nextByKm = null;
+      if (hasAlgorithm && algoritmoKm > 0 && v1 && v2 && k1 != null && k2 != null) {
+        const diasEntre = daysBetween(v2, v1);
+        const deltaKm = k1 - k2;
+
+        if (diasEntre > 0 && deltaKm > 0) {
+          const kmDiario = deltaKm / diasEntre;
+          if (kmDiario > 0) {
+            const diasFaltantes = algoritmoKm / kmDiario;
+            nextByKm = addDaysTrunc(v2, diasFaltantes);
+          }
+        }
+      }
+
+      // ✅ Selección correcta respecto a hoy
+      const picked = pickProximoRespectoHoy(today, [
+        { date: nextByTime, calculo: "Tiempo" },
+        { date: nextByKm, calculo: "KM" },
+      ]);
+
+      const proximo = picked.date;
+      const calculo = picked.calculo;
+
+      const daysRemaining = proximo ? daysBetween(today, proximo) : null;
+
+      const matchedFrequency =
+        daysRemaining === null ? null : frequencies.find((item) => daysRemaining <= Number(item.dias));
+
+      const reminderDate = proximo && matchedFrequency ? new Date(proximo) : null;
       if (reminderDate) reminderDate.setDate(reminderDate.getDate() - Number(matchedFrequency.dias));
+
+      const estadoRecordatorio = !hasAlgorithm
+        ? "Sin algoritmo"
+        : !proximo
+          ? "Sin historial"
+          : daysRemaining < 0
+            ? "Vencido"
+            : matchedFrequency
+              ? "Pendiente contacto"
+              : "Programado";
+
       unique.set(row.id, {
         id: row.id,
         clienteId: row.cliente_id,
@@ -91,29 +241,53 @@ export async function GET() {
         vin: row.vin || "",
         anio: row.anio,
         kilometraje: row.kilometraje,
+
         fechaUltimaVisita: datePart(row.fecha_ultima_visita),
-        proximoMantenimiento: nextByTime ? datePart(nextByTime) : "",
-        calculo: nextByTime ? "Tiempo" : "",
+
+        proximoMantenimiento: proximo ? datePart(proximo) : "",
+        calculo, // "Tiempo" o "KM"
         diasRestantes: daysRemaining,
         recordatorio: reminderDate ? datePart(reminderDate) : "",
-        estadoRecordatorio: daysRemaining === null ? "Sin algoritmo" : daysRemaining < 0 ? "Vencido" : matchedFrequency ? "Pendiente contacto" : "Programado",
+        estadoRecordatorio,
+
         oportunidadId: row.oportunidad_abierta_id,
         oportunidadCodigo: row.oportunidad_codigo || "",
         fechaAgendada: row.fecha_agenda ? `${datePart(row.fecha_agenda)} ${String(row.hora_agenda || "").slice(0, 5)}` : "",
       });
     }
-    const [origins] = await pool.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
-    const [suborigins] = await pool.query(`SELECT id,origen_id,name FROM configuracion_suborigenes_citas WHERE is_active=1 ORDER BY name ASC`);
-    const [users] = await pool.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
-    const [stages] = await pool.query(`SELECT id,nombre,color,sort_order FROM configuracion_posventa_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`);
+
+    const [origins] = await pool.query(
+      `SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`
+    );
+    const [suborigins] = await pool.query(
+      `SELECT id,origen_id,name FROM configuracion_suborigenes_citas WHERE is_active=1 ORDER BY name ASC`
+    );
+    const [users] = await pool.query(
+      `SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`
+    );
+    const [stages] = await pool.query(
+      `SELECT id,nombre,color,sort_order FROM configuracion_posventa_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`
+    );
+
     return NextResponse.json({
-      currentUser: { id: user.id, fullname: user.fullname, canViewAll: Boolean(hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"])) },
+      currentUser: {
+        id: user.id,
+        fullname: user.fullname,
+        canViewAll: Boolean(
+          hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"])
+        ),
+      },
       vehicles: Array.from(unique.values()),
       options: {
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         suborigins: suborigins.map((row) => ({ id: row.id, origenId: row.origen_id, name: row.name })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
-        stages: stages.map((row) => ({ id: row.id, nombre: row.nombre, color: row.color || "#2563eb", sortOrder: row.sort_order || row.id })),
+        stages: stages.map((row) => ({
+          id: row.id,
+          nombre: row.nombre,
+          color: row.color || "#2563eb",
+          sortOrder: row.sort_order || row.id,
+        })),
       },
     });
   } catch (error) {
