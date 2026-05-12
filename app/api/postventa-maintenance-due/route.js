@@ -16,12 +16,11 @@ function addMonths(date, months) {
   return next;
 }
 
-// Para calcar tu ejemplo: truncar días decimales
 function addDaysTrunc(date, days) {
   const n = Number(days);
   if (!Number.isFinite(n)) return null;
   const next = new Date(date);
-  next.setDate(next.getDate() + Math.floor(n));
+  next.setDate(next.getDate() + Math.floor(n)); // trunc como tu ejemplo
   return next;
 }
 
@@ -52,7 +51,11 @@ function yearMatches(year, ranges) {
   });
 }
 
-// 2 últimos registros con día distinto
+/**
+ * rows vienen ORDER BY fecha_visita_taller DESC, id DESC.
+ * - T1: último registro
+ * - T2: penúltimo registro con día distinto a T1 (si hay mismo día, se ignoran)
+ */
 function pickT1T2DistinctDay(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return { t1: null, t2: null };
 
@@ -70,22 +73,22 @@ function pickT1T2DistinctDay(rows) {
 }
 
 /**
- * ✅ Selección correcta para "próximo mantenimiento" respecto a HOY:
- * - Si hay candidatos >= hoy => elige el menor (más cercano en el futuro)
- * - Si todos están en pasado => elige el mayor (el más reciente pasado) para marcar vencido
+ * Reglas de selección:
+ * - Si hay futuras (>= hoy): elegir la menor (más cercana futura).
+ * - Si todas vencidas (< hoy): elegir la menor (la que pasó primero).
  */
-function pickProximoRespectoHoy(today, candidates) {
+function pickProximo(today, candidates) {
   const valid = candidates.filter((c) => c?.date instanceof Date && !Number.isNaN(c.date.valueOf()));
   if (!valid.length) return { date: null, calculo: "" };
 
   const futureOrToday = valid.filter((c) => c.date >= today);
   if (futureOrToday.length) {
-    futureOrToday.sort((a, b) => a.date - b.date); // más cercano futuro
+    futureOrToday.sort((a, b) => a.date - b.date);
     return { date: futureOrToday[0].date, calculo: futureOrToday[0].calculo };
   }
 
-  // todos vencidos: devolver el más reciente (máximo) para mostrar vencimiento
-  valid.sort((a, b) => b.date - a.date);
+  // todas vencidas: elegir la que pasó primero (más antigua)
+  valid.sort((a, b) => a.date - b.date);
   return { date: valid[0].date, calculo: valid[0].calculo };
 }
 
@@ -133,6 +136,7 @@ export async function GET() {
       `SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
     );
 
+    // Historial (MySQL 8+): últimos 30 por cliente
     const clienteIds = Array.from(new Set(vehicles.map((v) => v.cliente_id).filter(Boolean)));
     const historyByClienteId = new Map();
 
@@ -169,6 +173,11 @@ export async function GET() {
     for (const row of vehicles) {
       if (unique.has(row.id)) continue;
 
+      const history = historyByClienteId.get(row.cliente_id) || [];
+      const hasHistory = history.length > 0;
+
+      // ✅ si NO hay historial: no calcular nada
+      // (aunque exista algoritmo)
       const ranges = parseRanges(row.algoritmo_anios);
       const yearOk = yearMatches(Number(row.anio), ranges);
 
@@ -177,34 +186,39 @@ export async function GET() {
 
       const hasAlgorithm = Boolean(yearOk && (algoritmoMeses > 0 || algoritmoKm > 0));
 
-      const history = historyByClienteId.get(row.cliente_id) || [];
-      const { t1, t2 } = pickT1T2DistinctDay(history);
-
-      const v1 = t1?.fecha_visita_taller ? new Date(t1.fecha_visita_taller) : null; // fecha actual (T1)
-      const v2 = t2?.fecha_visita_taller ? new Date(t2.fecha_visita_taller) : null; // fecha anterior (T2)
-      const k1 = t1?.kilometraje_taller != null ? Number(t1.kilometraje_taller) : null;
-      const k2 = t2?.kilometraje_taller != null ? Number(t2.kilometraje_taller) : null;
-
-      // Próximo por tiempo = T2 + meses
-      const nextByTime = hasAlgorithm && algoritmoMeses > 0 && v2 ? addMonths(v2, algoritmoMeses) : null;
-
-      // Próximo por KM = T2 + floor( algoritmoKm / ((k1-k2)/(v1-v2)) )
+      let nextByTime = null;
       let nextByKm = null;
-      if (hasAlgorithm && algoritmoKm > 0 && v1 && v2 && k1 != null && k2 != null) {
-        const diasEntre = daysBetween(v2, v1);
-        const deltaKm = k1 - k2;
 
-        if (diasEntre > 0 && deltaKm > 0) {
-          const kmDiario = deltaKm / diasEntre;
-          if (kmDiario > 0) {
-            const diasFaltantes = algoritmoKm / kmDiario;
-            nextByKm = addDaysTrunc(v2, diasFaltantes);
+      if (hasHistory && hasAlgorithm) {
+        const { t1, t2 } = pickT1T2DistinctDay(history);
+
+        const v1 = t1?.fecha_visita_taller ? new Date(t1.fecha_visita_taller) : null; // T1
+        const v2 = t2?.fecha_visita_taller ? new Date(t2.fecha_visita_taller) : null; // T2 (puede no existir)
+        const k1 = t1?.kilometraje_taller != null ? Number(t1.kilometraje_taller) : null;
+        const k2 = t2?.kilometraje_taller != null ? Number(t2.kilometraje_taller) : null;
+
+        // ✅ Si hay 2 registros (T2 existe): tiempo usa T2
+        // ✅ Si solo hay 1 registro: tiempo usa T1 (solo tiempo)
+        const baseForTime = v2 || v1;
+
+        nextByTime = algoritmoMeses > 0 && baseForTime ? addMonths(baseForTime, algoritmoMeses) : null;
+
+        // ✅ KM SOLO si existe T2 (dos registros con fecha distinta)
+        if (algoritmoKm > 0 && v1 && v2 && k1 != null && k2 != null) {
+          const diasEntre = daysBetween(v2, v1); // (v1 - v2)
+          const deltaKm = k1 - k2;
+
+          if (diasEntre > 0 && deltaKm > 0) {
+            const kmDiario = deltaKm / diasEntre;
+            if (kmDiario > 0) {
+              const diasFaltantes = algoritmoKm / kmDiario;
+              nextByKm = addDaysTrunc(v2, diasFaltantes); // T2 + diasFaltantes(trunc)
+            }
           }
         }
       }
 
-      // ✅ Selección correcta respecto a hoy
-      const picked = pickProximoRespectoHoy(today, [
+      const picked = pickProximo(today, [
         { date: nextByTime, calculo: "Tiempo" },
         { date: nextByKm, calculo: "KM" },
       ]);
@@ -220,15 +234,18 @@ export async function GET() {
       const reminderDate = proximo && matchedFrequency ? new Date(proximo) : null;
       if (reminderDate) reminderDate.setDate(reminderDate.getDate() - Number(matchedFrequency.dias));
 
-      const estadoRecordatorio = !hasAlgorithm
-        ? "Sin algoritmo"
-        : !proximo
-          ? "Sin historial"
-          : daysRemaining < 0
-            ? "Vencido"
-            : matchedFrequency
-              ? "Pendiente contacto"
-              : "Programado";
+      // ✅ estados según tu regla
+      const estadoRecordatorio = !hasHistory
+        ? "Sin historial"
+        : !hasAlgorithm
+          ? "Sin algoritmo"
+          : !proximo
+            ? "Sin historial"
+            : daysRemaining < 0
+              ? "Vencido"
+              : matchedFrequency
+                ? "Pendiente contacto"
+                : "Programado";
 
       unique.set(row.id, {
         id: row.id,

@@ -620,155 +620,394 @@ function arrayBufferToBase64(buffer) {
 }
 
 function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, salesBossName, createdByName, hasAutography }) {
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 14;
-  let y = 16;
-  const signed = reservation.estado === "firmado";
-  const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const depositsTotal = (detail.depositos || []).reduce((sum, item) => sum + Number(item.monto || 0), 0);
+  // Debe quedar 1 hoja: no se llamará addPage (pero se mantiene la estructura)
+  const ALLOW_MULTIPAGE = false;
 
-  const ensurePage = (height = 10) => {
-    if (y + height <= pageHeight - margin) return;
-    pdf.addPage();
-    y = margin;
+  const pageW = pdf.internal.pageSize.getWidth();   // 210
+  const pageH = pdf.internal.pageSize.getHeight();  // 297
+
+  const margin = 8;
+  const left = margin;
+  const top = 10;
+  const right = pageW - margin;
+  const bottom = pageH - margin;
+
+  const lineColor = [35, 35, 35];
+  const headerFill = [235, 235, 235];
+  const labelFill = [245, 245, 245];
+
+  const money = (value, currency = "$") =>
+    `${currency} ${Number(value || 0).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+
+  const formatDate = (v) => {
+    if (!v) return "-";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   };
-  const line = (left, right = "") => {
-    ensurePage(6);
-    pdf.setFont("helvetica", "bold");
-    pdf.text(`${left}:`, margin, y);
-    pdf.setFont("helvetica", "normal");
-    pdf.text(String(right || "-"), 68, y);
-    y += 5;
+
+  const clip = (value, max = 40) => {
+    const s = String(value ?? "");
+    if (!s) return "-";
+    return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
   };
-  const section = (title) => {
-    ensurePage(12);
-    y += 3;
-    pdf.setFont("helvetica", "bold");
-    pdf.setTextColor(94, 23, 235);
-    pdf.text(title, margin, y);
-    pdf.setTextColor(0, 0, 0);
-    y += 2;
-    pdf.line(margin, y, pageWidth - margin, y);
-    y += 6;
+
+  const setFont = (weight = "normal", size = 8) => {
+    pdf.setFont("helvetica", weight);
+    pdf.setFontSize(size);
   };
-  const itemLines = (title, rows, referenceKey) => {
-    section(title);
-    if (!rows.length) {
-      line("-", "-");
+
+  const rect = (x, y, w, h, fill = null) => {
+    if (fill) {
+      pdf.setFillColor(...fill);
+      pdf.rect(x, y, w, h, "F");
+    }
+    pdf.setDrawColor(...lineColor);
+    pdf.rect(x, y, w, h);
+  };
+
+  const text = (t, x, y, opts = {}) => pdf.text(String(t ?? "-"), x, y, opts);
+
+  // Mantener helper tipo "ensurePage" (como tu estilo original)
+  // pero sin addPage para que siempre sea 1 hoja.
+  let currentY = top;
+
+  // Reservamos el bloque de firmas + observaciones al final
+  const obsH = 28;     // alto observaciones (para que entre el texto legal)
+  const signH = 26;    // alto firmas
+  const footerGap = 2;
+  const contentBottom = bottom - (obsH + signH + footerGap);
+
+  const ensurePage = (heightNeeded = 0) => {
+    if (currentY + heightNeeded <= contentBottom) return;
+    if (ALLOW_MULTIPAGE) {
+      pdf.addPage();
+      currentY = top;
       return;
     }
-    rows.forEach((row) => {
-      const text = `${row.detalle || "-"} ${row[referenceKey] ? `(${row[referenceKey]})` : ""} | Cant: ${row.cantidad || 0} | P.Unit: ${money(row.precioUnitario)} | Desc.: ${money(row.descuentoMonto)} | Total: ${money(row.total)}`;
-      ensurePage(10);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(pdf.splitTextToSize(text, pageWidth - margin * 2), margin, y);
-      y += 8;
-    });
+    // Clamp
+    currentY = Math.max(top, contentBottom - heightNeeded);
   };
 
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(18);
-  pdf.setTextColor(94, 23, 235);
-  pdf.text("Wankamotors SAC", pageWidth / 2, y, { align: "center" });
-  y += 7;
-  pdf.setFontSize(12);
-  pdf.text("NOTA DE PEDIDO", pageWidth / 2, y, { align: "center" });
-  y += 6;
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.setTextColor(0, 0, 0);
-  pdf.text(`Fecha: ${new Date().toLocaleDateString("es-PE")}`, pageWidth / 2, y, { align: "center" });
-  y += 5;
-  pdf.text(`Reserva #${reservation.id}`, pageWidth / 2, y, { align: "center" });
+  // =========================================================
+  // ✅ Datos preferentemente desde reservation (como pediste),
+  // con fallback a detail solo si no existe.
+  // =========================================================
+  const r = reservation || {};
+  const d = detail || {};
 
-  section("INFORMACION DE LA RESERVA");
-  line("Oportunidad", reservation.oportunidadCode);
-  line("Codigo Reserva", `RES-${reservation.id}`);
-  line("Estado", reservation.estado);
-  line("Creado por", reservation.creadoPor);
+  const cliente = r.cliente || [r.nombre, r.apellido].filter(Boolean).join(" ") || "-";
+  const conyugue = r.conyugue || r.nombreconyugue || "-";
+  const documento = r.documento || r.identificacion_fiscal || "-";
+  const documentoConyugue = r.dniConyugue || r.dniconyugue || "-";
 
-  section("DATOS DEL CLIENTE");
-  line("Nombre", reservation.cliente);
-  line("Email", reservation.email);
-  line("Telefono", reservation.celular);
-  line("DNI/RUC", reservation.documento);
-  line("Ocupacion", reservation.ocupacion);
-  line("Domicilio", reservation.domicilio);
-  line("Ubicacion", [reservation.distrito, reservation.provincia, reservation.departamento].filter(Boolean).join(", "));
+  const email = r.email || "-";
+  const celular = r.celular || "-";
+  const fechaNacimiento = formatDate(r.fechaNacimiento || r.fecha_nacimiento);
+  const ocupacion = r.ocupacion || "-";
+  const domicilio = r.domicilio || "-";
 
-  section("DATOS DEL VEHICULO");
-  line("Marca", detail.marca);
-  line("Modelo", detail.modelo);
-  line("Clase", detail.clase);
-  line("Version", detail.version);
-  line("Anio", detail.anio);
-  line("VIN", detail.vin || "-");
-  line("Motor #", detail.numeroMotor || "-");
-  line("Color Externo", detail.colorExterno || "-");
-  line("Color Interno", detail.colorInterno || "-");
-  line("Uso del Vehiculo", detail.usoVehiculo || "-");
+  const distrito = r.distrito || "-";
+  const provincia = r.provincia || "-";
+  const region = r.departamento || r.region || "-";
 
-  section("DESCUENTOS Y MONTOS");
-  line("Precio Base", money(detail.precioBase));
-  line("Descuento Dealer", money(detail.descuentoTienda));
-  line("Bono Flota", money(detail.bonoRetoma));
-  line("Descuento Retail", money(detail.descuentoNper));
-  const discountBase = Number(detail.precioUnitario || detail.precioBase || 0) * Number(detail.cantidad || 1);
-  (detail.descuentos || []).forEach((discount) => {
-    const label = `${discount.nombre}${discount.tipo === "PORCENTAJE" ? ` (${Number(discount.valor || 0).toFixed(2)}%)` : ""}`;
-    line(label, money(discountAmount(discount, discountBase)));
-  });
-  line("Flete", money(detail.flete));
-  line("Tarjeta Placa", money(detail.tarjetaPlaca));
-  line("GLP", money(detail.glp));
-  line("T.C. Referencial", detail.tcReferencial || "-");
-  line("Total final", money(detail.total));
+  const asesor = createdByName || r.creadoPor || r.creado_por || "-";
+  const fechaDoc = formatDate(r.createdAt || r.created_at || r.fecha || new Date());
+  const origenVenta = r.origenVenta || r.origen_venta || "-";
+  const campania = r.campania || "-";
+  const idTexto = r.idLead || r.id_lead || r.leadId || r.codigo || r.id || "-";
 
-  section("DEPOSITOS");
-  if (detail.depositos?.length) {
-    detail.depositos.forEach((deposit) => {
-      ensurePage(10);
-      pdf.setFont("helvetica", "normal");
-      const text = [
-        deposit.entidadFinanciera || "Entidad no indicada",
-        deposit.numeroOperacion ? `Op: ${deposit.numeroOperacion}` : "",
-        `Monto: ${money(deposit.monto)}`,
-        deposit.fechaDeposito ? `Fecha: ${new Date(deposit.fechaDeposito).toLocaleString("es-PE")}` : "",
-        deposit.observacion ? `Obs: ${deposit.observacion}` : "",
-      ].filter(Boolean).join(" | ");
-      pdf.text(pdf.splitTextToSize(text, pageWidth - margin * 2), margin, y);
-      y += 8;
-    });
-    line("Total depositado", money(depositsTotal));
-  } else {
-    line("-", "-");
+  const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "-";
+
+  // Vehículo (reservation con fallback a detail/form)
+  const marca = r.marca || d.marca || "-";
+  const modelo = r.modelo || d.modelo || "-";
+  const clase = r.clase || d.clase || "-";
+  const version = r.version || d.version || "-";
+  const anio = r.anio || d.anio || "-";
+  const vin = r.vin || d.vin || "-";
+  const color = r.color || r.colorExterno || d.colorExterno || "-";
+  const motor = r.numeroMotor || r.motor || d.numeroMotor || "-";
+  const codigoUnidad = r.codigoUnidad || r.codigo_unidad || r.codigo || "-";
+
+  // Montos (reservation con fallback a detail)
+  const precioLista =
+    r.precioLista ??
+    r.precio_lista ??
+    r.precioBase ??
+    r.precio_base ??
+    d.precioBase ??
+    d.precioUnitario ??
+    0;
+
+  const totalFinal =
+    r.total ??
+    r.total_final ??
+    r.totalFinal ??
+    d.total ??
+    0;
+
+  // Depósitos (reservation.depositos con fallback a detail.depositos)
+  const depositos = Array.isArray(r.depositos) ? r.depositos : (Array.isArray(d.depositos) ? d.depositos : []);
+
+  const signed = r.estado === "firmado";
+
+  // =========================================================
+  // Layout tipo hoja (1 sola hoja)
+  // =========================================================
+  rect(left, top, right - left, bottom - top);
+
+  // Header
+  const headerH = 20;
+  rect(left, currentY, right - left, headerH);
+  rect(left, currentY, 90, headerH);
+
+  setFont("bold", 24);
+  text("Wankamotors", left + 4, currentY + 14);
+
+  rect(left + 90, currentY, (right - left) - 90, headerH);
+
+  setFont("bold", 10);
+  text(clip(asesor, 30), left + 94, currentY + 6);
+
+  setFont("bold", 8);
+  text("FECHA", left + 94, currentY + 14);
+  setFont("normal", 8);
+  text(fechaDoc, left + 110, currentY + 14);
+
+  setFont("bold", 8);
+  text("ORIGEN:", left + 150, currentY + 14);
+  setFont("normal", 8);
+  text(clip(origenVenta, 14), left + 165, currentY + 14);
+
+  currentY += headerH;
+
+  // ID / Campaña
+  const idH2 = 9;
+  rect(left, currentY, right - left, idH2);
+  rect(left, currentY, 18, idH2, headerFill);
+
+  setFont("bold", 8);
+  text("ID:", left + 2, currentY + 6.2);
+  setFont("normal", 8);
+  text(clip(idTexto, 28), left + 21, currentY + 6.2);
+
+  setFont("bold", 8);
+  text("CAMPAÑA:", left + 120, currentY + 6.2);
+  setFont("normal", 8);
+  text(clip(campania, 24), left + 145, currentY + 6.2);
+
+  currentY += idH2;
+
+  // Título
+  const titleH = 7;
+  rect(left, currentY, right - left, titleH, headerFill);
+  setFont("bold", 9.5);
+  text("NOTA DE PEDIDO - PERSONA NATURAL", (left + right) / 2, currentY + 5.2, { align: "center" });
+  currentY += titleH;
+
+  // Helper filas
+  const rowH = 5.8;
+  const labelW = 56;
+  const col1W = 82;
+  const col2W = (right - left) - labelW - col1W;
+
+  const row = (label, v1, v2 = "") => {
+    ensurePage(rowH);
+    rect(left, currentY, right - left, rowH);
+    rect(left, currentY, labelW, rowH, labelFill);
+
+    setFont("bold", 7.0);
+    text(label, left + 2, currentY + 4.2);
+
+    rect(left + labelW, currentY, col1W, rowH);
+    rect(left + labelW + col1W, currentY, col2W, rowH);
+
+    setFont("normal", 7.8);
+    text(clip(v1, 44), left + labelW + 2, currentY + 4.2);
+    text(clip(v2, 34), left + labelW + col1W + 2, currentY + 4.2);
+
+    currentY += rowH;
+  };
+
+  // ===== Datos Cliente =====
+  row("COMPROBANTE", tipoComprobante, "BOLETA");
+  row("NOMBRES Y APELLIDOS", cliente);
+  row("CONYUGUE/CO-PROP.", conyugue);
+  row("DNI / DNI CONY.", documento, documentoConyugue);
+  row("DIRECCION", domicilio);
+
+  // Distrito/Provincia/Región en una fila
+  ensurePage(rowH);
+  rect(left, currentY, right - left, rowH);
+  rect(left, currentY, labelW, rowH, labelFill);
+
+  setFont("bold", 7.0);
+  text("DISTRITO", left + 2, currentY + 4.2);
+
+  const aW = 52;
+  const bLblW = 26;
+  const bW = 46;
+  const cLblW = 22;
+  const cW = (right - left) - labelW - aW - bLblW - bW - cLblW;
+
+  rect(left + labelW, currentY, aW, rowH);
+  setFont("normal", 7.8);
+  text(clip(distrito, 18), left + labelW + 2, currentY + 4.2);
+
+  rect(left + labelW + aW, currentY, bLblW, rowH, labelFill);
+  setFont("bold", 7.0);
+  text("PROV.", left + labelW + aW + 2, currentY + 4.2);
+
+  rect(left + labelW + aW + bLblW, currentY, bW, rowH);
+  setFont("normal", 7.8);
+  text(clip(provincia, 16), left + labelW + aW + bLblW + 2, currentY + 4.2);
+
+  rect(left + labelW + aW + bLblW + bW, currentY, cLblW, rowH, labelFill);
+  setFont("bold", 7.0);
+  text("REG.", left + labelW + aW + bLblW + bW + 2, currentY + 4.2);
+
+  rect(left + labelW + aW + bLblW + bW + cLblW, currentY, cW, rowH);
+  setFont("normal", 7.8);
+  text(clip(region, 24), left + labelW + aW + bLblW + bW + cLblW + 2, currentY + 4.2);
+
+  currentY += rowH;
+
+  row("TELEFONO", celular);
+  row("F. NACIMIENTO", fechaNacimiento);
+  row("CORREO", email);
+  row("OCUPACION", ocupacion);
+  row("ORIGEN FONDOS", r.origenFondos || r.origen_fondos || "-");
+
+  // ===== Vehículo =====
+  ensurePage(7);
+  rect(left, currentY, right - left, 6.8, headerFill);
+  setFont("bold", 8.8);
+  text("DATOS DEL VEHICULO", left + 2, currentY + 4.9);
+  currentY += 6.8;
+
+  row("MARCA", marca);
+  row("MODELO", modelo, "VERSION");
+  row("CLASE", clase, version);
+  row("COLOR", color, "AÑO");
+  row("AÑO", anio);
+  row("CHASIS/VIN", vin);
+  row("MOTOR", motor);
+  row("CODIGO", codigoUnidad);
+
+  // ===== Precios =====
+  ensurePage(7);
+  rect(left, currentY, right - left, 6.8, headerFill);
+  setFont("bold", 8.8);
+  text("PRECIOS", left + 2, currentY + 4.9);
+  currentY += 6.8;
+
+  row("PRECIO LISTA", money(precioLista));
+  row("PRECIO FINAL", money(totalFinal));
+
+  // ===== Depósitos =====
+  ensurePage(7);
+  rect(left, currentY, right - left, 6.8, headerFill);
+  setFont("bold", 8.8);
+  text("DEPOSITOS (MONTO / FECHA / BANCO / OP)", left + 2, currentY + 4.9);
+  currentY += 6.8;
+
+  const depRows = 5;
+  const depLabelW = 56;
+  const montoW = 34;
+  const fechaW = 30;
+  const bancoW = 44;
+  const opW = (right - left) - depLabelW - montoW - fechaW - bancoW;
+
+  for (let i = 0; i < depRows; i++) {
+    const dep = depositos[i];
+    ensurePage(rowH);
+
+    rect(left, currentY, right - left, rowH);
+    rect(left, currentY, depLabelW, rowH, labelFill);
+    setFont("bold", 6.8);
+    text("MONTO DEPOSITO", left + 2, currentY + 4.2);
+
+    rect(left + depLabelW, currentY, montoW, rowH);
+    rect(left + depLabelW + montoW, currentY, fechaW, rowH);
+    rect(left + depLabelW + montoW + fechaW, currentY, bancoW, rowH);
+    rect(left + depLabelW + montoW + fechaW + bancoW, currentY, opW, rowH);
+
+    setFont("normal", 7.8);
+    text(dep ? money(dep.monto) : "-", left + depLabelW + 2, currentY + 4.2);
+    text(dep ? formatDate(dep.fechaDeposito) : "-", left + depLabelW + montoW + 2, currentY + 4.2);
+    text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + fechaW + 2, currentY + 4.2);
+    text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + fechaW + bancoW + 2, currentY + 4.2);
+
+    currentY += rowH;
   }
 
-  itemLines("ACCESORIOS", accessories, "numeroParte");
-  itemLines("REGALOS", gifts, "lote");
+  // =========================================================
+  // ✅ Bloque de firmas EXACTO como tu original (Autography)
+  // =========================================================
+  const signAreaTop = bottom - (obsH + signH); // inicia bloque firmas+obs
+  const labelsY = signAreaTop;
+  const lineY = signAreaTop + 18;
 
-  section("RESUMEN FINAL");
-  line("Total Vehiculo", money(Number(detail.precioUnitario || detail.precioBase || 0) * Number(detail.cantidad || 1)));
-  line("Total Accesorios y Regalos", money(accessoriesTotal + giftsTotal));
-  line("Cuota Inicial", money(detail.cuotaInicial));
-  line("TOTAL GENERAL", money(detail.total));
-
-  ensurePage(42);
-  y += 12;
+  // Labels
   pdf.setFont("helvetica", "bold");
-  pdf.text("FIRMA DEL CLIENTE:", margin, y);
-  pdf.text("FIRMA ASESOR:", 78, y);
-  pdf.text("FIRMA AUTORIZADO:", 140, y);
-  y += 18;
-  pdf.line(margin, y, 65, y);
-  pdf.line(78, y, 127, y);
-  pdf.line(140, y, pageWidth - margin, y);
+  pdf.setFontSize(9);
+  pdf.text("FIRMA DEL CLIENTE:", left + 0, labelsY);
+  pdf.text("FIRMA ASESOR:", left + 70, labelsY);
+  pdf.text("FIRMA AUTORIZADO:", left + 132, labelsY);
+
+  // líneas
+  pdf.setDrawColor(...lineColor);
+  pdf.line(left + 0, lineY, left + 60, lineY);
+  pdf.line(left + 70, lineY, left + 120, lineY);
+  pdf.line(left + 132, lineY, right, lineY);
+
   if (signed) {
     pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
     pdf.setFontSize(17);
-    pdf.text(createdByName || reservation.creadoPor || "Asesor", 78, y - 3);
-    pdf.text(salesBossName || "Jefe de Ventas", 140, y - 3);
+
+    // asesor (columna medio)
+    pdf.text(asesor || "Asesor", left + 70, lineY - 3);
+
+    // jefe ventas / autorizado (columna derecha)
+    pdf.text(salesBossName || "Jefe de Ventas", left + 132, lineY - 3);
   }
+
+  // =========================================================
+  // ✅ Observaciones: texto fijo + (opcional) extra obs
+  // =========================================================
+  const obsY = signAreaTop + signH;
+  rect(left, obsY, right - left, obsH);
+  rect(left, obsY, 40, obsH, labelFill);
+
+  const LEGAL_TITLE = "CUPONERA DESCUENTO, LAMINADO";
+  const LEGAL_TEXT =
+    "Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos " +
+    "administrativos y que el monto en materia de devolución está afecta a 20 días hábiles, cualquier cambio adicional que no conste en la " +
+    "presente no será responsabilidad de la empresa. LA ENTREGA ESTÁ SUJETA A STOCK, LOS PLAZOS DE ENTREGA PUEDEN SUFRIR " +
+    "VARIACIÓN POR POSIBLES DEMORAS EN LA ENTREGA DEL VEHÍCULO POR PARTE DE LA MARCA, POR TAL CASO NO SERÁ " +
+    "IMPUTABLE AL VENDEDOR O A WANKAMOTORS, CABE RESALTAR QUE EL PRECIO PUEDE SUFRIR VARIACIÓN POR FACTORES " +
+    "EXTERNOS AJENOS A WANKAMOTORS Y ESTIPULADOS POR LA MARCA. UNA VEZ EMITIDO EL MISMO NO SE ACEPTARÁ SU CAMBIO " +
+    "NI CANJE. Por tal motivo agradecemos verificar la información registrada, en señal de conformidad el cliente deja como constancia su firma.";
+
+  const extraObs = String(r.observaciones || "").trim();
+  const obsText = extraObs ? `${LEGAL_TEXT}\n\nOBS: ${extraObs}` : LEGAL_TEXT;
+
+  setFont("bold", 8);
+  text("OBSERVACIONES", left + 2, obsY + 6);
+
+  // título centrado
+  setFont("bold", 8.2);
+  text(LEGAL_TITLE, left + 40 + (right - left - 40) / 2, obsY + 6, { align: "center" });
+
+  // texto legal
+  setFont("bold", 6.8);
+  const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), (right - left) - 40 - 4);
+  pdf.text(wrapped.slice(0, 7), left + 42, obsY + 12); // 7 líneas aprox entran en obsH=28
 }
