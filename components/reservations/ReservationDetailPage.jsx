@@ -837,7 +837,7 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   };
 
   // ===== Datos Cliente =====
-  row("COMPROBANTE", tipoComprobante, "BOLETA");
+  row("COMPROBANTE", tipoComprobante);
   row("NOMBRES Y APELLIDOS", cliente);
   row("CONYUGUE/CO-PROP.", conyugue);
   row("DNI / DNI CONY.", documento, documentoConyugue);
@@ -895,7 +895,7 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   row("MARCA", marca);
   row("MODELO", modelo, "VERSION");
   row("CLASE", clase, version);
-  row("COLOR", color, "AÑO");
+  row("COLOR", color);
   row("AÑO", anio);
   row("CHASIS/VIN", vin);
   row("MOTOR", motor);
@@ -986,7 +986,6 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   rect(left, obsY, right - left, obsH);
   rect(left, obsY, 40, obsH, labelFill);
 
-  const LEGAL_TITLE = "CUPONERA DESCUENTO, LAMINADO";
   const LEGAL_TEXT =
     "Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos " +
     "administrativos y que el monto en materia de devolución está afecta a 20 días hábiles, cualquier cambio adicional que no conste en la " +

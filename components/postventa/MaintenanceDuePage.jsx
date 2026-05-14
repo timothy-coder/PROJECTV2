@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { Eye, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { PostventaOpportunityDialog } from "@/components/postventa/PostventaOpportunityDialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useMaintenanceDue } from "@/hooks/postventa/useMaintenanceDue";
 import { hasPerm } from "@/lib/permissions";
@@ -19,6 +20,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [toDate, setToDate] = useState("");
   const [quickRange, setQuickRange] = useState("");
   const [dialogVehicle, setDialogVehicle] = useState(null);
+  const [clientDetail, setClientDetail] = useState(null);
+  const [vehicleDetail, setVehicleDetail] = useState(null);
 
   const canViewAll = Boolean(
     hasPerm(userPermissions, ["oportunidadespv", "viewall"]) ||
@@ -103,7 +106,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
         <div className="mb-4 grid gap-3 md:grid-cols-[280px_220px_170px_170px_220px_130px]">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Buscar..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Input className="pl-9" placeholder="Buscar cliente, vehiculo, placa o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
 
           <SearchableSelect
@@ -187,8 +190,24 @@ export default function MaintenanceDuePage({ userPermissions }) {
             <tbody className="divide-y">
               {rows.map((item) => (
                 <tr key={item.id}>
-                  <td className="px-3 py-3">{item.clienteNombre}</td>
-                  <td>{item.vehiculo}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <Button size="icon-sm" variant="outline" onClick={() => setClientDetail(item)}>
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <span className="font-semibold">{item.clienteNombre}</span>
+                      
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <Button size="icon-sm" variant="outline" onClick={() => setVehicleDetail(item)}>
+                        <Eye className="size-3.5" />
+                      </Button><span>{item.vehiculo}</span>
+                      
+                    </div>
+                    {item.vin ? <p className="mt-1 text-xs font-medium text-slate-500">VIN: {item.vin}</p> : null}
+                  </td>
 
                   <td>
                     <DateBadge value={item.proximoMantenimiento} days={item.diasRestantes} />
@@ -272,6 +291,100 @@ export default function MaintenanceDuePage({ userPermissions }) {
           }}
         />
       ) : null}
+      {clientDetail ? <ClientInfoDialog item={clientDetail} onClose={() => setClientDetail(null)} /> : null}
+      {vehicleDetail ? <VehicleInfoDialog item={vehicleDetail} onClose={() => setVehicleDetail(null)} /> : null}
+    </div>
+  );
+}
+
+function ClientInfoDialog({ item, onClose }) {
+  const client = item.cliente || {};
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(94vw,640px)] bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle>Informacion del cliente</DialogTitle>
+          <DialogDescription>{client.nombreCompleto || item.clienteNombre}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Info label="Nombre" value={client.nombreCompleto || item.clienteNombre} />
+          <Info label="Celular" value={client.celular} />
+          <Info label="Email" value={client.email} />
+          <Info label="Documento" value={[client.tipoIdentificacion, client.identificacionFiscal].filter(Boolean).join(" ")} />
+          <Info label="Fecha nacimiento" value={formatDate(client.fechaNacimiento)} />
+          <Info label="Ocupacion" value={client.ocupacion} />
+          <Info label="Nombre comercial" value={client.nombreComercial} />
+          <Info label="Domicilio" value={client.domicilio} wide />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VehicleInfoDialog({ item, onClose }) {
+  const [tab, setTab] = useState("info");
+  const history = item.historialMantenimientos || [];
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90svh] max-w-[min(94vw,760px)] overflow-hidden bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-slate-200 px-5 py-4">
+          <DialogTitle>Informacion del vehiculo</DialogTitle>
+          <DialogDescription>{item.vehiculo}</DialogDescription>
+        </DialogHeader>
+        <div className="px-5 pt-4">
+          <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1">
+            <button type="button" onClick={() => setTab("info")} className={`h-8 rounded-md text-xs font-bold ${tab === "info" ? "bg-white shadow-sm" : "text-slate-500"}`}>Carro</button>
+            <button type="button" onClick={() => setTab("history")} className={`h-8 rounded-md text-xs font-bold ${tab === "history" ? "bg-white shadow-sm" : "text-slate-500"}`}>Historial</button>
+          </div>
+        </div>
+        <div className="min-h-0 overflow-y-auto px-5 py-4">
+          {tab === "info" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Info label="Marca" value={item.marca} />
+              <Info label="Modelo" value={item.modelo} />
+              <Info label="Placa" value={item.placa} />
+              <Info label="VIN" value={item.vin} />
+              <Info label="Año" value={item.anio} />
+              <Info label="Color" value={item.color} />
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-100 text-xs font-bold text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">Fecha visita</th>
+                    <th>Kilometraje</th>
+                    <th>Registro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {history.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">{formatDate(row.fechaVisitaTaller)}</td>
+                      <td>{row.kilometrajeTaller ?? "-"}</td>
+                      <td className="text-xs text-slate-500">{row.createdAt ? formatDate(row.createdAt) : "-"}</td>
+                    </tr>
+                  ))}
+                  {!history.length ? (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-8 text-center text-slate-500">Sin historial de mantenimientos.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Info({ label, value, wide }) {
+  return (
+    <div className={`rounded-lg border border-slate-200 bg-slate-50 p-3 ${wide ? "sm:col-span-2" : ""}`}>
+      <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-slate-900">{value || "-"}</p>
     </div>
   );
 }

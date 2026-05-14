@@ -107,8 +107,11 @@ export async function GET() {
 
     const [vehicles] = await pool.query(
       `SELECT
-          v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita,
+          v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita, v.color,
           CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+          c.nombre AS cliente_nombre_raw, c.apellido AS cliente_apellido, c.email AS cliente_email,
+          c.celular AS cliente_celular, c.tipo_identificacion, c.identificacion_fiscal,
+          c.fecha_nacimiento, c.ocupacion, c.domicilio, c.nombre_comercial,
           ma.name AS marca_nombre, mo.name AS modelo_nombre,
           av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
           opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
@@ -137,33 +140,36 @@ export async function GET() {
     );
 
     // Historial (MySQL 8+): últimos 30 por cliente
-    const clienteIds = Array.from(new Set(vehicles.map((v) => v.cliente_id).filter(Boolean)));
-    const historyByClienteId = new Map();
+    const vehicleIds = Array.from(new Set(vehicles.map((v) => v.id).filter(Boolean)));
+    const historyByVehicleId = new Map();
 
-    if (clienteIds.length) {
-      const placeholders = clienteIds.map(() => "?").join(",");
+    if (vehicleIds.length) {
+      const placeholders = vehicleIds.map(() => "?").join(",");
       const [historyRows] = await pool.query(
         `
-        SELECT cliente_id, id, fecha_visita_taller, kilometraje_taller
+        SELECT vehiculo_id, id, fecha_visita_taller, kilometraje_taller, created_by, created_at, updated_at
         FROM (
           SELECT
-            h.cliente_id,
+            h.vehiculo_id,
             h.id,
             h.fecha_visita_taller,
             h.kilometraje_taller,
-            ROW_NUMBER() OVER (PARTITION BY h.cliente_id ORDER BY h.fecha_visita_taller DESC, h.id DESC) AS rn
-          FROM administracion_clientes_historial_mantenimientos h
-          WHERE h.cliente_id IN (${placeholders})
+            h.created_by,
+            h.created_at,
+            h.updated_at,
+            ROW_NUMBER() OVER (PARTITION BY h.vehiculo_id ORDER BY h.fecha_visita_taller DESC, h.id DESC) AS rn
+          FROM administracion_vehiculos_historial_mantenimientos h
+          WHERE h.vehiculo_id IN (${placeholders})
         ) x
         WHERE x.rn <= 30
-        ORDER BY x.cliente_id ASC, x.fecha_visita_taller DESC, x.id DESC
+        ORDER BY x.vehiculo_id ASC, x.fecha_visita_taller DESC, x.id DESC
         `,
-        clienteIds
+        vehicleIds
       );
 
       for (const r of historyRows) {
-        if (!historyByClienteId.has(r.cliente_id)) historyByClienteId.set(r.cliente_id, []);
-        historyByClienteId.get(r.cliente_id).push(r);
+        if (!historyByVehicleId.has(r.vehiculo_id)) historyByVehicleId.set(r.vehiculo_id, []);
+        historyByVehicleId.get(r.vehiculo_id).push(r);
       }
     }
 
@@ -173,7 +179,7 @@ export async function GET() {
     for (const row of vehicles) {
       if (unique.has(row.id)) continue;
 
-      const history = historyByClienteId.get(row.cliente_id) || [];
+      const history = historyByVehicleId.get(row.id) || [];
       const hasHistory = history.length > 0;
 
       // ✅ si NO hay historial: no calcular nada
@@ -251,13 +257,36 @@ export async function GET() {
         id: row.id,
         clienteId: row.cliente_id,
         clienteNombre: row.cliente_nombre.trim(),
+        cliente: {
+          id: row.cliente_id,
+          nombre: row.cliente_nombre_raw || "",
+          apellido: row.cliente_apellido || "",
+          nombreCompleto: row.cliente_nombre.trim(),
+          email: row.cliente_email || "",
+          celular: row.cliente_celular || "",
+          tipoIdentificacion: row.tipo_identificacion || "",
+          identificacionFiscal: row.identificacion_fiscal || "",
+          fechaNacimiento: datePart(row.fecha_nacimiento),
+          ocupacion: row.ocupacion || "",
+          domicilio: row.domicilio || "",
+          nombreComercial: row.nombre_comercial || "",
+        },
         vehiculo: [row.modelo_nombre, row.marca_nombre].filter(Boolean).join(" - ") || row.placas || row.vin || "-",
         marca: row.marca_nombre || "",
         modelo: row.modelo_nombre || "",
         placa: row.placas || "",
         vin: row.vin || "",
         anio: row.anio,
+        color: row.color || "",
         kilometraje: row.kilometraje,
+        historialMantenimientos: history.map((item) => ({
+          id: item.id,
+          fechaVisitaTaller: datePart(item.fecha_visita_taller),
+          kilometrajeTaller: item.kilometraje_taller,
+          createdBy: item.created_by,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+        })),
 
         fechaUltimaVisita: datePart(row.fecha_ultima_visita),
 

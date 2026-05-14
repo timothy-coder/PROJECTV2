@@ -89,7 +89,7 @@ export default async function PublicQuotePage({ params }) {
               <Info label="Marca" value={quote.marca} />
               <Info label="Modelo" value={quote.modelo} />
               <Info label="Version" value={quote.version} />
-              <Info label="Anio" value={quote.anio || "-"} />
+              <Info label="Año" value={quote.anio || "-"} />
               <Info label="Color Ext." value={quote.color_externo || "-"} />
               <Info label="Color Int." value={quote.color_interno || "-"} />
               <Info label="SKU" value={quote.sku || "N/A"} />

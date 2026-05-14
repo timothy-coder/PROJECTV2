@@ -76,7 +76,12 @@ export default function CatalogPage({ userPermissions }) {
   }
 
   function openTechnicalSheetPdf(price) {
-    window.open(`/api/catalog/pdf/${price.id}`, "_blank", "noopener,noreferrer");
+    const link = document.createElement("a");
+    link.href = `/api/catalog/pdf/${price.id}`;
+    link.download = `ficha-tecnica-${price.id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   }
 
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver catalogo.</div>;
