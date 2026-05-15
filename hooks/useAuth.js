@@ -8,8 +8,19 @@ export function useAuth() {
   const [booting, setBooting] = useState(true);
 
   const refresh = useCallback(async () => {
-    const { user } = await authApi.me();
-    setUser(user);
+    try {
+      const { user } = await authApi.me();
+      setUser(user);
+    } catch (error) {
+      if (error.status === 401) {
+        setUser(null);
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      throw error;
+    }
   }, []);
 
   useEffect(() => {

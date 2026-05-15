@@ -24,15 +24,22 @@ function mapElement(row) {
   };
 }
 
-export async function GET() {
+export async function GET(request) {
   const user = await getCurrentUser();
-  if (!can(user, "view")) return NextResponse.json({ message: "No tienes permiso para ver plantillas." }, { status: 403 });
+  const requestedType = request.nextUrl.searchParams.get("tipoDocumento");
+  const activeOnly = request.nextUrl.searchParams.get("active") === "1";
+  const canUseReservationTemplate = requestedType === "RESERVA" && (hasPerm(user?.permissions || {}, ["reservas", "view"]) || hasPerm(user?.permissions || {}, ["reservas", "viewall"]));
+  if (!can(user, "view") && !canUseReservationTemplate) return NextResponse.json({ message: "No tienes permiso para ver plantillas." }, { status: 403 });
 
   try {
     const [templates] = await pool.query(
       `SELECT id, tipo_documento, nombre, descripcion, is_active, created_at, updated_at
        FROM configuracion_ventas_documento_plantillas
+       ${requestedType ? "WHERE tipo_documento=? " : ""}
+       ${requestedType && activeOnly ? "AND is_active=1 " : !requestedType && activeOnly ? "WHERE is_active=1 " : ""}
        ORDER BY tipo_documento ASC, nombre ASC`
+      ,
+      requestedType ? [requestedType] : []
     );
     const ids = templates.map((item) => item.id);
     if (!ids.length) return NextResponse.json({ templates: [] });

@@ -8,7 +8,7 @@ export async function GET() {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
 
-    if (!token) return NextResponse.json({ user: null }, { status: 200 });
+    if (!token) return NextResponse.json({ user: null }, { status: 401 });
 
     const payload = verifySession(token);
     const userId = Number(payload.sub);
@@ -28,7 +28,7 @@ export async function GET() {
     );
 
     const user = rows?.[0];
-    if (!user || !user.is_active) return NextResponse.json({ user: null }, { status: 200 });
+    if (!user || !user.is_active) return NextResponse.json({ user: null }, { status: 401 });
 
     return NextResponse.json(
       {
@@ -48,6 +48,8 @@ export async function GET() {
     );
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ user: null }, { status: 200 });
+    const response = NextResponse.json({ user: null }, { status: 401 });
+    response.cookies.delete(COOKIE_NAME);
+    return response;
   }
 }

@@ -56,6 +56,37 @@ function normalizeDeposits(deposits) {
     .filter((deposit) => deposit.monto > 0 || deposit.entidadFinanciera || deposit.numeroOperacion || deposit.fechaDeposito || deposit.observacion);
 }
 
+function normalizeCoowners(coowners) {
+  return (Array.isArray(coowners) ? coowners : [])
+    .map((coowner) => {
+      const tipo = String(coowner.tipoIdentificacion || "").toUpperCase();
+      const rawDocument = String(coowner.numeroDocumento || "").trim();
+      const numeroDocumento = tipo === "DNI"
+        ? rawDocument.replace(/\D/g, "").slice(0, 8)
+        : tipo === "RUC"
+          ? rawDocument.replace(/\D/g, "").slice(0, 11)
+          : rawDocument || null;
+      return {
+        nombre: String(coowner.nombre || "").trim() || null,
+        apellido: String(coowner.apellido || "").trim() || null,
+        email: String(coowner.email || "").trim() || null,
+        celular: String(coowner.celular || "").trim() || null,
+        tipoIdentificacion: ["DNI", "RUC", "PASAPORTE"].includes(tipo) ? tipo : null,
+        numeroDocumento,
+        nombreComercial: tipo === "RUC" ? String(coowner.nombreComercial || "").trim() || null : null,
+      };
+    })
+    .filter((coowner) => coowner.nombre || coowner.apellido || coowner.email || coowner.celular || coowner.numeroDocumento || coowner.nombreComercial);
+}
+
+function normalizePersonType(tipoComprobante, tipoPersona) {
+  const comprobante = String(tipoComprobante || "").toUpperCase();
+  if (comprobante.includes("BOLETA")) return "NATURAL";
+  const persona = String(tipoPersona || "").toUpperCase();
+  if (comprobante.includes("FACTURA") && ["NATURAL_RUC", "JURIDICA"].includes(persona)) return persona;
+  return "NATURAL";
+}
+
 function getDiscountAmount(discount, base) {
   if (discount.tipo === "PORCENTAJE") return Number(base || 0) * Number(discount.valor || 0) / 100;
   return Number(discount.valor || 0);
@@ -131,11 +162,14 @@ export async function GET(_request, { params }) {
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
               c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal, c.fecha_nacimiento,
               c.ocupacion, c.domicilio, c.nombre_comercial, c.nombreconyugue, c.dniconyugue,
+              og.name AS origen_nombre, so.name AS suborigen_nombre,
               dep.nombre AS departamento, prov.nombre AS provincia, dis.nombre AS distrito,
               u.fullname AS creado_por
        FROM ventas_reservas r
        LEFT JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
        LEFT JOIN administracion_clientes c ON c.id=o.cliente_id
+       LEFT JOIN configuracion_origenes_citas og ON og.id=o.origen_id
+       LEFT JOIN configuracion_suborigenes_citas so ON so.id=o.suborigen_id
        LEFT JOIN departamentos dep ON dep.id=c.departamento_id
        LEFT JOIN provincias prov ON prov.id=c.provincia_id
        LEFT JOIN distritos dis ON dis.id=c.distrito_id
@@ -227,6 +261,13 @@ export async function GET(_request, { params }) {
        ORDER BY COALESCE(fecha_deposito, created_at) ASC, id ASC`,
       [detail.id]
     ) : [[]];
+    const [coownerRows] = await pool.query(
+      `SELECT id, nombre, apellido, email, celular, tipo_identificacion, numero_documento, nombre_comercial, created_at
+       FROM ventas_reservas_copropietarios
+       WHERE reserva_id=?
+       ORDER BY id ASC`,
+      [id]
+    );
     const [[carEvent]] = detail?.vin ? await pool.query(
       `SELECT id, vin, numero_factura, fecha_facturacion, fecha_entrega_cliente, fecha_entrega_placa,
               placa, kilometraje, observacion
@@ -262,6 +303,8 @@ export async function GET(_request, { params }) {
         observaciones: reservation.observaciones || "",
         oportunidadId: reservation.oportunidad_id,
         oportunidadCode: reservation.oportunidad_code || "-",
+        origenVenta: reservation.origen_nombre || "",
+        campania: reservation.suborigen_nombre || "",
         createdAt: reservation.created_at,
         creadoPor: reservation.creado_por || "-",
         cliente: String(reservation.cliente || "").trim() || "-",
@@ -293,6 +336,7 @@ export async function GET(_request, { params }) {
         precioId: detail.precio_id,
         precioBase: Number(detail.precio_base || detail.precio_unitario || 0),
         tipoComprobante: detail.tipo_comprobante || "",
+        tipoPersona: detail.tipo_persona || "NATURAL",
         numeroMotor: detail.numero_motor || "",
         tcReferencial: detail.tc_referencial || "",
         total: Number(detail.total || 0),
@@ -311,6 +355,8 @@ export async function GET(_request, { params }) {
         cantidad: Number(detail.cantidad || 1),
         precioUnitario: Number(detail.precio_unitario || 0),
         descripcion: detail.descripcion || "",
+        origenFondos: detail.origen_fondos || "",
+        codigo: detail.codigo || "",
         colorExterno: detail.color_externo || "",
         colorInterno: detail.color_interno || "",
         descuentos: discountRows.map((row) => ({
@@ -328,6 +374,17 @@ export async function GET(_request, { params }) {
           monto: Number(row.monto || 0),
           fechaDeposito: row.fecha_deposito,
           observacion: row.observacion || "",
+        })),
+        copropietarios: coownerRows.map((row) => ({
+          id: Number(row.id),
+          nombre: row.nombre || "",
+          apellido: row.apellido || "",
+          email: row.email || "",
+          celular: row.celular || "",
+          tipoIdentificacion: row.tipo_identificacion || "",
+          numeroDocumento: row.numero_documento || "",
+          nombreComercial: row.nombre_comercial || "",
+          createdAt: row.created_at,
         })),
         carEvent: carEvent ? {
           id: Number(carEvent.id),
@@ -634,6 +691,8 @@ export async function PUT(request, { params }) {
       const base = Number(d.precioUnitario || 0) * Number(d.cantidad || 1);
       const extraDiscounts = normalizeDiscounts(d.descuentos);
       const deposits = normalizeDeposits(d.depositos);
+      const coowners = normalizeCoowners(d.copropietarios);
+      const tipoPersona = normalizePersonType(d.tipoComprobante, d.tipoPersona);
       const extraDiscountTotal = extraDiscounts.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
       const itemsTotal = await quoteItemsTotal(connection, d.cotizacionId);
       const total = base
@@ -648,18 +707,36 @@ export async function PUT(request, { params }) {
         + itemsTotal;
       const [detailUpdate] = await connection.query(
         `UPDATE ventas_reserva_detalles
-         SET tipo_comprobante=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,
+         SET tipo_comprobante=?, tipo_persona=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,
              dsctotienda=?, dsctotiendaporcentaje=?, dsctobonoretoma=?, dsctonper=?, glp=?, tarjetaplaca=?, flete=?,
-             cuota_inicial=?, cantidad=?, precio_unitario=?, descripcion=?
+             cuota_inicial=?, cantidad=?, precio_unitario=?, descripcion=?, origen_fondos=?, codigo=?
          WHERE reserva_id=?`,
         [
-          d.tipoComprobante || null, d.numeroMotor || null, d.tcReferencial || null, total,
+          d.tipoComprobante || null, tipoPersona, d.numeroMotor || null, d.tcReferencial || null, total,
           d.vinExiste ? d.vin || null : null, d.vinExiste ? 1 : 0, d.usoVehiculo || null, d.placa || null,
           d.descuentoTienda || 0, d.descuentoTiendaPorcentaje || null, d.bonoRetoma || 0, d.descuentoNper || 0,
           d.glp || 0, d.tarjetaPlaca || 0, d.flete || 0, d.cuotaInicial || null, d.cantidad || 1,
-          d.precioUnitario || 0, d.descripcion || null, id,
+          d.precioUnitario || 0, d.descripcion || null, d.origenFondos || null, d.codigo || null, id,
         ]
       );
+      await connection.query(`DELETE FROM ventas_reservas_copropietarios WHERE reserva_id=?`, [id]);
+      if (coowners.length) {
+        await connection.query(
+          `INSERT INTO ventas_reservas_copropietarios
+           (reserva_id, nombre, apellido, email, celular, tipo_identificacion, numero_documento, nombre_comercial)
+           VALUES ${coowners.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+          coowners.flatMap((coowner) => [
+            id,
+            coowner.nombre,
+            coowner.apellido,
+            coowner.email,
+            coowner.celular,
+            coowner.tipoIdentificacion,
+            coowner.numeroDocumento,
+            coowner.nombreComercial,
+          ])
+        );
+      }
       const detailId = Number(d.id || 0);
       if (detailId) {
         await connection.query(`DELETE FROM ventas_reserva_detalles_descuentos WHERE detalle_id=?`, [detailId]);

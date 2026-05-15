@@ -26,15 +26,21 @@ export const USER_PERMISSION_GROUPS = [
   { key: "configagenda", label: "Config. Ventas", actions: ["view", "create", "edit", "delete"] },
   { key: "config_ventas_plantillas", label: "Plantillas Venta", actions: ["view", "create", "edit", "delete"] },
   { key: "configcotizacion", label: "Config. Citas", actions: ["view", "create", "edit", "delete"] },
+  { key: "sistema_logistico", label: "Sistema Logistico", actions: ["view"] },
   { key: "mensajes", label: "Mensajes", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion", label: "Configuracion", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_centros", label: "Config. Centros", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_talleres", label: "Config. Talleres", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_mostradores", label: "Config. Mostradores", actions: ["view", "create", "edit", "delete"] },
+  { key: "configuracion_motivos_citas", label: "Config. Motivos", actions: ["view", "create", "edit", "delete"] },
+  { key: "configuracion_submotivos_citas", label: "Config. Submotivos", actions: ["view", "create", "edit", "delete"] },
+  { key: "configuracion_origenes_citas", label: "Config. Origenes", actions: ["view", "create", "edit", "delete"] },
+  { key: "configuracion_suborigenes_citas", label: "Config. Suborigenes", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_monedas", label: "Config. Monedas", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_impuestos", label: "Config. Impuestos", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_tarifas_mano_obra", label: "Config. Mano de Obra", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_tarifas_panos", label: "Config. Panos", actions: ["view", "create", "edit", "delete"] },
+  { key: "configuracion_frecuencia", label: "Config. Frecuencia", actions: ["view", "create", "edit", "delete"] },
 ];
 
 export const WORK_DAYS = [

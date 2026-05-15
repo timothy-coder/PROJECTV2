@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, Eye, FileText, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Eye, FileText, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -45,14 +45,16 @@ export default function ReservationDetailPage({ id }) {
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF("p", "mm", "a4");
     const hasAutography = await loadAutographyFont(pdf);
-    buildReservationPdf(pdf, {
-      reservation,
+    const template = await loadReservationTemplate();
+    await buildReservationPdf(pdf, {
+      reservation: { ...reservation, tipoPersona: detail.tipoPersona, origenFondos: detail.origenFondos, codigo: detail.codigo, copropietarios: detail.copropietarios || [] },
       detail,
       accessories: accessories || [],
       gifts: gifts || [],
       salesBossName: salesBossName || "Jefe de Ventas",
       createdByName: reservation.creadoPor || "",
       hasAutography,
+      template,
     });
     pdf.save(`reserva-${reservation.id}.pdf`);
   };
@@ -259,6 +261,7 @@ function VinReleaseControls({ currentUser, request, vin, onAction }) {
 function ReservationForm({ reservation, detail, vins, accessories, gifts, options, update, readOnly }) {
   const [form, setForm] = useState({ ...detail });
   const [itemDialog, setItemDialog] = useState(null);
+  const [coownerDialog, setCoownerDialog] = useState(null);
   const [saveState, setSaveState] = useState("guardado");
   const firstRender = useRef(true);
   const baseTotal = useMemo(() => Number(form.precioUnitario || 0) * Number(form.cantidad || 1), [form.precioUnitario, form.cantidad]);
@@ -268,6 +271,19 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   const giftsTotal = useMemo(() => gifts.reduce((sum, item) => sum + Number(item.total || 0), 0), [gifts]);
   const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal + Number(form.glp || 0) + Number(form.tarjetaPlaca || 0) + Number(form.flete || 0) - Number(form.cuotaInicial || 0) + accessoriesTotal + giftsTotal, [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.glp, form.tarjetaPlaca, form.flete, form.cuotaInicial, extraDiscountTotal, accessoriesTotal, giftsTotal]);
   const vinMessage = form.vinExiste ? "" : (form.cuotaInicial ? "Anticipo sin data" : "Reserva total sin data");
+  const isFactura = String(form.tipoComprobante || "").toUpperCase().includes("FACTURA");
+  const isBoleta = String(form.tipoComprobante || "").toUpperCase().includes("BOLETA");
+  const updateTipoComprobante = (value) => {
+    setForm((current) => ({
+      ...current,
+      tipoComprobante: value,
+      tipoPersona: String(value || "").toUpperCase().includes("BOLETA")
+        ? "NATURAL"
+        : String(value || "").toUpperCase().includes("FACTURA") && ["NATURAL_RUC", "JURIDICA"].includes(current.tipoPersona)
+          ? current.tipoPersona
+          : "NATURAL_RUC",
+    }));
+  };
   const applySelectedVin = (value) => {
     const selectedVin = vins.find((item) => String(item.value) === String(value));
     setForm((current) => ({
@@ -320,6 +336,25 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
       depositos: (current.depositos || []).filter((_, itemIndex) => itemIndex !== index),
     }));
   };
+  const saveCoowner = (payload) => {
+    setForm((current) => {
+      const copropietarios = current.copropietarios || [];
+      if (payload.index !== undefined && payload.index !== null) {
+        return {
+          ...current,
+          copropietarios: copropietarios.map((item, index) => index === payload.index ? payload.coowner : item),
+        };
+      }
+      return { ...current, copropietarios: [...copropietarios, payload.coowner] };
+    });
+    setCoownerDialog(null);
+  };
+  const removeCoowner = (index) => {
+    setForm((current) => ({
+      ...current,
+      copropietarios: (current.copropietarios || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
   const saveQuoteItem = async (payload) => {
     try {
       await update({ quoteItem: payload });
@@ -358,7 +393,34 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
       </div>
       <div className="space-y-6 p-4">
         <Block title="DATOS DEL CLIENTE">
-          <Field label="Tipo de Comprobante"><Input disabled={readOnly} value={form.tipoComprobante} onChange={(e) => setForm((f) => ({ ...f, tipoComprobante: e.target.value }))} /></Field>
+          <Field label="Tipo de Comprobante">
+            <SearchableSelect
+              disabled={readOnly}
+              value={form.tipoComprobante || ""}
+              options={[
+                { value: "Boleta", label: "Boleta" },
+                { value: "Factura", label: "Factura" },
+              ]}
+              placeholder="Seleccionar"
+              onChange={updateTipoComprobante}
+            />
+          </Field>
+          <Field label="Tipo de persona">
+            {isFactura ? (
+              <SearchableSelect
+                disabled={readOnly}
+                value={form.tipoPersona || "NATURAL_RUC"}
+                options={[
+                  { value: "NATURAL_RUC", label: "Persona natural con RUC" },
+                  { value: "JURIDICA", label: "Persona juridica" },
+                ]}
+                placeholder="Seleccionar"
+                onChange={(value) => setForm((current) => ({ ...current, tipoPersona: value }))}
+              />
+            ) : (
+              <Input disabled value={isBoleta ? "Persona natural" : "Persona natural"} />
+            )}
+          </Field>
           <Field label="Documento de Identidad"><Input value={reservation.documento} disabled /></Field>
           <Field label="Nombre Comercial"><Input value={reservation.nombreComercial} disabled /></Field>
           <Field label="Fecha Nacimiento"><Input value={String(reservation.fechaNacimiento || "").slice(0, 10)} disabled /></Field>
@@ -366,6 +428,15 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <Field label="Domicilio"><Input value={reservation.domicilio} disabled /></Field>
           <Field label="Email"><Input value={reservation.email} disabled /></Field>
           <Field label="Celular"><Input value={reservation.celular} disabled /></Field>
+          <div className="md:col-span-2">
+            <CoownersBlock
+              rows={form.copropietarios || []}
+              readOnly={readOnly}
+              onAdd={() => setCoownerDialog({ index: null, item: null })}
+              onEdit={(item, index) => setCoownerDialog({ index, item })}
+              onDelete={removeCoowner}
+            />
+          </div>
         </Block>
         <Block title="DATOS DEL VEHICULO">
           <Field label="Marca"><Input value={form.marca} disabled /></Field>
@@ -391,6 +462,8 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <Field label="Tarjeta Placa"><Input disabled={readOnly} type="number" value={form.tarjetaPlaca} onChange={(e) => setForm((f) => ({ ...f, tarjetaPlaca: e.target.value }))} /></Field>
           <Field label="GLP"><Input disabled={readOnly} type="number" value={form.glp} onChange={(e) => setForm((f) => ({ ...f, glp: e.target.value }))} /></Field>
           <Field label="Cuota Inicial"><Input disabled={readOnly} type="number" value={form.cuotaInicial} onChange={(e) => setForm((f) => ({ ...f, cuotaInicial: e.target.value }))} /></Field>
+          <Field label="Origen fondos"><Input disabled={readOnly} value={form.origenFondos || ""} onChange={(e) => setForm((f) => ({ ...f, origenFondos: e.target.value }))} /></Field>
+          <Field label="Codigo"><Input disabled={readOnly} value={form.codigo || ""} onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))} /></Field>
           <div className="md:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <div>
@@ -511,12 +584,50 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
             onSubmit={saveQuoteItem}
           />
         ) : null}
+        {coownerDialog ? (
+          <CoownerDialog
+            state={coownerDialog}
+            onClose={() => setCoownerDialog(null)}
+            onSubmit={saveCoowner}
+          />
+        ) : null}
       </div>
     </section>
   );
 }
 
 function Block({ title, children }) { return <div className="border-t pt-4"><h3 className="mb-4 font-bold">{title}</h3><div className="grid gap-3 md:grid-cols-2">{children}</div></div>; }
+function CoownersBlock({ rows, readOnly, onAdd, onEdit, onDelete }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h4 className="font-bold">Copropietarios</h4>
+          <span className="rounded-full bg-white px-2 py-1 text-xs font-bold">{rows.length} registros</span>
+        </div>
+        {!readOnly ? <Button type="button" size="sm" onClick={onAdd}><UserPlus className="size-4" />Agregar copropietario</Button> : null}
+      </div>
+      <div className="space-y-2">
+        {rows.map((row, index) => (
+          <div key={`${row.id || "new"}-${index}`} className="flex items-start justify-between gap-3 rounded-lg border bg-white p-3">
+            <div>
+              <p className="font-semibold">{[row.nombre, row.apellido].filter(Boolean).join(" ") || row.nombreComercial || "-"}</p>
+              <p className="text-xs text-slate-500">{row.tipoIdentificacion || "-"} {row.numeroDocumento || ""}{row.nombreComercial ? ` - ${row.nombreComercial}` : ""}</p>
+              <p className="text-xs text-slate-500">{row.email || "-"} {row.celular ? `- ${row.celular}` : ""}</p>
+            </div>
+            {!readOnly ? (
+              <div className="flex gap-1">
+                <Button type="button" size="icon" variant="ghost" onClick={() => onEdit(row, index)}><FileText className="size-4" /></Button>
+                <Button type="button" size="icon" variant="ghost" className="text-red-600" onClick={() => onDelete(index)}><Trash2 className="size-4" /></Button>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {!rows.length ? <p className="rounded-lg border border-dashed bg-white p-4 text-center text-sm text-slate-500">Sin copropietarios registrados.</p> : null}
+      </div>
+    </div>
+  );
+}
 function ItemsBlock({ title, rows, referenceKey, readOnly, onAdd, onEdit, onDelete }) { const total = rows.reduce((sum, item) => sum + Number(item.total || 0), 0); return <div className="border-t pt-4"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><h3 className="font-bold">{title}</h3><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{rows.length} registros</span></div>{!readOnly ? <Button size="sm" className="bg-slate-950 text-white hover:bg-slate-800" onClick={onAdd}><Plus className="size-4" />Agregar</Button> : null}</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left"><tr><th className="px-3 py-3">Detalle</th><th>Referencia</th><th>Cant.</th><th>Unitario</th><th>Desc.</th><th>Total</th><th>Acciones</th></tr></thead><tbody className="divide-y">{rows.map((row) => <tr key={row.id}><td className="px-3 py-3 font-medium"><p>{row.detalle}</p>{row.notas ? <p className="text-xs text-slate-500">{row.notas}</p> : null}</td><td>{row[referenceKey] || "-"}</td><td>{row.cantidad}</td><td>{money(row.precioUnitario)}</td><td className="text-red-600">{discountLabel(row)}</td><td className="font-bold text-blue-700">{money(row.total)}</td><td>{!readOnly ? <div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => onEdit(row)}><FileText className="size-4" /></Button><Button size="icon" variant="ghost" className="text-red-600" onClick={() => onDelete(row)}><Trash2 className="size-4" /></Button></div> : "-"}</td></tr>)}{!rows.length ? <tr><td className="py-8 text-center text-slate-500" colSpan={7}>Sin registros</td></tr> : null}</tbody></table></div><div className="mt-3 rounded-lg border bg-slate-50 p-3 text-right font-bold">Total {title}: {money(total)}</div></div>; }
 function Field({ label, children }) { return <div className="space-y-1"><Label className="text-xs font-bold text-slate-600">{label}</Label>{children}</div>; }
 function InfoCard({ title, lines }) { return <div className="rounded-lg border bg-white p-5 shadow-sm"><p className="mb-6 font-semibold">{title}</p>{lines.map((line, index) => <p key={index} className={index === 0 ? "font-bold" : "text-sm text-slate-600"}>{line || "-"}</p>)}</div>; }
@@ -589,6 +700,90 @@ function Info({ label, value }) {
   return <div><p className="text-xs text-slate-500">{label}</p><p className="font-bold">{value}</p></div>;
 }
 
+function CoownerDialog({ state, onClose, onSubmit }) {
+  const item = state.item || {};
+  const [form, setForm] = useState({
+    nombre: item.nombre || "",
+    apellido: item.apellido || "",
+    email: item.email || "",
+    celular: item.celular || "",
+    tipoIdentificacion: item.tipoIdentificacion || "",
+    numeroDocumento: item.numeroDocumento || "",
+    nombreComercial: item.nombreComercial || "",
+  });
+  const isRuc = form.tipoIdentificacion === "RUC";
+  const isNumericDocument = form.tipoIdentificacion === "DNI" || form.tipoIdentificacion === "RUC";
+  const documentMaxLength = form.tipoIdentificacion === "DNI" ? 8 : form.tipoIdentificacion === "RUC" ? 11 : undefined;
+  const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const updateDocument = (value) => {
+    const nextValue = isNumericDocument ? value.replace(/\D/g, "").slice(0, documentMaxLength) : value;
+    updateField("numeroDocumento", nextValue);
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] w-[min(96vw,720px)] max-w-none overflow-y-auto bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b px-5 py-4">
+          <DialogTitle>{state.item ? "Editar" : "Agregar"} copropietario</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
+          <Field label="Tipo identificacion">
+            <SearchableSelect
+              value={form.tipoIdentificacion}
+              options={[
+                { value: "DNI", label: "DNI" },
+                { value: "RUC", label: "RUC" },
+                { value: "PASAPORTE", label: "PASAPORTE" },
+              ]}
+              placeholder="Seleccionar"
+              onChange={(value) => setForm((current) => {
+                const numeric = value === "DNI" || value === "RUC";
+                const maxLength = value === "DNI" ? 8 : value === "RUC" ? 11 : undefined;
+                return {
+                  ...current,
+                  tipoIdentificacion: value,
+                  numeroDocumento: numeric ? current.numeroDocumento.replace(/\D/g, "").slice(0, maxLength) : current.numeroDocumento,
+                  nombreComercial: value === "RUC" ? current.nombreComercial : "",
+                };
+              })}
+            />
+          </Field>
+          <Field label="Numero documento">
+            <Input
+              value={form.numeroDocumento}
+              inputMode={isNumericDocument ? "numeric" : undefined}
+              maxLength={documentMaxLength}
+              onChange={(event) => updateDocument(event.target.value)}
+            />
+          </Field>
+          <Field label="Nombre">
+            <Input value={form.nombre} onChange={(event) => updateField("nombre", event.target.value)} />
+          </Field>
+          <Field label="Apellido">
+            <Input value={form.apellido} onChange={(event) => updateField("apellido", event.target.value)} />
+          </Field>
+          {isRuc ? (
+            <div className="md:col-span-2">
+              <Field label="Nombre comercial">
+                <Input value={form.nombreComercial} onChange={(event) => updateField("nombreComercial", event.target.value)} />
+              </Field>
+            </div>
+          ) : null}
+          <Field label="Email">
+            <Input type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} />
+          </Field>
+          <Field label="Celular">
+            <Input value={form.celular} onChange={(event) => updateField("celular", event.target.value)} />
+          </Field>
+        </div>
+        <DialogFooter className="border-t px-5 py-4">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={() => onSubmit({ index: state.index, coowner: form })}>Guardar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function discountLabel(row) {
   const amount = Number(row.descuentoMonto || 0);
   const percentage = Number(row.descuentoPorcentaje || 0);
@@ -610,6 +805,34 @@ async function loadAutographyFont(pdf) {
   }
 }
 
+async function loadReservationTemplate() {
+  try {
+    const response = await fetch("/api/sales-document-templates?tipoDocumento=RESERVA&active=1", { credentials: "include" });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return (data.templates || []).find((template) => template.tipoDocumento === "RESERVA" && template.isActive) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function imageToDataUrl(path) {
+  if (!path) return "";
+  try {
+    const response = await fetch(path);
+    if (!response.ok) return "";
+    const blob = await response.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return "";
+  }
+}
+
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -619,7 +842,7 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, salesBossName, createdByName, hasAutography }) {
+async function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, salesBossName, createdByName, hasAutography, template }) {
   // Debe quedar 1 hoja: no se llamará addPage (pero se mantiene la estructura)
   const ALLOW_MULTIPAGE = false;
 
@@ -673,6 +896,62 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   };
 
   const text = (t, x, y, opts = {}) => pdf.text(String(t ?? "-"), x, y, opts);
+  const getTemplateSection = (type) => (template?.secciones || [])
+    .filter((section) => section.tipo === type && section.isActive)
+    .flatMap((section) => section.elementos || [])
+    .filter((element) => element.isActive);
+  const drawTemplateElements = async (elements, x, y, w, h) => {
+    if (!elements.length) return false;
+    const groups = [...elements].sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0) || Number(a.id || 0) - Number(b.id || 0))
+      .reduce((acc, element) => {
+        const key = Number(element.orden || 0);
+        const group = acc.get(key) || [];
+        group.push(element);
+        acc.set(key, group);
+        return acc;
+      }, new Map());
+    const rows = [...groups.values()];
+    const rowH = Math.max(h / Math.max(rows.length, 1), 4);
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      const colW = w / Math.max(row.length, 1);
+      for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+        const element = row[colIndex];
+        const cellX = x + colIndex * colW;
+        const cellY = y + rowIndex * rowH;
+        const align = element.align === "RIGHT" ? "right" : element.align === "CENTER" ? "center" : "left";
+        const textX = align === "right" ? cellX + colW - 1 : align === "center" ? cellX + colW / 2 : cellX + 1;
+        if (element.tipo === "IMAGEN" && element.imagenPath) {
+          const dataUrl = await imageToDataUrl(element.imagenPath);
+          if (dataUrl) {
+            const imgW = Math.min(Number(element.widthPx || 0) / 4 || colW - 2, colW - 2);
+            const imgH = Math.min(Number(element.heightPx || 0) / 4 || rowH - 1, rowH - 1);
+            const imgX = align === "right" ? cellX + colW - imgW - 1 : align === "center" ? cellX + (colW - imgW) / 2 : cellX + 1;
+            pdf.addImage(dataUrl, undefined, imgX, cellY + 0.5, imgW, imgH);
+          }
+        } else {
+          setFont(element.tipo === "LINK" ? "bold" : "normal", 7);
+          pdf.setTextColor(element.tipo === "LINK" ? 30 : 35, element.tipo === "LINK" ? 80 : 35, element.tipo === "LINK" ? 180 : 35);
+          text(clip(element.texto || element.url || "", 45), textX, cellY + Math.min(rowH - 1, 4), { align });
+          pdf.setTextColor(0, 0, 0);
+        }
+      }
+    }
+    return true;
+  };
+  const drawTemplateWatermark = async () => {
+    if (!template?.marcaAgua?.imagenPath) return;
+    const dataUrl = await imageToDataUrl(template.marcaAgua.imagenPath);
+    if (!dataUrl) return;
+    const previousGState = pdf.GState && pdf.setGState
+      ? new pdf.GState({ opacity: Number(template.marcaAgua.opacity || 0.15) })
+      : null;
+    if (previousGState) pdf.setGState(previousGState);
+    const scale = Number(template.marcaAgua.scale || 1);
+    const size = Math.min(pageW, pageH) * 0.42 * scale;
+    pdf.addImage(dataUrl, undefined, (pageW - size) / 2, (pageH - size) / 2, size, size, undefined, "FAST", Number(template.marcaAgua.rotateDeg || 0));
+    if (previousGState) pdf.setGState(new pdf.GState({ opacity: 1 }));
+  };
 
   // Mantener helper tipo "ensurePage" (como tu estilo original)
   // pero sin addPage para que siempre sea 1 hoja.
@@ -703,7 +982,12 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   const d = detail || {};
 
   const cliente = r.cliente || [r.nombre, r.apellido].filter(Boolean).join(" ") || "-";
-  const conyugue = r.conyugue || r.nombreconyugue || "-";
+  const copropietarios = Array.isArray(r.copropietarios) ? r.copropietarios : [];
+  const copropietariosTexto = copropietarios
+    .map((item) => [item.nombre, item.apellido].filter(Boolean).join(" ") || item.nombreComercial || "")
+    .filter(Boolean)
+    .join(", ");
+  const conyugue = copropietariosTexto || r.conyugue || r.nombreconyugue || "-";
   const documento = r.documento || r.identificacion_fiscal || "-";
   const documentoConyugue = r.dniConyugue || r.dniconyugue || "-";
 
@@ -724,6 +1008,12 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   const idTexto = r.idLead || r.id_lead || r.leadId || r.codigo || r.id || "-";
 
   const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "-";
+  const tipoPersona = r.tipoPersona || r.tipo_persona || d.tipoPersona || "NATURAL";
+  const personTitle = tipoPersona === "JURIDICA"
+    ? "NOTA DE PEDIDO - PERSONA JURIDICA"
+    : tipoPersona === "NATURAL_RUC"
+      ? "NOTA DE PEDIDO - PERSONA NATURAL CON RUC"
+      : "NOTA DE PEDIDO - PERSONA NATURAL";
 
   // Vehículo (reservation con fallback a detail/form)
   const marca = r.marca || d.marca || "-";
@@ -761,6 +1051,7 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   // =========================================================
   // Layout tipo hoja (1 sola hoja)
   // =========================================================
+  await drawTemplateWatermark();
   rect(left, top, right - left, bottom - top);
 
   // Header
@@ -768,8 +1059,11 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   rect(left, currentY, right - left, headerH);
   rect(left, currentY, 90, headerH);
 
-  setFont("bold", 24);
-  text("Wankamotors", left + 4, currentY + 14);
+  const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 2, currentY + 2, 86, headerH - 4);
+  if (!headerTemplateApplied) {
+    setFont("bold", 24);
+    text("Wankamotors", left + 4, currentY + 14);
+  }
 
   rect(left + 90, currentY, (right - left) - 90, headerH);
 
@@ -809,7 +1103,7 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   const titleH = 7;
   rect(left, currentY, right - left, titleH, headerFill);
   setFont("bold", 9.5);
-  text("NOTA DE PEDIDO - PERSONA NATURAL", (left + right) / 2, currentY + 5.2, { align: "center" });
+  text(personTitle, (left + right) / 2, currentY + 5.2, { align: "center" });
   currentY += titleH;
 
   // Helper filas
@@ -1002,11 +1296,11 @@ function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, sal
   text("OBSERVACIONES", left + 2, obsY + 6);
 
   // título centrado
-  setFont("bold", 8.2);
-  text(LEGAL_TITLE, left + 40 + (right - left - 40) / 2, obsY + 6, { align: "center" });
-
+  
+  
   // texto legal
   setFont("bold", 6.8);
   const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), (right - left) - 40 - 4);
   pdf.text(wrapped.slice(0, 7), left + 42, obsY + 12); // 7 líneas aprox entran en obsH=28
+  await drawTemplateElements(getTemplateSection("PIE"), left + 2, bottom - 7, right - left - 4, 5);
 }

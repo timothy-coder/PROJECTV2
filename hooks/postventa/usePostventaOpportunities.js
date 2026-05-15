@@ -30,6 +30,15 @@ export function usePostventaOpportunities(kind = "opportunity") {
       await apiFetch(`/api/postventa-opportunities?kind=${kind}`, { method: "POST", body: JSON.stringify({ ...payload, kind }) });
       await reload();
     },
+    update: async (id, payload) => {
+      await apiFetch(`/api/postventa-opportunities/${id}`, { method: "PUT", body: JSON.stringify({ ...payload, kind }) });
+      await reload();
+    },
+    assign: async (id, payload) => {
+      await apiFetch(`/api/postventa-opportunities/${id}`, { method: "PUT", body: JSON.stringify({ ...payload, action: "assign", kind }) });
+      await reload();
+    },
+    detail: (id) => apiFetch(`/api/postventa-opportunities/${id}`),
   }), [kind, reload]);
   return { ...data, loading, error, reload, ...actions };
 }

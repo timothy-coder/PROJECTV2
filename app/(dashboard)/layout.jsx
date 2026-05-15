@@ -1,8 +1,10 @@
 import DashboardNav from "@/components/layout/DashboardNav";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
+import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({ children }) {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   return (
     <div className="h-svh w-full overflow-hidden bg-slate-950 text-slate-100">

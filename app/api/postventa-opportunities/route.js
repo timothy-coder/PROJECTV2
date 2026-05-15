@@ -96,6 +96,7 @@ export async function GET(request) {
         vehiculoId: row.vehiculo_id,
         vehiculoNombre: [row.modelo_nombre, row.marca_nombre].filter(Boolean).join(" - ") || row.placas || row.vin || "-",
         placa: row.placas || "",
+        vin: row.vin || "",
         origenId: row.origen_id,
         origenNombre: row.origen_nombre,
         suborigenId: row.suborigen_id,
@@ -108,7 +109,6 @@ export async function GET(request) {
         asignadoNombre: row.asignado_a_nombre || "Sin asignar",
         createdBy: row.created_by,
         creadoPorNombre: row.creado_por_nombre,
-        detalle: row.detalle || "",
         agendaDate: datePart(row.fecha_agenda),
         agendaTime: timePart(row.hora_agenda),
         createdAt: row.created_at,
@@ -137,7 +137,10 @@ export async function POST(request) {
     if (!hasPerm(user.permissions, [config.permission, "create"])) {
       return NextResponse.json({ message: `No tienes permiso para crear ${config.label}.` }, { status: 403 });
     }
-    if (!body.clienteId || !body.vehiculoId || !body.origenId || !body.fechaAgenda || !body.horaAgenda) {
+    const details = Array.isArray(body.details)
+      ? body.details.filter((item) => item?.fechaAgenda && item?.horaAgenda)
+      : body.fechaAgenda && body.horaAgenda ? [{ fechaAgenda: body.fechaAgenda, horaAgenda: body.horaAgenda }] : [];
+    if (!body.clienteId || !body.vehiculoId || !body.origenId || !details.length) {
       return NextResponse.json({ message: "Completa cliente, vehiculo, origen y agenda." }, { status: 400 });
     }
     if (!canSeeAllClients(user)) {
@@ -159,14 +162,19 @@ export async function POST(request) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [Number(body.clienteId), Number(body.vehiculoId), Number(body.origenId), body.suborigenId ? Number(body.suborigenId) : null, body.detalle || null, stageId, user.id, assignedTo, code]
     );
-    await connection.query(
-      `INSERT INTO posventa_oportunidades_detalles (oportunidad_padre_id, fecha_agenda, hora_agenda, oportunidad_id) VALUES (?, ?, ?, ?)`,
-      [result.insertId, body.fechaAgenda, body.horaAgenda, code]
-    );
-    if (body.detalle) {
+    for (const detail of details) {
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_detalles (oportunidad_padre_id, fecha_agenda, hora_agenda, oportunidad_id) VALUES (?, ?, ?, ?)`,
+        [result.insertId, detail.fechaAgenda, detail.horaAgenda, code]
+      );
+    }
+    const activities = Array.isArray(body.activities)
+      ? body.activities.map((item) => String(item?.detalle || "").trim()).filter(Boolean)
+      : body.detalle ? [String(body.detalle).trim()] : [];
+    for (const activity of activities) {
       await connection.query(
         `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by) VALUES (?, ?, ?, ?)`,
-        [result.insertId, stageId, body.detalle, user.id]
+        [result.insertId, stageId, activity, user.id]
       );
     }
     await connection.commit();

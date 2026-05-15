@@ -1,0 +1,312 @@
+import { NextResponse } from "next/server";
+
+import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
+
+function permissionFromCode(code = "") {
+  return String(code).startsWith("LDPV-") ? "leadspv" : "oportunidadespv";
+}
+
+function canSeeAll(user) {
+  return Boolean(hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"]));
+}
+
+function canView(user, permission) {
+  return Boolean(hasPerm(user.permissions, [permission, "view"]) || hasPerm(user.permissions, [permission, "viewall"]));
+}
+
+function canEdit(user, permission) {
+  return Boolean(hasPerm(user.permissions, [permission, "edit"]) || hasPerm(user.permissions, [permission, "viewall"]));
+}
+
+function canAssign(user, permission) {
+  return Boolean(hasPerm(user.permissions, [permission, "asignar"]) || hasPerm(user.permissions, [permission, "viewall"]));
+}
+
+function datePart(value) {
+  if (!value) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function timePart(value) {
+  if (!value) return "";
+  return String(value).slice(0, 5);
+}
+
+async function loadOpportunity(connection, id, user, canAll) {
+  const [rows] = await connection.query(
+    `SELECT o.id, o.cliente_id, o.vehiculo_id, o.origen_id, o.suborigen_id, o.etapasconversionpv_id,
+            o.created_by, o.asignado_a, o.created_at, o.updated_at, o.oportunidad_id,
+            CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+            c.email, c.celular, c.identificacion_fiscal,
+            v.placas, v.vin, v.anio, v.color, ma.name AS marca_nombre, mo.name AS modelo_nombre,
+            og.name AS origen_nombre, so.name AS suborigen_nombre,
+            e.nombre AS etapa_nombre, e.color AS etapa_color, e.descripcion AS etapa_temp, e.sort_order,
+            cu.fullname AS creado_nombre, au.fullname AS asignado_nombre
+     FROM posventa_oportunidades o
+     INNER JOIN administracion_clientes c ON c.id=o.cliente_id
+     INNER JOIN administracion_vehiculos v ON v.id=o.vehiculo_id
+     LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
+     LEFT JOIN administracion_modelos mo ON mo.id=v.modelo_id
+     INNER JOIN configuracion_origenes_citas og ON og.id=o.origen_id
+     LEFT JOIN configuracion_suborigenes_citas so ON so.id=o.suborigen_id
+     INNER JOIN configuracion_posventa_etapasconversion e ON e.id=o.etapasconversionpv_id
+     INNER JOIN administracion_usuarios cu ON cu.id=o.created_by
+     LEFT JOIN administracion_usuarios au ON au.id=o.asignado_a
+     WHERE o.id=? ${canAll ? "" : "AND (o.created_by=? OR o.asignado_a=?)"} LIMIT 1`,
+    canAll ? [id] : [id, user.id, user.id]
+  );
+  return rows[0] || null;
+}
+
+export async function GET(_request, { params }) {
+  const connection = await pool.getConnection();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    const canAll = canSeeAll(user);
+    const opportunity = await loadOpportunity(connection, id, user, canAll);
+    if (!opportunity) return NextResponse.json({ message: "No encontrada." }, { status: 404 });
+    const permission = permissionFromCode(opportunity.oportunidad_id);
+    if (!canView(user, permission)) return NextResponse.json({ message: "No tienes permiso para ver este registro." }, { status: 403 });
+
+    const [stages] = await connection.query(
+      `SELECT id,nombre,descripcion,color,sort_order
+       FROM configuracion_posventa_etapasconversion
+       WHERE is_active=1
+       ORDER BY COALESCE(sort_order,id) ASC`
+    );
+    const [details] = await connection.query(
+      `SELECT id, fecha_agenda, hora_agenda, oportunidad_id, created_at
+       FROM posventa_oportunidades_detalles
+       WHERE oportunidad_padre_id=?
+       ORDER BY created_at DESC, id DESC`,
+      [id]
+    );
+    const [activities] = await connection.query(
+      `SELECT a.id, a.etapasconversion_id, a.detalle, a.created_by, a.created_at, a.updated_at,
+              e.nombre AS etapa_nombre, e.color AS etapa_color, u.fullname AS user_name
+       FROM posventa_oportunidades_actividades a
+       LEFT JOIN configuracion_posventa_etapasconversion e ON e.id=a.etapasconversion_id
+       INNER JOIN administracion_usuarios u ON u.id=a.created_by
+       WHERE a.oportunidad_id=?
+       ORDER BY a.created_at DESC, a.id DESC`,
+      [id]
+    );
+
+    return NextResponse.json({
+      currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll },
+      opportunity: {
+        id: opportunity.id,
+        code: opportunity.oportunidad_id,
+        clienteId: opportunity.cliente_id,
+        clienteNombre: opportunity.cliente_nombre.trim(),
+        email: opportunity.email || "",
+        celular: opportunity.celular || "",
+        dni: opportunity.identificacion_fiscal || "",
+        vehiculoId: opportunity.vehiculo_id,
+        vehiculoNombre: [opportunity.marca_nombre, opportunity.modelo_nombre].filter(Boolean).join(" ") || opportunity.placas || opportunity.vin || "-",
+        placa: opportunity.placas || "",
+        vin: opportunity.vin || "",
+        anio: opportunity.anio || "",
+        color: opportunity.color || "",
+        origenNombre: opportunity.origen_nombre,
+        suborigenNombre: opportunity.suborigen_nombre || "",
+        etapaId: opportunity.etapasconversionpv_id,
+        etapaNombre: opportunity.etapa_nombre,
+        etapaColor: opportunity.etapa_color || "#2563eb",
+        asignadoNombre: opportunity.asignado_nombre || "Sin asignar",
+        creadoNombre: opportunity.creado_nombre,
+        createdAt: opportunity.created_at,
+        updatedAt: opportunity.updated_at,
+      },
+      stages: stages.map((row) => ({
+        id: row.id,
+        nombre: row.nombre,
+        temp: Number(row.descripcion || 0),
+        color: row.color || "#2563eb",
+        sortOrder: row.sort_order || row.id,
+      })),
+      details: details.map((row) => ({
+        id: row.id,
+        fechaAgenda: datePart(row.fecha_agenda),
+        horaAgenda: timePart(row.hora_agenda),
+        code: row.oportunidad_id || "",
+        createdAt: row.created_at,
+      })),
+      activities: activities.map((row) => ({
+        id: row.id,
+        etapaId: row.etapasconversion_id,
+        etapaNombre: row.etapa_nombre || "",
+        etapaColor: row.etapa_color || "#2563eb",
+        detalle: row.detalle || "",
+        userId: row.created_by,
+        userName: row.user_name,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Error loading postventa opportunity detail:", error);
+    return NextResponse.json({ message: "No se pudo cargar el detalle de PostVenta." }, { status: 500 });
+  } finally {
+    connection.release();
+  }
+}
+
+export async function POST(request, { params }) {
+  const connection = await pool.getConnection();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    const body = await request.json();
+    const canAll = canSeeAll(user);
+    const opportunity = await loadOpportunity(connection, id, user, canAll);
+    if (!opportunity) return NextResponse.json({ message: "No encontrada." }, { status: 404 });
+    const permission = permissionFromCode(opportunity.oportunidad_id);
+    if (!canView(user, permission)) return NextResponse.json({ message: "No tienes permiso para editar este registro." }, { status: 403 });
+
+    await connection.beginTransaction();
+    if (body.action === "stage") {
+      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [Number(body.etapaId), id]);
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, Number(body.etapaId), body.detalle || "Cambio de etapa", user.id]
+      );
+    }
+    if (body.action === "activity") {
+      const detalle = String(body.detalle || "").trim();
+      if (!detalle) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Escribe el detalle de la actividad." }, { status: 400 });
+      }
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, opportunity.etapasconversionpv_id, detalle, user.id]
+      );
+    }
+    if (body.action === "activity-update") {
+      const detalle = String(body.detalle || "").trim();
+      if (!body.activityId || !detalle) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Completa la actividad." }, { status: 400 });
+      }
+      await connection.query(
+        `UPDATE posventa_oportunidades_actividades
+         SET detalle=?
+         WHERE id=? AND oportunidad_id=?`,
+        [detalle, Number(body.activityId), id]
+      );
+    }
+    if (body.action === "agenda") {
+      if (!body.fechaAgenda || !body.horaAgenda) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Completa fecha y hora de agenda." }, { status: 400 });
+      }
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_detalles (oportunidad_padre_id, fecha_agenda, hora_agenda, oportunidad_id)
+         VALUES (?, ?, ?, ?)`,
+        [id, body.fechaAgenda, body.horaAgenda, opportunity.oportunidad_id]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, opportunity.etapasconversionpv_id, `Agenda registrada: ${body.fechaAgenda} ${body.horaAgenda}`, user.id]
+      );
+    }
+    await connection.commit();
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error saving postventa opportunity detail:", error);
+    return NextResponse.json({ message: "No se pudo guardar el detalle de PostVenta." }, { status: 500 });
+  } finally {
+    connection.release();
+  }
+}
+
+export async function PUT(request, { params }) {
+  const connection = await pool.getConnection();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    const body = await request.json();
+    const canAll = canSeeAll(user);
+    const opportunity = await loadOpportunity(connection, id, user, canAll);
+    if (!opportunity) return NextResponse.json({ message: "No encontrada." }, { status: 404 });
+    const permission = permissionFromCode(opportunity.oportunidad_id);
+    const isAssign = body.action === "assign";
+    if (isAssign ? !canAssign(user, permission) : !canEdit(user, permission)) {
+      return NextResponse.json({ message: "No tienes permiso para realizar esta accion." }, { status: 403 });
+    }
+
+    await connection.beginTransaction();
+    if (isAssign) {
+      await connection.query(
+        `UPDATE posventa_oportunidades SET asignado_a=? WHERE id=?`,
+        [body.asignadoA ? Number(body.asignadoA) : null, id]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, opportunity.etapasconversionpv_id, body.asignadoA ? "Oportunidad asignada" : "Oportunidad sin asignar", user.id]
+      );
+    } else {
+      const details = Array.isArray(body.details)
+        ? body.details.filter((item) => item?.fechaAgenda && item?.horaAgenda)
+        : body.fechaAgenda && body.horaAgenda ? [{ fechaAgenda: body.fechaAgenda, horaAgenda: body.horaAgenda }] : [];
+      const activities = Array.isArray(body.activities)
+        ? body.activities.map((item) => String(item?.detalle || "").trim()).filter(Boolean)
+        : [];
+      await connection.query(
+        `UPDATE posventa_oportunidades
+         SET origen_id=?, suborigen_id=?, etapasconversionpv_id=?, asignado_a=?
+         WHERE id=?`,
+        [
+          Number(body.origenId || opportunity.origen_id),
+          body.suborigenId ? Number(body.suborigenId) : null,
+          Number(body.etapaId || opportunity.etapasconversionpv_id),
+          body.asignadoA ? Number(body.asignadoA) : null,
+          id,
+        ]
+      );
+      for (const detail of details) {
+        await connection.query(
+          `INSERT INTO posventa_oportunidades_detalles (oportunidad_padre_id, fecha_agenda, hora_agenda, oportunidad_id)
+           VALUES (?, ?, ?, ?)`,
+          [id, detail.fechaAgenda, detail.horaAgenda, opportunity.oportunidad_id]
+        );
+      }
+      for (const activity of activities) {
+        await connection.query(
+          `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+           VALUES (?, ?, ?, ?)`,
+          [id, Number(body.etapaId || opportunity.etapasconversionpv_id), activity, user.id]
+        );
+      }
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, Number(body.etapaId || opportunity.etapasconversionpv_id), "Oportunidad editada", user.id]
+      );
+    }
+    await connection.commit();
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error updating postventa opportunity:", error);
+    return NextResponse.json({ message: "No se pudo actualizar la oportunidad de PostVenta." }, { status: 500 });
+  } finally {
+    connection.release();
+  }
+}
