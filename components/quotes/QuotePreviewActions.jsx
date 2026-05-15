@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, Eye } from "lucide-react";
+import { Download, Eye, FileDown } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 
-export function QuotePreviewActions({ publicToken, fileName = "cotizacion", targetId = "quote-preview-root", advisorName = "Asesor" }) {
+export function QuotePreviewActions({ publicToken, fileName = "cotizacion", targetId = "quote-preview-root", advisorName = "Asesor", quoteId }) {
   const [downloading, setDownloading] = useState(false);
 
   async function downloadPdf() {
@@ -60,6 +61,31 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", targ
     }
   }
 
+  async function downloadServerPdf(url, name) {
+    setDownloading(true);
+    try {
+      const response = await fetch(url, { credentials: "include" });
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !contentType.includes("application/pdf")) {
+        const error = contentType.includes("application/json") ? await response.json().catch(() => ({})) : {};
+        throw new Error(error?.message || "No se pudo generar el PDF de cotizacion.");
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${sanitizeFileName(name)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      toast.error("No se pudo descargar", { description: error.message || "Revisa la cotizacion." });
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="mt-5 flex justify-center gap-3 print:hidden">
       <button
@@ -71,6 +97,28 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", targ
         <Download className="size-4" />
         {downloading ? "Generando..." : "Descargar PDF"}
       </button>
+      {quoteId ? (
+        <>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-bold text-white"
+            disabled={downloading}
+            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf`, `cotizacion-formato-${quoteId}`)}
+          >
+            <FileDown className="size-4" />
+            Descargar formato Ford
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-violet-700 px-4 text-sm font-bold text-white"
+            disabled={downloading}
+            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?full=1`, `cotizacion-completa-${quoteId}`)}
+          >
+            <FileDown className="size-4" />
+            Cotizacion + ficha tecnica
+          </button>
+        </>
+      ) : null}
       {publicToken ? (
         <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white" href={`/cotizacion/${publicToken}`}>
           <Eye className="size-4" />

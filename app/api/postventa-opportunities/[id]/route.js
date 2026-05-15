@@ -99,7 +99,12 @@ export async function GET(_request, { params }) {
     );
 
     return NextResponse.json({
-      currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll },
+      currentUser: {
+        id: user.id,
+        fullname: user.fullname,
+        canViewAll: canAll,
+        canCreateQuote: hasPerm(user.permissions, ["cotizacion", "create"]),
+      },
       opportunity: {
         id: opportunity.id,
         code: opportunity.oportunidad_id,

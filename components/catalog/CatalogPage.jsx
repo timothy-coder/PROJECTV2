@@ -37,7 +37,6 @@ export default function CatalogPage({ userPermissions }) {
   async function exportCatalog() {
     const XLSX = await import("xlsx");
     const rows = data.prices.flatMap((price) => price.groups.flatMap((group) => group.items.map((item) => ({
-      precio_id: price.id,
       marca: price.marcaName,
       modelo: price.modeloName,
       version: price.version,
@@ -46,10 +45,13 @@ export default function CatalogPage({ userPermissions }) {
       grupo_activo: group.isActive ? 1 : 0,
       clave: item.clave,
       valor: item.valor,
+      tipo_valor: item.valorTipo || "TEXTO",
+      url: item.valorUrl || "",
+      archivo: item.valorPath || "",
       orden_item: item.orden,
       item_activo: item.isActive ? 1 : 0,
     }))));
-    const template = [{ precio_id: "", marca: "", modelo: "", version: "", grupo: "", orden_grupo: 0, grupo_activo: 1, clave: "", valor: "", orden_item: 0, item_activo: 1 }];
+    const template = [{ marca: "", modelo: "", version: "", grupo: "", orden_grupo: 0, grupo_activo: 1, clave: "", tipo_valor: "TEXTO", valor: "", url: "", archivo: "", orden_item: 0, item_activo: 1 }];
     const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : template);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "catalogo_specs");
@@ -75,13 +77,25 @@ export default function CatalogPage({ userPermissions }) {
     }
   }
 
-  function openTechnicalSheetPdf(price) {
-    const link = document.createElement("a");
-    link.href = `/api/catalog/pdf/${price.id}`;
-    link.download = `ficha-tecnica-${price.id}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  async function openTechnicalSheetPdf(price) {
+    try {
+      const response = await fetch(`/api/catalog/pdf/${price.id}`, { credentials: "include" });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error?.message || "No se pudo descargar la ficha tecnica.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ficha-tecnica-${price.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error("No se pudo descargar", { description: error.message || "Revisa la ficha tecnica." });
+    }
   }
 
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver catalogo.</div>;

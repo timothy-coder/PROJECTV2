@@ -1120,12 +1120,16 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     setFont("bold", 7.0);
     text(label, left + 2, currentY + 4.2);
 
-    rect(left + labelW, currentY, col1W, rowH);
-    rect(left + labelW + col1W, currentY, col2W, rowH);
-
     setFont("normal", 7.8);
-    text(clip(v1, 44), left + labelW + 2, currentY + 4.2);
-    text(clip(v2, 34), left + labelW + col1W + 2, currentY + 4.2);
+    if (v2 === "" || v2 === null || typeof v2 === "undefined") {
+      rect(left + labelW, currentY, (right - left) - labelW, rowH);
+      text(clip(v1, 74), left + labelW + 2, currentY + 4.2);
+    } else {
+      rect(left + labelW, currentY, col1W, rowH);
+      rect(left + labelW + col1W, currentY, col2W, rowH);
+      text(clip(v1, 44), left + labelW + 2, currentY + 4.2);
+      text(clip(v2, 34), left + labelW + col1W + 2, currentY + 4.2);
+    }
 
     currentY += rowH;
   };
@@ -1145,15 +1149,15 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   setFont("bold", 7.0);
   text("DISTRITO", left + 2, currentY + 4.2);
 
-  const aW = 52;
-  const bLblW = 26;
-  const bW = 46;
-  const cLblW = 22;
+  const aW = 42;
+  const bLblW = 18;
+  const bW = 36;
+  const cLblW = 16;
   const cW = (right - left) - labelW - aW - bLblW - bW - cLblW;
 
   rect(left + labelW, currentY, aW, rowH);
   setFont("normal", 7.8);
-  text(clip(distrito, 18), left + labelW + 2, currentY + 4.2);
+  text(clip(distrito, 14), left + labelW + 2, currentY + 4.2);
 
   rect(left + labelW + aW, currentY, bLblW, rowH, labelFill);
   setFont("bold", 7.0);
@@ -1161,7 +1165,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   rect(left + labelW + aW + bLblW, currentY, bW, rowH);
   setFont("normal", 7.8);
-  text(clip(provincia, 16), left + labelW + aW + bLblW + 2, currentY + 4.2);
+  text(clip(provincia, 12), left + labelW + aW + bLblW + 2, currentY + 4.2);
 
   rect(left + labelW + aW + bLblW + bW, currentY, cLblW, rowH, labelFill);
   setFont("bold", 7.0);
@@ -1169,7 +1173,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   rect(left + labelW + aW + bLblW + bW + cLblW, currentY, cW, rowH);
   setFont("normal", 7.8);
-  text(clip(region, 24), left + labelW + aW + bLblW + bW + cLblW + 2, currentY + 4.2);
+  text(clip(region, 10), left + labelW + aW + bLblW + bW + cLblW + 2, currentY + 4.2);
 
   currentY += rowH;
 

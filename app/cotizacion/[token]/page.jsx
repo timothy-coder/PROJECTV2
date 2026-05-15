@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { FileText } from "lucide-react";
 
+import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
 import { pool } from "@/lib/db";
 
 function money(value) {
@@ -52,6 +53,16 @@ export default async function PublicQuotePage({ params }) {
        WHERE cr.cotizacion_id=? ORDER BY cr.id ASC`,
       [quote.id]
     );
+    const [specRows] = await connection.query(
+      `SELECT g.id AS group_id, g.nombre AS group_name,
+              i.id AS item_id, i.clave, i.valor, i.orden AS item_order
+       FROM ventas_precio_specs_group g
+       LEFT JOIN ventas_precio_specs_item i ON i.group_id=g.id AND i.is_active=1
+       WHERE g.precio_id=? AND g.is_active=1
+       ORDER BY g.orden ASC, g.id ASC, i.orden ASC, i.id ASC`,
+      [quote.precio_id]
+    );
+    const specGroups = buildSpecGroups(specRows);
 
     const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || 0);
     const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || 0);
@@ -114,6 +125,7 @@ export default async function PublicQuotePage({ params }) {
 
           <ItemsSection title="Accesorios" rows={accessories} partKey="numero_parte" />
           <ItemsSection title="Regalos" rows={gifts} partKey="lote" />
+          <PublicSpecsPreview groups={specGroups} />
 
           <section className="rounded-lg border border-emerald-300 bg-emerald-50 p-5">
             <h2 className="mb-4 font-bold text-emerald-900">Resumen General</h2>
@@ -134,6 +146,43 @@ export default async function PublicQuotePage({ params }) {
   } finally {
     connection.release();
   }
+}
+
+function PublicSpecsPreview({ groups }) {
+  const previewItems = groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.name })))
+    .filter((item) => Number(item.order || 0) === 0 && ["IMAGEN", "VIDEO"].includes(item.valorTipo));
+  if (!previewItems.length) return null;
+  return (
+    <section className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-4 font-bold text-blue-900">Vista previa tecnica</h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {previewItems.map((item) => <PreviewMedia key={item.id} item={item} />)}
+      </div>
+    </section>
+  );
+}
+
+function PreviewMedia({ item }) {
+  const href = item.valorPath || item.valorUrl || item.valor;
+  return (
+    <div className="rounded-lg border bg-slate-50 p-3">
+      <p className="mb-2 text-xs font-bold uppercase text-slate-500">{item.group} - {item.key}</p>
+      {item.valorTipo === "VIDEO" ? (
+        <video src={href} controls className="max-h-72 w-full rounded-md border bg-black object-contain" />
+      ) : (
+        <img src={href} alt={item.key} className="max-h-72 w-full rounded-md border bg-white object-contain" />
+      )}
+    </div>
+  );
+}
+
+function buildSpecGroups(rows) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    if (!groups.has(row.group_id)) groups.set(row.group_id, { id: row.group_id, name: row.group_name, items: [] });
+    if (row.item_id) groups.get(row.group_id).items.push({ id: row.item_id, key: row.clave, order: row.item_order, ...decodeSpecValue(row.valor) });
+  });
+  return Array.from(groups.values());
 }
 
 function Info({ label, value }) {

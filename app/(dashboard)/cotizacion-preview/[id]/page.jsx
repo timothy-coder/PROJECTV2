@@ -4,6 +4,7 @@ import { ArrowRight, UserRound, MapPin, Check, CalendarDays, Plus, Pencil, Trash
 import { pool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 import { hasPerm } from "@/lib/permissions";
+import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
 import { QuotePreviewItems, QuoteVehicleDiscountEditor } from "@/components/quotes/QuotePreviewItems";
 import { QuotePreviewActions } from "@/components/quotes/QuotePreviewActions";
 
@@ -55,7 +56,7 @@ export default async function Page({ params }) {
     const [[publicLink]] = await connection.query(`SELECT token FROM ventas_cotizacion_enlaces_publicos WHERE cotizacion_id=? LIMIT 1`, [id]);
     const [specRows] = await connection.query(
       `SELECT g.id AS group_id, g.nombre AS group_name,
-              i.id AS item_id, i.clave, i.valor
+              i.id AS item_id, i.clave, i.valor, i.orden AS item_order
        FROM ventas_precio_specs_group g
        LEFT JOIN ventas_precio_specs_item i ON i.group_id=g.id AND i.is_active=1
        WHERE g.precio_id=? AND g.is_active=1
@@ -193,6 +194,7 @@ export default async function Page({ params }) {
               publicToken={publicLink?.token || ""}
               fileName={`cotizacion-Q-${String(quote.id).padStart(6, "0")}-${quote.cliente || "cliente"}`}
               advisorName={user.fullname || quote.creado || "Asesor"}
+              quoteId={quote.id}
             />
           </section>
         </div>
@@ -220,10 +222,13 @@ function buildSpecGroups(rows) {
       });
     }
     if (row.item_id) {
+      const decoded = decodeSpecValue(row.valor);
       groups.get(row.group_id).items.push({
         id: row.item_id,
         key: row.clave,
-        value: row.valor,
+        value: decoded.valor,
+        order: row.item_order,
+        ...decoded,
       });
     }
   });
@@ -244,8 +249,9 @@ function SpecGroup({ group }) {
 }
 function SpecItem({ item }) {
   const value = String(item.value || "").trim();
-  if (!value) return <p className="text-sm font-bold">{item.key}</p>;
-  if (isImageValue(value)) {
+  const href = item.valorPath || item.valorUrl || value;
+  if (!value && !href) return <p className="text-sm font-bold">{item.key}</p>;
+  if (item.valorTipo === "IMAGEN" || isImageValue(href)) {
     return (
       <div>
         <p className="mb-2 text-xs font-semibold text-slate-600">{item.key}</p>
@@ -253,16 +259,25 @@ function SpecItem({ item }) {
           aria-label={item.key || "Especificacion"}
           className="h-24 w-full rounded bg-slate-100 bg-contain bg-center bg-no-repeat"
           role="img"
-          style={{ backgroundImage: `url("${value}")` }}
+          style={{ backgroundImage: `url("${href}")` }}
         />
       </div>
     );
   }
-  if (isUrlValue(value)) {
+  if (item.valorTipo === "VIDEO") {
+    return (
+      <div>
+        <p className="mb-2 text-xs font-semibold text-slate-600">{item.key}</p>
+        <video src={href} controls className="h-24 w-full rounded bg-slate-100 object-contain" />
+        <a className="mt-1 block text-xs font-bold text-blue-700 underline" href={href} target="_blank" rel="noreferrer">Abrir video</a>
+      </div>
+    );
+  }
+  if (isUrlValue(href)) {
     return (
       <div>
         <p className="text-xs font-semibold text-slate-600">{item.key}</p>
-        <a className="text-sm font-bold text-blue-700 underline-offset-2 hover:underline" href={value} target="_blank" rel="noreferrer">
+        <a className="text-sm font-bold text-blue-700 underline-offset-2 hover:underline" href={href} target="_blank" rel="noreferrer">
           Ver {item.key || "detalle"}
         </a>
       </div>

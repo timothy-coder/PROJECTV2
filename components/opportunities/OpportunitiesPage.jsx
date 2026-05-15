@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CalendarDays, Edit3, Eye, Kanban, Loader2, Plus, RefreshCw, Send, Table2 } from "lucide-react";
 
+import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOpportunities } from "@/hooks/opportunities/useOpportunities";
+import { useClients } from "@/hooks/clients/useClients";
 import { hasPerm } from "@/lib/permissions";
 
 function permissionKey(kind) {
@@ -34,6 +36,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const canView = Boolean(hasPerm(userPermissions, [permissionKey(kind), "view"]) || canViewAll);
   const canCreate = hasPerm(userPermissions, [permissionKey(kind), "create"]);
   const canEdit = hasPerm(userPermissions, [permissionKey(kind), "edit"]);
+  const canCreateClient = hasPerm(userPermissions, ["clientes", "create"]);
   const copy = kind === "lead"
     ? { title: "Leads", subtitle: "Gestiona todos tus leads de ventas", add: "Agregar lead", type: "LD", detailPath: "/leads" }
     : { title: "Oportunidades", subtitle: "Gestiona todas tus oportunidades de negocio", add: "Agregar oportunidad", type: "OPO", detailPath: "/oportunidades" };
@@ -94,7 +97,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
         {view === "general" ? <GeneralView data={filtered} loading={data.loading} canEdit={canEdit} canViewAll={canViewAll} onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }} onEdit={(item) => setDialog({ open: true, item, mode: "edit" })} onAssign={(item) => setAssignDialog({ open: true, item })} /> : null}
         {view === "timeline" ? <TimelineView data={filtered} mode={timelineMode} setMode={setTimelineMode} /> : null}
         {view === "kanban" ? <KanbanView data={filtered} stages={data.options.stages} /> : null}
-        {dialog.open ? <OpportunityDialog state={dialog} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} onClose={() => setDialog({ open: false, item: null, mode: "edit" })} onSubmit={saveOpportunity} /> : null}
+        {dialog.open ? <OpportunityDialog state={dialog} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} canCreateClient={canCreateClient} onClose={() => setDialog({ open: false, item: null, mode: "edit" })} onSubmit={saveOpportunity} /> : null}
         {assignDialog.open ? <AssignDialog state={assignDialog} users={data.options.users} onClose={() => setAssignDialog({ open: false, item: null })} onSubmit={async (payload) => { await data.assign(assignDialog.item.id, payload); setAssignDialog({ open: false, item: null }); }} /> : null}
         {conflict ? <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} /> : null}
       </div>
@@ -120,11 +123,14 @@ function KanbanView({ data, stages }) {
   return <section className="overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm"><div className="bg-violet-50 p-4"><h2 className="text-xl font-bold text-violet-700">Kanban de Etapas</h2></div><div className="grid min-w-[920px] grid-cols-4 gap-px overflow-x-auto bg-slate-200">{stages.map((stage) => { const items = data.filter((item) => item.etapaId === stage.id); return <div key={stage.id} className="min-h-80 bg-white p-3"><div className="mb-3 rounded-lg bg-blue-600 p-3 text-center font-bold text-white">{stage.nombre}<p className="text-2xl">{items.length}</p></div><div className="space-y-2">{items.map((item) => <Tooltip key={item.id}><TooltipTrigger><div className="rounded-lg p-3 text-left text-slate-950 shadow-sm" style={rowTimeStyle(item)}><p className="font-bold">{item.code}</p><p className="text-xs">{item.clienteNombre}</p><p className="text-xs">{item.nextAgenda || "-"}</p><TimeStateBadge item={item} /></div></TooltipTrigger><TooltipContent><TooltipBody item={item} /></TooltipContent></Tooltip>)}</div></div>; })}</div></section>;
 }
 
-function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, onSubmit }) {
+function OpportunityDialog({ state, options, currentUser, canViewAll, canCreateClient, onClose, onSubmit }) {
   const readOnly = state.mode === "view";
+  const clientsData = useClients();
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const assignedDefault = canViewAll ? (state.item?.asignadoA ? String(state.item.asignadoA) : "") : String(currentUser?.id || "");
   const [form, setForm] = useState({ clienteId: state.item?.clienteId ? String(state.item.clienteId) : "", origenId: state.item?.origenId ? String(state.item.origenId) : "", suborigenId: state.item?.suborigenId ? String(state.item.suborigenId) : "", etapaId: state.item?.etapaId ? String(state.item.etapaId) : "", asignadoA: assignedDefault, activityText: "", activities: [], fechaAgenda: "", horaAgenda: "" });
-  const clientOptions = options.clients.map((item) => ({ value: item.id, label: item.nombre }));
+  const clientSource = clientsData.clients.length ? clientsData.clients.map((item) => ({ id: item.id, nombre: [item.nombre, item.apellido].filter(Boolean).join(" ") || item.nombreComercial || item.celular || `Cliente ${item.id}` })) : options.clients;
+  const clientOptions = clientSource.map((item) => ({ value: item.id, label: item.nombre }));
   const originOptions = options.origins.map((item) => ({ value: item.id, label: item.name }));
   const suboriginOptions = options.suborigins.filter((item) => !form.origenId || item.origenId === Number(form.origenId)).map((item) => ({ value: item.id, label: item.name }));
   const userOptions = [{ value: "", label: "Sin asignar" }, ...options.users.map((item) => ({ value: item.id, label: item.fullname }))];
@@ -147,7 +153,16 @@ function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, o
               <section className="rounded-lg border border-violet-200 bg-violet-50/30 p-4">
                 <h3 className="mb-3 font-bold text-violet-700">Informacion general</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Cliente *"><SearchableSelect disabled={readOnly || Boolean(state.item)} value={form.clienteId} options={clientOptions} placeholder="Buscar cliente..." onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} /></Field>
+                  <Field label="Cliente *">
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <SearchableSelect disabled={readOnly || Boolean(state.item)} value={form.clienteId} options={clientOptions} placeholder="Buscar cliente..." onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))} />
+                      {canCreateClient && !readOnly && !state.item ? (
+                        <Button type="button" variant="outline" size="icon" title="Agregar cliente" onClick={() => setClientDialogOpen(true)}>
+                          <Plus className="size-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </Field>
                   <Field label="Creado por"><Input disabled value={state.item?.creadoPorNombre || currentUser?.fullname || ""} /></Field>
                   <Field label="Origen *"><SearchableSelect disabled={readOnly} value={form.origenId} options={originOptions} placeholder="Buscar origen..." onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
                   <Field label="Suborigen"><SearchableSelect disabled={readOnly} value={form.suborigenId} options={suboriginOptions} placeholder="Buscar suborigen..." onChange={(value) => setForm((current) => ({ ...current, suborigenId: value }))} /></Field>
@@ -183,6 +198,17 @@ function OpportunityDialog({ state, options, currentUser, canViewAll, onClose, o
             {!readOnly ? <Button type="submit">Guardar</Button> : null}
           </DialogFooter>
         </form>
+        <ClientDialog
+          open={clientDialogOpen}
+          mode="create"
+          client={null}
+          options={clientsData.options}
+          onClose={() => setClientDialogOpen(false)}
+          onSubmit={async (payload) => {
+            const result = await clientsData.createClient(payload);
+            if (result?.id) setForm((current) => ({ ...current, clienteId: String(result.id) }));
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

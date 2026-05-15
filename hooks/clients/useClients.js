@@ -73,8 +73,9 @@ export function useClients() {
   }, []);
 
   const createClient = useCallback(async (payload) => {
-    await clientsApi.create(payload);
+    const result = await clientsApi.create(payload);
     await loadClients();
+    return result;
   }, [loadClients]);
 
   const updateClient = useCallback(async (id, payload) => {

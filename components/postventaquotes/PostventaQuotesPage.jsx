@@ -401,7 +401,7 @@ function DetailItem({ label, value }) {
   return <div><p className="text-xs text-slate-500">{label}</p><div className="mt-1">{value}</div></div>;
 }
 
-function QuoteForm({ tipo, options = {}, currentUser, initial, onCancel, onSubmit }) {
+export function QuoteForm({ tipo, options = {}, currentUser, initial, onCancel, onSubmit }) {
   const [form, setForm] = useState(() => ({
     clienteId: initial?.clienteId ? String(initial.clienteId) : "",
     centroId: initial?.centroId ? String(initial.centroId) : "",

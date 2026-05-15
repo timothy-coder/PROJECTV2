@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Car, MessageSquare, Pencil, RotateCcw, Save, UserRound } from "lucide-react";
+import { Calendar, Car, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Save, UserRound } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,12 +11,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePostventaOpportunityDetail } from "@/hooks/postventa/usePostventaOpportunityDetail";
+import { usePostventaQuotes } from "@/hooks/postventaquotes/usePostventaQuotes";
+import { QuoteForm } from "@/components/postventaquotes/PostventaQuotesPage";
 
 export default function PostventaOpportunityDetailPage({ id }) {
   const { data, loading, save } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
   const [editingActivity, setEditingActivity] = useState(null);
+  const [quoteType, setQuoteType] = useState("taller");
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [createdQuote, setCreatedQuote] = useState(null);
+  const quoteData = usePostventaQuotes(quoteType);
 
   if (loading || !data) return <div className="p-4">Cargando...</div>;
 
@@ -84,6 +91,14 @@ export default function PostventaOpportunityDetailPage({ id }) {
         </div>
 
         <InfoSection opportunity={opportunity} />
+        <QuoteSection
+          canCreate={currentUser.canCreateQuote}
+          createdQuote={createdQuote}
+          onCopy={copyCreatedQuoteLink}
+          onOpen={() => setQuoteOpen(true)}
+          quoteType={quoteType}
+          setQuoteType={setQuoteType}
+        />
         <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={addAgenda} />
 
         <section className="my-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
@@ -104,8 +119,83 @@ export default function PostventaOpportunityDetailPage({ id }) {
             }}
           />
         ) : null}
+
+        <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+          <DialogContent className="max-h-[94svh] w-[min(98vw,1180px)] max-w-none overflow-y-auto bg-slate-50 p-0 text-slate-950">
+            <QuoteForm
+              tipo={quoteType}
+              options={quoteData.options}
+              currentUser={quoteData.currentUser}
+              initial={{
+                clienteId: opportunity.clienteId,
+                descripcion: `Cotizacion ${quoteType === "pyp" ? "PYP" : "Taller"} para ${opportunity.code} - ${opportunity.vehiculoNombre}`,
+              }}
+              onCancel={() => setQuoteOpen(false)}
+              onSubmit={async (payload) => {
+                const result = await quoteData.createQuote({
+                  ...payload,
+                  clienteId: payload.clienteId || opportunity.clienteId,
+                  descripcion: payload.descripcion || `Cotizacion para ${opportunity.code}`,
+                });
+                const link = result.token ? `${window.location.origin}/cotizacion-posventa/${result.token}` : "";
+                setCreatedQuote({ id: result.id, token: result.token, link });
+                setQuoteOpen(false);
+                if (link) await navigator.clipboard?.writeText(link);
+                toast.success(link ? "Cotizacion creada y enlace publico copiado" : "Cotizacion creada");
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
+  );
+
+  async function copyCreatedQuoteLink() {
+    if (!createdQuote?.link) return;
+    await navigator.clipboard?.writeText(createdQuote.link);
+    toast.success("Enlace publico copiado");
+  }
+}
+
+function QuoteSection({ canCreate, createdQuote, onCopy, onOpen, quoteType, setQuoteType }) {
+  return (
+    <section className="mb-4 rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold"><FileText className="size-5" />Cotizacion de PostVenta</h2>
+          <p className="text-sm text-slate-500">Crea una cotizacion de taller o PYP para este cliente y genera su enlace publico.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={quoteType}
+            onChange={(event) => setQuoteType(event.target.value)}
+            className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-emerald-500"
+          >
+            <option value="taller">Taller</option>
+            <option value="pyp">PYP</option>
+          </select>
+          {canCreate ? (
+            <Button type="button" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={onOpen}>
+              <FileText className="size-4" />
+              Agregar cotizacion
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {!canCreate ? <p className="mt-3 rounded-md border border-dashed p-3 text-sm text-slate-500">No tienes permiso para crear cotizaciones.</p> : null}
+      {createdQuote?.link ? (
+        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm sm:flex-row sm:items-center">
+          <Link2 className="size-4 text-emerald-700" />
+          <a href={createdQuote.link} target="_blank" className="min-w-0 flex-1 truncate font-bold text-emerald-800">
+            {createdQuote.link}
+          </a>
+          <Button type="button" variant="outline" onClick={onCopy}>
+            <Copy className="size-4" />
+            Copiar
+          </Button>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

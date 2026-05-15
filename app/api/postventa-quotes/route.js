@@ -171,7 +171,7 @@ export async function POST(request) {
       );
     }
     await connection.commit();
-    return NextResponse.json({ ok: true, id: quoteId }, { status: 201 });
+    return NextResponse.json({ ok: true, id: quoteId, token: publicToken }, { status: 201 });
   } catch (error) {
     await connection.rollback();
     console.error("Error creating postventa quote:", error);

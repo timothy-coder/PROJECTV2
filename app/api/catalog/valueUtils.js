@@ -22,15 +22,22 @@ export function decodeSpecValue(value) {
       valorRaw: raw,
     };
   } catch {
-    return { valor: raw, valorTipo: inferSpecValueType(raw), valorUrl: isUrl(raw) ? raw : "", valorPath: "", valorRaw: raw };
+    const inferredType = inferSpecValueType(raw);
+    return {
+      valor: raw,
+      valorTipo: inferredType,
+      valorUrl: isUrl(raw) ? raw : "",
+      valorPath: isLocalPath(raw) ? raw : "",
+      valorRaw: raw,
+    };
   }
 }
 
 export function inferSpecValueType(value) {
   const text = String(value || "").trim();
-  if (isUrl(text)) {
-    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(text)) return "IMAGEN";
-    if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(text)) return "VIDEO";
+  if (isUrl(text) || isLocalPath(text)) {
+    if (isImagePath(text)) return "IMAGEN";
+    if (isVideoPath(text)) return "VIDEO";
     return "LINK";
   }
   return "TEXTO";
@@ -38,4 +45,16 @@ export function inferSpecValueType(value) {
 
 export function isUrl(value) {
   return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+export function isLocalPath(value) {
+  return /^\//.test(String(value || "").trim());
+}
+
+function isImagePath(value) {
+  return /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(String(value || "").trim());
+}
+
+function isVideoPath(value) {
+  return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(String(value || "").trim());
 }

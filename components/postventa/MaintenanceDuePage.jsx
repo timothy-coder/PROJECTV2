@@ -354,7 +354,6 @@ function VehicleInfoDialog({ item, onClose }) {
                   <tr>
                     <th className="px-3 py-2">Fecha visita</th>
                     <th>Kilometraje</th>
-                    <th>Registro</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -362,7 +361,6 @@ function VehicleInfoDialog({ item, onClose }) {
                     <tr key={row.id}>
                       <td className="px-3 py-2">{formatDate(row.fechaVisitaTaller)}</td>
                       <td>{row.kilometrajeTaller ?? "-"}</td>
-                      <td className="text-xs text-slate-500">{row.createdAt ? formatDate(row.createdAt) : "-"}</td>
                     </tr>
                   ))}
                   {!history.length ? (
