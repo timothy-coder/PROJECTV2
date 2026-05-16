@@ -160,7 +160,7 @@ export async function GET(_request, { params }) {
     const [[reservation]] = await pool.query(
       `SELECT r.*, o.oportunidad_id AS oportunidad_code,
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
-              c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal, c.fecha_nacimiento,
+              c.id_lead, c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal, c.fecha_nacimiento,
               c.ocupacion, c.domicilio, c.nombre_comercial, c.nombreconyugue, c.dniconyugue,
               og.name AS origen_nombre, so.name AS suborigen_nombre,
               dep.nombre AS departamento, prov.nombre AS provincia, dis.nombre AS distrito,
@@ -308,6 +308,7 @@ export async function GET(_request, { params }) {
         createdAt: reservation.created_at,
         creadoPor: reservation.creado_por || "-",
         cliente: String(reservation.cliente || "").trim() || "-",
+        idLead: reservation.id_lead || "",
         email: reservation.email || "",
         celular: reservation.celular || "",
         tipoIdentificacion: reservation.tipo_identificacion || "",

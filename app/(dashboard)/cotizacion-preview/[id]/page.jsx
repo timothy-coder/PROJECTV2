@@ -110,9 +110,16 @@ export default async function Page({ params }) {
               <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="SKU" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
             </div>
           </section>
-          <section className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-            <h2 className="mb-8 font-bold text-blue-900">Especificaciones del Modelo</h2>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <details className="group rounded-xl border border-blue-200 bg-blue-50 p-5">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-blue-900">Especificaciones del Modelo</h2>
+                <p className="mt-1 text-xs font-medium text-blue-700">{specGroups.length ? `${specGroups.length} grupos de especificaciones` : "Sin especificaciones registradas"}</p>
+              </div>
+              <span className="rounded-md border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-800 group-open:hidden">Ver detalle</span>
+              <span className="hidden rounded-md border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-800 group-open:inline">Ocultar</span>
+            </summary>
+            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {specGroups.map((group) => (
                 <SpecGroup key={group.id} group={group} />
               ))}
@@ -122,7 +129,7 @@ export default async function Page({ params }) {
                 </div>
               ) : null}
             </div>
-          </section>
+          </details>
           <section className="rounded-xl border border-orange-200 bg-orange-50 p-5">
             <h2 className="mb-8 font-bold text-orange-900">Precio del Vehí­culo</h2>
             <div className="grid gap-4 md:grid-cols-4">
@@ -152,14 +159,14 @@ export default async function Page({ params }) {
           />
           <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5">
             <h2 className="mb-6 font-bold text-emerald-900">Resumen General</h2>
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-3">
               <SummaryBox label="Precio Vehiculo" sub={`S/IGV: ${money(Number(quote.precio_base || 0) / 1.18)}`} value={money(quote.precio_base)} />
-              <SummaryBox label="Desc. Vehiculo" value={discountMoney(vehicleDiscount)} danger />
+              
               <SummaryBox label="Accesorios (c/IGV)" sub={`c/desc: ${money(accessoriesTotal)}`} value={money(accessoriesGross)} />
               <SummaryBox label="Regalos (c/IGV)" sub={`c/desc: ${money(giftsTotal)}`} value={money(giftsGross)} />
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <SummaryBox label="Desc. Accesorios" value={discountMoney(accessoriesDiscount)} danger />
+              <SummaryBox label="Desc. Vehiculo" value={discountMoney(vehicleDiscount)} danger />
               <SummaryBox label="Total Descuentos" value={discountMoney(itemDiscounts)} danger />
             </div>
             <div className="mt-4 grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-2">
@@ -195,6 +202,7 @@ export default async function Page({ params }) {
               fileName={`cotizacion-Q-${String(quote.id).padStart(6, "0")}-${quote.cliente || "cliente"}`}
               advisorName={user.fullname || quote.creado || "Asesor"}
               quoteId={quote.id}
+              userPermissions={user?.permissions || {}}
             />
           </section>
         </div>

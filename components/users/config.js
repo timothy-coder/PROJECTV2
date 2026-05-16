@@ -19,6 +19,8 @@ export const USER_PERMISSION_GROUPS = [
   { key: "oportunidadespv", label: "Oportunidades PosVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "leadspv", label: "Leads PostVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "cotizacion", label: "Cotizacion", actions: ["view", "viewall", "create", "edit", "delete", "status"] },
+  { key: "cotizacion_ford", label: "Cotizacion Ford", actions: ["view"] },
+  { key: "cotizacion_otros", label: "Cotizacion Otros", actions: ["view"] },
   { key: "agenda", label: "Agenda", actions: ["view", "create", "edit", "viewall"] },
   { key: "oportunidades", label: "Oportunidades", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "leads", label: "Leads", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },

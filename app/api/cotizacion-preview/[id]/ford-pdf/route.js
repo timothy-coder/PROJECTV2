@@ -3,6 +3,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import QRCode from "qrcode";
+import sharp from "sharp";
 
 import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
 import { pool } from "@/lib/db";
@@ -25,6 +26,12 @@ function dateText(value = new Date()) {
   return d.toLocaleDateString("es-PE");
 }
 
+function dateLongText(value = new Date()) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" });
+}
+
 export async function GET(request, { params }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
@@ -35,15 +42,20 @@ export async function GET(request, { params }) {
   const { id: rawId } = await params;
   const id = Number(rawId);
   const full = request.nextUrl.searchParams.get("full") === "1";
+  const format = request.nextUrl.searchParams.get("format") === "otros" ? "otros" : "ford";
 
   try {
+    const requiredPermission = format === "otros" ? ["cotizacion_otros", "view"] : ["cotizacion_ford", "view"];
+    if (!hasPerm(user.permissions || {}, requiredPermission)) {
+      return NextResponse.json({ message: "No tienes permiso para descargar este formato de cotizacion." }, { status: 403 });
+    }
     const data = await loadQuoteData(id);
     if (!data.quote) return NextResponse.json({ message: "Cotizacion no encontrada." }, { status: 404 });
-    const pdf = await buildFordQuotePdf(data, { full });
+    const pdf = await buildFordQuotePdf(data, { full, origin: request.nextUrl.origin, format });
     return new NextResponse(pdf, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${full ? "cotizacion-completa" : "cotizacion-ford"}-${id}.pdf"`,
+        "Content-Disposition": `attachment; filename="${full ? `cotizacion-${format}-completa` : `cotizacion-${format}`}-${id}.pdf"`,
         "Cache-Control": "no-store",
       },
     });
@@ -57,7 +69,8 @@ async function loadQuoteData(id) {
   const [[quote]] = await pool.query(
     `SELECT q.*, o.oportunidad_id, o.id AS oportunidad_pk,
             CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
-            c.email, c.celular, au.fullname AS asignado, cu.fullname AS creado,
+            c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal,
+            au.fullname AS asignado, cu.fullname AS creado, cu.email AS asesor_email, cu.phone AS asesor_phone,
             p.id AS precio_id, p.version, p.precio_base, p.en_stock, p.tiempo_entrega_dias,
             ma.name AS marca, mo.name AS modelo
      FROM ventas_cotizaciones q
@@ -96,6 +109,7 @@ async function loadQuoteData(id) {
      ORDER BY g.orden ASC, g.id ASC, i.orden ASC, i.id ASC`,
     [quote.precio_id]
   );
+  const [[publicLink]] = await pool.query(`SELECT token FROM ventas_cotizacion_enlaces_publicos WHERE cotizacion_id=? LIMIT 1`, [id]);
 
   return {
     quote,
@@ -104,6 +118,7 @@ async function loadQuoteData(id) {
     specGroups: buildSpecGroups(specRows),
     template: await loadTemplate("COTIZACION", quote.marca),
     fichaTemplate: await loadTemplate("FICHA_TECNICA"),
+    publicToken: publicLink?.token || "",
   };
 }
 
@@ -158,15 +173,25 @@ async function loadTemplate(type, brand = "") {
   };
 }
 
-async function buildFordQuotePdf(data, { full }) {
+async function buildFordQuotePdf(data, { full, origin, format = "ford" }) {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
   const chunks = [];
   doc.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
   registerPdfFonts(doc);
-  doc._qrImages = await buildQrImages(data.specGroups.flatMap((group) => group.items.map((item) => item.href)));
+  const publicUrl = data.publicToken ? `${origin}/cotizacion/${data.publicToken}` : "";
+  const catalogUrl = `${origin}/catalogo/${data.quote.precio_id}`;
+  const rawMediaHrefs = data.specGroups.flatMap((group) => group.items.map((item) => item.href)).filter(Boolean);
+  const mediaHrefs = data.specGroups.flatMap((group) => group.items.map((item) => getQuoteItemHref(item, origin))).filter(Boolean);
+  const templateImageSources = [...getTemplateImageSources(data.template), ...getTemplateImageSources(data.fichaTemplate)];
+  doc._qrImages = await buildQrImages([publicUrl, catalogUrl, ...mediaHrefs]);
+  doc._pdfImages = await buildPdfImages([...rawMediaHrefs.filter(isImageHref), ...mediaHrefs.filter(isImageHref), ...templateImageSources]);
+  doc._publicQuoteUrl = publicUrl;
+  doc._catalogUrl = catalogUrl;
+  doc._fullQuote = full;
 
-  drawQuotePage(doc, data);
+  if (format === "otros") drawOtherQuotePage(doc, data);
+  else drawQuotePageV2(doc, data);
   if (full) drawTechnicalSheetPages(doc, data);
 
   doc.end();
@@ -231,9 +256,185 @@ function drawQuotePage(doc, data) {
   doc.font("Helvetica-Bold").fontSize(7).fillColor("#ffffff").text("CONDICIONES DE VENTA", x, 530);
   doc.font("Helvetica").fontSize(7).text("Entrega inmediata sujeta a disponibilidad de stock\nGarantia Ford de 5 años o 150,000 km.\nSeguro: Consulte por su tasa exclusiva y atencion personalizada.", x, 545, { width: 310 });
 
-  doc.font("Helvetica-Bold").fontSize(7).text("TERMINOS Y CONDICIONES:", x, 715);
+  doc.font("Helvetica-Bold").fontSize(8).text("TERMINOS Y CONDICIONES:", x, 715);
   doc.rect(x, 728, w, 82).strokeColor("#ffffff").lineWidth(0.5).stroke();
   drawTemplateSection(doc, data.template?.footer, x + 5, 735, w - 10, 62, "#ffffff");
+}
+
+function drawQuotePageV2(doc, data) {
+  const brand = String(data.quote?.marca || "").trim().toLowerCase();
+  if (brand && brand !== "ford") {
+    drawGenericQuotePage(doc, data);
+    return;
+  }
+
+  const { quote, accessories, gifts, template } = data;
+  const x = 18;
+  const w = PAGE_W - 36;
+  const advisorName = quote.creado || quote.asignado || "-";
+  const advisorPhone = quote.asesor_phone || "-";
+
+  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
+  doc.save();
+  doc.translate(24, 24);
+  doc.scale(0.91);
+  doc.fillColor("#000000");
+  drawTemplateSection(doc, template?.header, x, 16, w, 58, "#000000");
+  if (!template?.header?.elementos?.length) {
+    doc.font("Helvetica-Bold").fontSize(7).text("WANKAMOTORS S.A.", x, 22);
+    doc.font("Helvetica").fontSize(6.5).text("Jr. Faustino Quispe N°497", x, 32);
+    doc.fillColor("#000000").text("www.wankamotors.pe", x, 42, { link: "https://www.wankamotors.pe", underline: true });
+    doc.fillColor("#000000");
+  }
+
+  doc.font("Helvetica-Bold").fontSize(8).text(`COTIZACION N° ${String(quote.id).padStart(7, "0")}`, 220, 22, { width: 160, align: "center" });
+  doc.font("Helvetica").fontSize(7).text(dateText(quote.created_at), 220, 34, { width: 160, align: "center" });
+
+  doc.font("Helvetica-Bold").fontSize(6.8).text("SR. (A):", x, 92);
+  doc.font("Helvetica-BoldOblique").fontSize(13).text(String(quote.cliente || "-").toUpperCase(), x + 48, 88, { width: 230 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("DNI/RUC:", x, 106);
+  doc.font("Helvetica").fontSize(6.8).text(quote.identificacion_fiscal || "-", x + 48, 106, { width: 190 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("TELEF:", x, 118);
+  doc.font("Helvetica").fontSize(6.8).text(quote.celular || "-", x + 48, 118, { width: 190 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("CONTACTO:", x, 130);
+  doc.font("Helvetica").fontSize(6.8).text(quote.cliente || "-", x + 48, 130, { width: 220 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("EMAIL:", x, 142);
+  doc.font("Helvetica").fontSize(6.8).text(quote.email || "-", x + 48, 142, { width: 220 });
+
+  doc.font("Helvetica-Bold").fontSize(6.8).text("ASESOR:", 355, 92);
+  doc.font("Helvetica").fontSize(6.8).text(advisorName, 405, 92, { width: 150 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("TELF:", 355, 106);
+  doc.font("Helvetica").fontSize(6.8).text(advisorPhone, 405, 106, { width: 150 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("CELULAR:", 355, 120);
+  doc.font("Helvetica").fontSize(6.8).text(advisorPhone, 405, 120, { width: 150 });
+  doc.font("Helvetica-Bold").fontSize(6.8).text("EMAIL:", 355, 134);
+  doc.font("Helvetica").fontSize(6.2).text(quote.asesor_email || "-", 405, 134, { width: 150 });
+
+  doc.moveTo(x, 170).lineTo(x + w, 170).strokeColor("#000000").lineWidth(0.5).stroke();
+  doc.font("Helvetica").fontSize(7).fillColor("#000000").text(
+    `Nos es muy grato presentarnos y, acorde a su gentil requerimiento, le remitimos la siguiente cotizacion: ${quote.marca} ${quote.modelo} ${quote.version} AÑO MODELO ${quote.anio || ""}`,
+    x,
+    180,
+    { width: w }
+  );
+
+  drawQuoteImages(doc, findQuoteMedia(data.specGroups).filter((item) => item.href && (item.valorTipo === "IMAGEN" || isImageHref(item.href))).slice(0, 3), 95, 204, 350, 132);
+
+  const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || quote["descuento_vehÃƒÂ­culo"] || 0);
+  const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || quote["descuento_vehÃƒÂ­culo_porcentaje"] || 0);
+  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
+  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+  const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const tramites = Number(quote.tramites || quote.tramite || 100);
+  const total = vehicleTotal + accessoriesTotal + giftsTotal + tramites;
+
+  let y = 348;
+  y = priceRow(doc, y, `DESCRIPCION ${quote.modelo || ""} ${quote.version || ""}`, "MONTO US$", "", true, true);
+  y = priceRow(doc, y, "PRECIO DE LISTA (1)", "", money(quote.precio_base));
+  for (const item of accessories) y = priceRow(doc, y, String(item.detalle || item.numero_parte || "ACCESORIO").toUpperCase(), "", money(item.total));
+  for (const item of gifts) y = priceRow(doc, y, String(item.detalle || item.lote || "REGALO").toUpperCase(), "", money(item.total));
+  y = priceRow(doc, y, "TOTAL EN DOLARES", "PRECIO FLOTA", money(vehicleTotal + accessoriesTotal + giftsTotal), true);
+  y = priceRow(doc, y, "TRAMITES", "", money(tramites), true);
+  y = priceRow(doc, y + 4, "TOTAL EN DOLARES", "", money(total), true);
+
+  drawBankTable(doc, x, y + 10);
+  const conditionsY = y + 80;
+  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("CONDICIONES DE VENTA", x, conditionsY);
+  doc.font("Helvetica").fontSize(6.5).text(
+    "* Entrega inmediata sujeta a disponibilidad de stock\n* Garantia Ford de 5 años o 150,000 km. (Lo que ocurra primero)\n\nSERVICIOS OPCIONALES\n* Seguro: Consulte por su tasa exclusiva y atencion personalizada.\n* Venta de SOAT a precio especial por la compra de su auto. Consulte con su asesor.\nCORTESIAS\n* Estuche para manual del auto y libros de servicio",
+    x,
+    conditionsY + 18,
+    { width: 305, lineGap: 1.2 }
+  );
+  if (doc._publicQuoteUrl) {
+    drawQrPlaceholder(doc, doc._publicQuoteUrl, x, conditionsY + 116, 70);
+  }
+  drawSignature(doc, advisorName, 398, y + 94);
+
+  if (!doc._fullQuote) {
+    doc.font("Helvetica-Bold").fontSize(6.8).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, 742);
+    doc.moveTo(x, 754).lineTo(x + w, 754).strokeColor("#000000").lineWidth(0.5).stroke();
+    doc.font("Helvetica-Oblique").fontSize(5.5).fillColor("#000000").text(getQuoteTerms(), x, 762, { width: w, lineGap: 0.7 });
+  }
+  doc.restore();
+}
+
+function drawOtherQuotePage(doc, data) {
+  const { quote, template } = data;
+  const x = 18;
+  const w = PAGE_W - 36;
+  const footerH = doc._fullQuote ? 0 : 110;
+  const contentBottom = PAGE_H - footerH - 24;
+  const modelTitle = `${quote.modelo || ""} ${quote.version || ""}`.trim().toUpperCase();
+  const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || quote["descuento_vehÃƒÂ­culo"] || 0);
+  const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || quote["descuento_vehÃƒÂ­culo_porcentaje"] || 0);
+  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
+  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+
+  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
+  doc.save();
+  doc.translate(24, 24);
+  doc.scale(0.91);
+  doc.fillColor("#000000");
+  drawTemplateSection(doc, template?.header, x, 16, 150, 72, "#000000");
+
+  doc.font("Helvetica-Bold").fontSize(9).text(dateLongText(quote.created_at || new Date()), x + w - 150, 26, { width: 150, align: "right" });
+  doc.font("Helvetica-Bold").fontSize(8).text("Estimado (a):", x, 78);
+  doc.font("Helvetica-Bold").fontSize(8).text("DNI:", x + 338, 78);
+  doc.font("Helvetica").fontSize(8).text(String(quote.cliente || "-").toUpperCase(), x, 94, { width: 250 });
+  doc.text(quote.identificacion_fiscal || "-", x + 372, 94, { width: 130 });
+  doc.font("Helvetica-Bold").fontSize(7.5).text(
+    "Sirva la presente para saludarlo cordialmente y a la vez hacerle llegar nuestra oferta economica por el modelo detallado a continuacion:",
+    x,
+    120,
+    { width: w, lineGap: 1 }
+  );
+
+  doc.font("Helvetica-Bold").fontSize(8).text(`MODELO ${modelTitle || "-"}`, x, 190, { width: w, align: "center" });
+  const hero = findFirstMedia(data.specGroups);
+  if (hero?.href) drawImageOrLink(doc, getQuoteItemHref(hero, doc._catalogUrl ? new URL(doc._catalogUrl).origin : ""), 138, 225, 320, 170, "center", 320);
+  doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#000000").text("FOTO REFERENCIAL", x, 404, { width: w, align: "center" });
+
+  doc.font("Helvetica-Bold").fontSize(8).text("MODELO Y PRECIO", x, 452);
+  doc.moveTo(x, 466).lineTo(x + w, 466).strokeColor("#000000").lineWidth(0.5).stroke();
+  doc.rect(x, 480, w, 50).strokeColor("#000000").lineWidth(0.7).stroke();
+  doc.rect(x, 480, w / 2, 15).fillAndStroke("#ffffff", "#000000");
+  doc.rect(x + w / 2, 480, w / 2, 15).fillAndStroke("#ffffff", "#000000");
+  doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#000000").text(modelTitle || "-", x, 484, { width: w / 2, align: "center" });
+  doc.text(`MODELO ${quote.anio || new Date().getFullYear()}`, x + w / 2, 484, { width: w / 2, align: "center" });
+  doc.rect(x, 495, w / 2, 15).strokeColor("#000000").stroke();
+  doc.rect(x + w / 2, 495, w / 2, 15).strokeColor("#000000").stroke();
+  doc.fontSize(7.5).text("PRECIO REGULAR", x, 499, { width: w / 2, align: "center" });
+  doc.text(`$${money(quote.precio_base)}`, x + w / 2, 499, { width: w / 2, align: "center" });
+  doc.rect(x, 510, w / 2, 20).strokeColor("#000000").stroke();
+  doc.rect(x + w / 2, 510, w / 2, 20).strokeColor("#000000").stroke();
+  doc.fontSize(13).text("PRECIO ESPECIAL", x, 515, { width: w / 2, align: "center" });
+  doc.text(`$${money(vehicleTotal)}`, x + w / 2, 515, { width: w / 2, align: "center" });
+
+  const bullets = [
+    "Los precios estan expresados en dolares americanos e incluyen el I.G.V. 18%",
+    "Precios sujetos a variacion sin previo aviso",
+    "Tipo de cambio referencial sujeto a variacion diaria.",
+    "El tipo de cambio es valido solo por hoy. TC: s/3.55",
+    "Promocion valida deacuerdo a stock.",
+  ];
+  doc.font("Helvetica").fontSize(8.4).fillColor("#000000");
+  bullets.forEach((item, index) => {
+    doc.font("Helvetica-Bold").text("*", x + 22, 560 + index * 17);
+    doc.font("Helvetica").text(item, x + 42, 560 + index * 17, { width: w - 70 });
+  });
+
+  doc.font("Helvetica-Bold").fontSize(8).text("NOTA:", x + 22, 654);
+  doc.font("Helvetica").fontSize(8).text(
+    "Nuestros precios son pactados en dolares americanos de conformidad con el articulo 1237 del codigo civil debiendo ser pagados en dicha moneda. El importe en nuevos soles en esta cotizacion se consigna solo como referencia en cumplimiento de la ley 28300 y considera el tipo de cambio de venta vigente a la fecha de la presente cotizacion.",
+    x + 22,
+    678,
+    { width: w - 44, lineGap: 2, height: Math.max(40, contentBottom - 678) }
+  );
+
+  doc.restore();
+  if (!doc._fullQuote) drawWhiteTermsFooter(doc);
 }
 
 function drawGenericQuotePage(doc, data) {
@@ -306,18 +507,18 @@ function drawGenericQuotePage(doc, data) {
   );
 }
 
-function priceRow(doc, y, label, desc, amount, highlight = false) {
-  doc.font("Helvetica-Bold").fontSize(7).fillColor(highlight ? "#f4f27a" : "#ffffff");
-  doc.text(label, 24, y, { width: 135 });
-  doc.font("Helvetica").text(desc, 160, y, { width: 260 });
+function priceRow(doc, y, label, desc, amount, highlight = false, header = false) {
+  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000");
+  doc.text(label, 24, y, { width: header ? 360 : 260 });
+  doc.font(header ? "Helvetica-Bold" : "Helvetica").text(desc, header ? 440 : 300, y, { width: header ? 95 : 135, align: header ? "right" : "left" });
   doc.font("Helvetica-Bold").text(amount, 440, y, { width: 95, align: "right" });
-  doc.moveTo(24, y - 2).lineTo(535, y - 2).strokeColor("#ffffff").lineWidth(0.4).stroke();
+  doc.moveTo(24, y - 2).lineTo(535, y - 2).strokeColor("#000000").lineWidth(0.4).stroke();
   return y + 13;
 }
 
 function drawBankTable(doc, x, y) {
-  doc.rect(x, y, 300, 56).strokeColor("#ffffff").stroke();
-  doc.font("Helvetica-Bold").fontSize(7).fillColor("#ffffff").text("DOLARES", x + 18, y + 16);
+  doc.rect(x, y, 300, 56).strokeColor("#000000").stroke();
+  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("DOLARES", x + 18, y + 16);
   doc.text("SOLES", x + 18, y + 38);
   doc.text("BCP", x + 135, y + 7);
   doc.text("BBVA", x + 225, y + 7);
@@ -332,50 +533,317 @@ function drawBankTable(doc, x, y) {
 
 function drawSignature(doc, name, x, y) {
   doc.rect(x, y, 175, 92).strokeColor("#111111").fillAndStroke("#ffffff", "#111111");
-  doc.font(doc._registeredAutography ? "Autography" : "Helvetica-Oblique").fontSize(30).fillColor("#5c67c8").text(name, x + 15, y + 28, { width: 145, align: "center" });
-  doc.font("Helvetica-Bold").fontSize(7).fillColor("#ffffff").text("Firma del Vendedor", x, y + 98, { width: 175, align: "center" });
+  const fontName = doc._registeredAutography ? "Autography" : "Helvetica-Oblique";
+  const cleanName = String(name || "-").trim();
+  let size = 30;
+  doc.font(fontName).fontSize(size);
+  while (doc.widthOfString(cleanName) > 145 && size > 15) {
+    size -= 1;
+    doc.fontSize(size);
+  }
+  doc.fillColor("#000000").text(cleanName, x + 15, y + 32, { width: 145, align: "center", lineBreak: false });
+  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("Firma del Vendedor", x, y + 96, { width: 175, align: "center" });
+}
+
+function drawQuoteImages(doc, items, x, y, w, h) {
+  const images = items.length ? items : [];
+  if (!images.length) return;
+  const gap = 8;
+  const slotW = (w - gap * (images.length - 1)) / images.length;
+  images.forEach((item, index) => {
+    doc.rect(x + index * (slotW + gap), y, slotW, h).fill("#ffffff");
+    drawImageOrLink(doc, item.href, x + index * (slotW + gap) + 4, y + 4, slotW - 8, h - 8, "center", slotW - 8);
+  });
+}
+
+function findQuoteMedia(groups) {
+  const items = groups.flatMap((group) => group.items || []);
+  const orderZero = items.filter((item) => Number(item.order || 0) === 0 && ["IMAGEN", "VIDEO", "LINK"].includes(item.valorTipo));
+  return orderZero.length ? orderZero : items.filter((item) => ["IMAGEN", "VIDEO", "LINK"].includes(item.valorTipo));
+}
+
+function isImageHref(value) {
+  return /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(String(value || "").trim());
+}
+
+function getQuoteTerms() {
+  return "Especificaciones tecnicas proporcionadas por Ford Peru S.R.L, pueden variar sin previo aviso.\n(1) Monto expresado en dolares americanos incluido IGV, no incluye el costo por concepto de flete de Lima a provincias. Precio sujeto a variacion por modificaciones en la estructura arancelaria y/o tributaria. Para separar y/o reservar su unidad, el monto minimo es del 10%. (2) El precio del kit de proteccion incluye la instalacion de seguro de ruedas, emblemas. (3) El precio de las laminas de seguridad incluye la instalacion. (4) El precio del servicio de inmatriculacion incluye servicios del tramitador, tramites de inscripcion vehicular y Declaracion Jurada Municipal al SAT. (5) Tipo de Cambio tiene validez en el dia, precio expresado en soles incluido IGV segun Tipo de Cambio referencial de 3.860. Esta cotizacion tiene validez en el dia.\nSe deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos administrativos y que el monto en materia de devolución está afecta a 20 días hábiles, cualquier cambio adicional que no conste en la presente no será responsabilidad de la empresa. La entrega está sujeta a stock, los plazos de entrega pueden sufrir variación por posibles demoras en la entrega del vehículo por parte de la marca, por tal caso no será imputable al vendedor o a WANKAMOTORS, cabe resaltar que el precio puede sufrir variación por factores ajenos a WANKAMOTORS y estipulados por la marca. Una vez emitido el mismo no se aceptará su cambio ni canje. Por tal motivo agradecemos verificar la información.";
+}
+
+function getFordTerms() {
+  return "Especificaciones tecnicas proporcionadas por Ford Peru S.R.L, pueden variar sin previo aviso.\n(1) Monto expresado en dolares americanos incluido IGV, no incluye el costo por concepto de flete de Lima a provincias. Precio sujeto a variacion por modificaciones en la estructura arancelaria y/o tributaria. Para separar y/o reservar su unidad, el monto minimo es del 10%. (2) El precio del kit de proteccion incluye la instalacion de seguro de ruedas, emblemas. (3) El precio de las laminas de seguridad incluye la instalacion. (4) El precio del servicio de inmatriculacion incluye servicios del tramitador, tramites de inscripcion vehicular y Declaracion Jurada Municipal al SAT. (5) Tipo de Cambio tiene validez en el dia, precio expresado en soles incluido IGV segun Tipo de Cambio referencial de 3.860. Esta cotizacion tiene validez en el dia.\nSe deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retenciónRÁ AFECTA A UN % DE RETENCIÓN POR CONCEPTO DE GASTOS ADMINISTRATIVOS Y QUE EL MONTO EN MATERIA DE DEVOLUCIÓN ESTÁ AFECTA A 20 DÍAS HÁBILES, CUALQUIER CAMBIO ADICIONAL QUE NO CONSTE EN LA PRESENTE NO SERÁ RESPONSABILIDAD DE LA EMPRESA. LA ENTREGA ESTÁ SUJETA A STOCK, LOS PLAZOS DE ENTREGA PUEDEN SUFRIR VARIACIÓN POR POSIBLES DEMORAS EN LA ENTREGA DEL VEHÍCULO POR PARTE DE LA MARCA, POR TAL CASO NO SERÁ IMPUTABLE AL VENDEDOR O A WANKAMOTORS, CABE RESALTAR QUE EL PRECIO PUEDE SUFRIR VARIACIÓN POR FACTORES EXTERNOS AJENOS A WANKAMOTORS Y ESTIPULADOS POR LA MARCA. UNA VEZ EMITIDO EL MISMO NO SE ACEPTARÁ SU CAMBIO NI CANJE. POR TAL MOTIVO AGRADECEMOS VERIFICAR LA INFORMACIÓN REGISTRADA, EN SEÑAL DE CONFORMIDAD EL CLIENTE DEJA COMO CONSTANCIA SU FIRMA.";
+}
+
+function drawWhiteTermsFooter(doc) {
+  const x = 24;
+  const y = 728;
+  const w = PAGE_W - 48;
+  doc.rect(0, y - 10, PAGE_W, PAGE_H - y + 10).fill("#ffffff");
+  doc.font("Helvetica-Bold").fontSize(6.6).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, y, { width: w });
+  doc.font("Helvetica").fontSize(4.8).fillColor("#000000").text(getQuoteTerms(), x, y + 10, { width: w, lineGap: 0.4 });
 }
 
 function drawTechnicalSheetPages(doc, data) {
   doc.addPage();
-  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
-  const x = 36;
-  let y = 28;
-  drawTemplateSection(doc, data.fichaTemplate?.header, x, y, PAGE_W - 72, 55, "#111827");
-  y += 70;
-  doc.font("Helvetica-Bold").fontSize(18).fillColor("#111827").text(`FICHA TECNICA - ${data.quote.marca} ${data.quote.modelo}`, x, y);
-  y += 30;
-  for (const group of data.specGroups) {
-    if (y > 730) {
-      doc.addPage();
-      doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
-      y = 40;
-    }
-    doc.rect(x, y, PAGE_W - 72, 24).fillAndStroke("#eef2ff", "#c7d2fe");
-    doc.font("Helvetica-Bold").fontSize(12).fillColor("#3730a3").text(group.name, x + 10, y + 7);
-    y += 34;
-    for (const item of group.items) {
-      if (y > 740) {
-        doc.addPage();
-        doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
-        y = 40;
-      }
-      doc.font("Helvetica-Bold").fontSize(8).fillColor("#475569").text(String(item.key || "").toUpperCase(), x + 8, y);
-      if (item.valorTipo === "IMAGEN") {
-        drawImageOrLink(doc, item.href, x + 150, y - 5, 120, 70);
-        y += 78;
-      } else if (item.valorTipo === "VIDEO" || item.valorTipo === "LINK") {
-        drawQrPlaceholder(doc, item.href, x + 150, y - 6);
-        doc.font("Helvetica").fontSize(8).fillColor("#1d4ed8").text(item.valor || item.href, x + 205, y, { width: 290, link: item.href, underline: true });
-        y += 58;
-      } else {
-        doc.font("Helvetica").fontSize(9).fillColor("#111827").text(item.valor || "-", x + 150, y, { width: 360 });
-        y += 20;
-      }
-    }
-    y += 8;
+  drawTechnicalPageShell(doc);
+
+  const price = {
+    marca: data.quote.marca,
+    modelo: data.quote.modelo,
+    version: data.quote.version,
+  };
+  const previewItems = getTechnicalPreviewItems(data.specGroups);
+  const sectionGroups = data.specGroups
+    .map((group) => ({
+      ...group,
+      items: (group.items || []).filter((item) => Number(item.order || 0) !== 0),
+    }))
+    .filter((group) => group.items.length);
+  const origin = doc._catalogUrl ? new URL(doc._catalogUrl).origin : "";
+
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(10).text("FICHA TECNICA VEHICULAR", 42, 42, { width: 511, align: "center" });
+  doc.fontSize(18).text(`${price.marca || ""} ${price.modelo || ""}`.trim().toUpperCase() || "-", 42, 62, { width: 511, align: "center" });
+  doc.font("Helvetica").fontSize(11).text(String(price.version || "-").toUpperCase(), 42, 86, { width: 511, align: "center" });
+  doc.moveTo(42, 112).lineTo(553, 112).strokeColor("#000000").lineWidth(0.8).stroke();
+  doc.y = 128;
+
+  drawTechnicalPreviewItems(doc, previewItems, null, origin);
+
+  for (const group of sectionGroups) {
+    drawTechnicalTableGroup(doc, group, origin);
   }
-  drawTemplateSection(doc, data.fichaTemplate?.footer, x, 785, PAGE_W - 72, 38, "#111827");
+
+  drawFinalTermsAtEnd(doc);
+}
+
+function drawTechnicalPageShell(doc) {
+  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
+  doc.x = 42;
+  doc.y = 42;
+}
+
+function drawTechnicalTemplateSection(doc, section) {
+  if (!section?.elementos?.length) return;
+  const rows = groupElementsByOrder(section.elementos);
+  doc.moveDown(0.2);
+  for (const row of rows) {
+    const y = doc.y;
+    const width = 523 / Math.max(row.items.length, 1);
+    row.items.forEach((item, index) => drawTechnicalTemplateElement(doc, item, 36 + index * width, y, width - 8));
+    doc.y = Math.max(doc.y, y + 24);
+  }
+  doc.moveDown(0.5);
+}
+
+function drawTechnicalTemplateElement(doc, item, x, y, width) {
+  const align = String(item.align || "LEFT").toLowerCase();
+  const href = item.imagenPath || item.url;
+  if (item.tipo === "IMAGEN") {
+    drawImageOrLink(doc, href, x, y, Math.min(Number(item.widthPx) || width, width), Number(item.heightPx) || 42, align, width);
+    return;
+  }
+  if (item.tipo === "LINK") {
+    doc
+      .fillColor("#1d4ed8")
+      .fontSize(10)
+      .font("Helvetica-Bold")
+      .text(item.texto || item.url || "", x, y, { width, align, link: item.url || undefined, underline: true });
+    return;
+  }
+  doc.fillColor("#0f172a").fontSize(10).font("Helvetica").text(item.texto || "", x, y, { width, align });
+}
+
+function drawTechnicalGroupTitle(doc, title, y) {
+  doc.roundedRect(36, y, 523, 26, 6).fillAndStroke("#eef2ff", "#dbeafe");
+  doc.fillColor("#5b21b6").fontSize(13).font("Helvetica-Bold").text(String(title || "").toUpperCase(), 48, y + 7, { width: 495 });
+}
+
+function getTechnicalSpecCardHeight(doc, item, origin, width) {
+  const href = getQuoteItemHref(item, origin);
+  const imageLike = item.valorTipo === "IMAGEN" || isImageHref(href);
+  const videoLike = item.valorTipo === "VIDEO" || isVideoHref(href);
+  const linkLike = item.valorTipo === "LINK";
+  if (imageLike) return 86;
+  if (videoLike || linkLike) return 62;
+
+  const keyText = String(item.key || "").toUpperCase();
+  const valueText = String(item.valor || "-");
+  const keyH = doc.heightOfString(keyText, { width: width - 24, lineGap: 1 });
+  const valueH = doc.heightOfString(valueText, { width: width - 24, lineGap: 1 });
+  return Math.max(38, keyH + valueH + 19);
+}
+
+function drawTechnicalSpecCard(doc, item, x, y, width, height, origin) {
+  const href = getQuoteItemHref(item, origin);
+  const imageLike = item.valorTipo === "IMAGEN" || isImageHref(href);
+  const videoLike = item.valorTipo === "VIDEO" || isVideoHref(href);
+  const linkLike = item.valorTipo === "LINK";
+  const keyText = String(item.key || "").toUpperCase();
+
+  doc.roundedRect(x, y, width, height, 5).fillAndStroke("#f8fafc", "#e2e8f0");
+  doc.fillColor("#64748b").fontSize(7.2).font("Helvetica-Bold").text(keyText, x + 10, y + 8, { width: width - 20, lineGap: 1 });
+
+  if (imageLike) {
+    drawImageOrLink(doc, href, x + 10, y + 26, Math.min(118, width - 82), 50, "left", Math.min(118, width - 82));
+    drawQrPlaceholder(doc, href, x + width - 60, y + 26, 44);
+    return;
+  }
+
+  if (videoLike || linkLike) {
+    drawQrPlaceholder(doc, href, x + width - 58, y + 16, 44);
+    doc.fillColor("#475569").fontSize(8).font("Helvetica-Bold").text(videoLike ? "Escanear video" : "Escanear enlace", x + 10, y + 31, { width: width - 78 });
+    return;
+  }
+
+  doc.fillColor("#0f172a").fontSize(9.2).font("Helvetica").text(String(item.valor || "-"), x + 10, y + 24, { width: width - 20, lineGap: 1 });
+}
+
+function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
+  if (!previewItems.length) return;
+
+  const previewRows = previewItems.map((item) => {
+    const href = getQuoteItemHref(item, origin);
+    const videoLike = item.valorTipo === "VIDEO" || isVideoHref(href);
+    return { item, href, videoLike };
+  });
+  const qrSize = 58;
+  const gap = 16;
+  const columns = 4;
+  const rows = Math.ceil(previewRows.length / columns);
+  const sectionH = rows * (qrSize + 24) + 18;
+
+  ensureTechnicalSpace(doc, sectionH + 12, template);
+  const startY = doc.y;
+  doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#000000").text("MULTIMEDIA", 42, startY, { width: 511 });
+  doc.moveTo(42, startY + 13).lineTo(553, startY + 13).strokeColor("#000000").lineWidth(0.4).stroke();
+
+  for (let index = 0; index < previewRows.length; index++) {
+    const { href } = previewRows[index];
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const slotW = (511 - gap * (columns - 1)) / columns;
+    const x = 42 + col * (slotW + gap);
+    const y = startY + 24 + row * (qrSize + 24);
+    drawQrPlaceholder(doc, href, x + (slotW - qrSize) / 2, y, qrSize);
+    doc.font("Helvetica").fontSize(7).fillColor("#000000").text("Multimedia del codigo QR", x, y + qrSize + 5, { width: slotW, align: "center" });
+  }
+
+  doc.y = startY + sectionH + 12;
+}
+
+function drawTechnicalTableGroup(doc, group, origin) {
+  const gridX = 42;
+  const gridW = 511;
+  const gap = 18;
+  const colW = (gridW - gap) / 2;
+  ensureTechnicalSpace(doc, 34, null);
+  doc.font("Helvetica-Bold").fontSize(8.8).fillColor("#000000").text(String(group.name || "").toUpperCase(), gridX, doc.y, { width: gridW });
+  doc.y += 14;
+  doc.moveTo(gridX, doc.y).lineTo(gridX + gridW, doc.y).strokeColor("#000000").lineWidth(0.45).stroke();
+  doc.y += 9;
+
+  const items = group.items || [];
+  for (let i = 0; i < items.length; i += 2) {
+    const pair = items.slice(i, i + 2);
+    const rowH = Math.max(...pair.map((item) => getTechnicalSpecTileHeight(doc, item, origin, colW)));
+    ensureTechnicalSpace(doc, rowH + 10, null);
+    const y = doc.y;
+    pair.forEach((item, index) => {
+      drawTechnicalSpecTile(doc, item, gridX + index * (colW + gap), y, colW, rowH, origin);
+    });
+    doc.y = y + rowH + 8;
+  }
+  doc.y += 8;
+}
+
+function getTechnicalSpecTileHeight(doc, item, origin, width) {
+  const href = getQuoteItemHref(item, origin);
+  const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
+  const keyText = String(item.key || "").toUpperCase();
+  const valueText = mediaLike ? "Ver multimedia con codigo QR" : String(item.valor || "-");
+  const keyH = doc.font("Helvetica-Bold").fontSize(7.2).heightOfString(keyText, { width, lineGap: 1 });
+  const valueH = doc.font("Helvetica").fontSize(8.2).heightOfString(valueText, { width, lineGap: 1 });
+  return Math.max(mediaLike ? 76 : 34, keyH + valueH + (mediaLike ? 48 : 14));
+}
+
+function drawTechnicalSpecTile(doc, item, x, y, width, height, origin) {
+  const href = getQuoteItemHref(item, origin);
+  const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
+  const keyText = String(item.key || "").toUpperCase();
+  const valueText = mediaLike ? "Ver multimedia con codigo QR" : String(item.valor || "-");
+  doc.font("Helvetica-Bold").fontSize(7.2).fillColor("#000000").text(keyText, x, y, { width, lineGap: 1 });
+  const keyH = doc.heightOfString(keyText, { width, lineGap: 1 });
+  doc.font("Helvetica").fontSize(8.2).fillColor("#000000").text(valueText, x, y + keyH + 5, { width, lineGap: 1 });
+  if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 38) / 2, y + height - 42, 38);
+  doc.moveTo(x, y + height).lineTo(x + width, y + height).strokeColor("#d1d5db").lineWidth(0.25).stroke();
+}
+
+function drawFinalTermsAtEnd(doc) {
+  const text = getQuoteTerms();
+  const x = 42;
+  const w = 511;
+  const titleH = 12;
+  doc.font("Helvetica").fontSize(5.6);
+  const bodyH = doc.heightOfString(text, { width: w, lineGap: 0.8 });
+  const needed = titleH + bodyH + 10;
+  const footerY = PAGE_H - 34 - needed;
+  if (doc.y > footerY) {
+    doc.addPage();
+    drawTechnicalPageShell(doc);
+  }
+  doc.y = PAGE_H - 34 - needed;
+  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, doc.y);
+  doc.y += titleH;
+  doc.font("Helvetica").fontSize(5.6).fillColor("#000000").text(text, x, doc.y, { width: w, lineGap: 0.8 });
+}
+
+function drawWatermark(doc, watermark) {
+  const image = doc._pdfImages?.get(String(watermark?.imagen_path || "").trim());
+  if (!image) return;
+  try {
+    doc.save();
+    doc.opacity(Number(watermark.opacity ?? 0.15));
+    doc.rotate(Number(watermark.rotate_deg || 0), { origin: [297.5, 420] });
+    const size = 260 * Number(watermark.scale || 1);
+    doc.image(image, (595 - size) / 2, (842 - size) / 2, { fit: [size, size] });
+    doc.restore();
+  } catch {
+    doc.restore();
+  }
+}
+
+function ensureTechnicalSpace(doc, needed, template) {
+  if (doc.y + needed <= 790) return;
+  drawTechnicalTemplateSection(doc, template?.footer);
+  doc.addPage();
+  drawTechnicalPageShell(doc);
+  drawWatermark(doc, template?.watermark);
+  drawTechnicalTemplateSection(doc, template?.header);
+}
+
+
+
+function getTechnicalPreviewItems(groups) {
+  return groups.flatMap((group) =>
+    (group.items || [])
+      .filter((item) => Number(item.order || 0) === 0 && (item.valorTipo === "VIDEO" || isVideoHref(getQuoteItemHref(item))))
+      .map((item) => ({ ...item, groupName: group.name }))
+  );
+}
+
+function getQuoteItemHref(item, origin = "") {
+  return absoluteLocalUrl(item?.valorPath || item?.valorUrl || item?.valor || item?.href || "", origin);
+}
+
+function absoluteLocalUrl(value, origin = "") {
+  const text = String(value || "").trim();
+  if (!text || /^https?:\/\//i.test(text) || !text.startsWith("/") || !origin) return text;
+  return `${origin}${text}`;
+}
+
+function isVideoHref(value) {
+  const text = String(value || "").trim();
+  return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(text) || /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(text);
 }
 
 function drawTemplateSection(doc, section, x, y, w, h, color) {
@@ -398,27 +866,27 @@ function drawTemplateSection(doc, section, x, y, w, h, color) {
 }
 
 function drawImageOrLink(doc, source, x, y, w, h, align = "left", containerW = w) {
-  const file = resolvePublicFile(source);
-  if (!file) {
+  const image = doc._pdfImages?.get(String(source || "").trim()) || resolvePublicFile(source);
+  if (!image) {
     if (source) doc.font("Helvetica-Bold").fontSize(7).fillColor("#1d4ed8").text(source, x, y, { width: containerW, link: source, underline: true });
     return;
   }
   try {
     const drawX = align === "center" ? x + (containerW - w) / 2 : align === "right" ? x + containerW - w : x;
-    doc.image(file, drawX, y, { fit: [w, h], align: "center", valign: "center" });
+    doc.image(image, drawX, y, { fit: [w, h], align: "center", valign: "center" });
   } catch {
     doc.font("Helvetica").fontSize(7).fillColor("#64748b").text("Imagen no compatible", x, y, { width: containerW });
   }
 }
 
-function drawQrPlaceholder(doc, href, x, y) {
+function drawQrPlaceholder(doc, href, x, y, size = 42) {
   const image = doc._qrImages?.get(String(href || ""));
-  doc.rect(x, y, 42, 42).fillAndStroke("#ffffff", "#111827");
+  doc.rect(x, y, size, size).fillAndStroke("#ffffff", "#111827");
   if (image) {
-    doc.image(image, x + 2, y + 2, { fit: [38, 38] });
+    doc.image(image, x + 2, y + 2, { fit: [size - 4, size - 4] });
     return;
   }
-  doc.font("Helvetica-Bold").fontSize(5).fillColor("#111827").text("QR", x, y + 17, { width: 42, align: "center" });
+  doc.font("Helvetica-Bold").fontSize(5).fillColor("#111827").text("QR", x, y + size / 2 - 4, { width: size, align: "center" });
 }
 
 function resolvePublicFile(source) {
@@ -492,11 +960,62 @@ async function buildQrImages(values) {
   const uniqueValues = Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
   const entries = await Promise.all(uniqueValues.map(async (value) => {
     try {
-      const buffer = await QRCode.toBuffer(value, { errorCorrectionLevel: "M", margin: 1, scale: 8, type: "png" });
-      return [value, buffer];
+      const dataUrl = await QRCode.toDataURL(value, { errorCorrectionLevel: "M", margin: 1, scale: 8, type: "image/png" });
+      return [value, dataUrl];
     } catch {
       return [value, null];
     }
   }));
   return new Map(entries.filter(([, buffer]) => buffer));
+}
+
+async function buildPdfImages(values) {
+  const uniqueValues = Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+  const entries = await Promise.all(uniqueValues.map(async (value) => {
+    try {
+      const file = resolvePublicFile(value);
+      if (file) return [value, await normalizePdfImage(fs.readFileSync(file), value, "")];
+      if (!/^https?:\/\//i.test(value)) return [value, null];
+      const response = await fetch(value, { cache: "no-store" });
+      if (!response.ok) return [value, null];
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.startsWith("image/") && !isImageHref(value)) return [value, null];
+      return [value, await normalizePdfImage(Buffer.from(await response.arrayBuffer()), value, contentType)];
+    } catch {
+      return [value, null];
+    }
+  }));
+  return new Map(entries.filter(([, image]) => image));
+}
+
+async function normalizePdfImage(buffer, source, contentType) {
+  if (isPdfNativeImage(source, contentType)) return bufferToDataUrl(buffer, getNativeImageMime(source, contentType));
+  const png = await sharp(buffer, { animated: false }).png().toBuffer();
+  return bufferToDataUrl(png, "image/png");
+}
+
+function isPdfNativeImage(source, contentType) {
+  const text = String(source || "").trim();
+  const mime = String(contentType || "").toLowerCase();
+  return /\.(png|jpe?g)(\?.*)?$/i.test(text) || mime === "image/png" || mime === "image/jpeg" || mime === "image/jpg";
+}
+
+function getNativeImageMime(source, contentType) {
+  const mime = String(contentType || "").toLowerCase();
+  if (mime === "image/png" || mime === "image/jpeg" || mime === "image/jpg") return mime === "image/jpg" ? "image/jpeg" : mime;
+  return /\.png(\?.*)?$/i.test(String(source || "")) ? "image/png" : "image/jpeg";
+}
+
+function bufferToDataUrl(buffer, mime) {
+  return `data:${mime};base64,${Buffer.from(buffer).toString("base64")}`;
+}
+
+function getTemplateImageSources(template) {
+  return [
+    template?.watermark?.imagen_path,
+    ...(template?.header?.elementos || []).filter((element) => element.tipo === "IMAGEN").map((element) => element.imagenPath),
+    ...(template?.footer?.elementos || []).filter((element) => element.tipo === "IMAGEN").map((element) => element.imagenPath),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 }

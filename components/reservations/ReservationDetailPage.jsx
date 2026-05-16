@@ -1005,10 +1005,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const fechaDoc = formatDate(r.createdAt || r.created_at || r.fecha || new Date());
   const origenVenta = r.origenVenta || r.origen_venta || "-";
   const campania = r.campania || "-";
-  const idTexto = r.idLead || r.id_lead || r.leadId || r.codigo || r.id || "-";
+  const idTexto = r.idLead || r.id_lead || r.leadId || "-";
 
   const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "-";
   const tipoPersona = r.tipoPersona || r.tipo_persona || d.tipoPersona || "NATURAL";
+  const nombreComercial = r.nombreComercial || r.nombre_comercial || d.nombreComercial || d.nombre_comercial || "-";
   const personTitle = tipoPersona === "JURIDICA"
     ? "NOTA DE PEDIDO - PERSONA JURIDICA"
     : tipoPersona === "NATURAL_RUC"
@@ -1136,6 +1137,9 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   // ===== Datos Cliente =====
   row("COMPROBANTE", tipoComprobante);
+  if (tipoPersona === "JURIDICA") {
+    row("NOMBRE COMERCIAL", nombreComercial);
+  }
   row("NOMBRES Y APELLIDOS", cliente);
   row("CONYUGUE/CO-PROP.", conyugue);
   row("DNI / DNI CONY.", documento, documentoConyugue);
@@ -1303,8 +1307,16 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   
   
   // texto legal
-  setFont("bold", 6.8);
-  const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), (right - left) - 40 - 4);
-  pdf.text(wrapped.slice(0, 7), left + 42, obsY + 12); // 7 líneas aprox entran en obsH=28
+  const obsPad = 2;
+  const obsTextX = left + 40 + obsPad;
+  const obsTextY = obsY + 4.2;
+  const obsTextW = (right - left) - 40 - obsPad * 2;
+  const obsLineHeight = 1.08;
+  const obsFontSize = 6.2;
+  setFont("bold", obsFontSize);
+  const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), obsTextW);
+  const lineHeightMm = obsFontSize * 0.3528 * obsLineHeight;
+  const maxLines = Math.max(1, Math.floor((obsH - 5) / lineHeightMm));
+  pdf.text(wrapped.slice(0, maxLines), obsTextX, obsTextY, { lineHeightFactor: obsLineHeight });
   await drawTemplateElements(getTemplateSection("PIE"), left + 2, bottom - 7, right - left - 4, 5);
 }

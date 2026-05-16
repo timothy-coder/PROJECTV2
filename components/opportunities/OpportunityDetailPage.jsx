@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOpportunityDetail } from "@/hooks/opportunities/useOpportunityDetail";
+import { hasPerm } from "@/lib/permissions";
 
 export default function OpportunityDetailPage({ id }) {
   const { data, loading, save } = useOpportunityDetail(id);
@@ -38,7 +39,7 @@ export default function OpportunityDetailPage({ id }) {
         <section className="my-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><h2 className="mb-3 flex gap-2 font-bold"><MessageSquare className="size-5" />Registrar nueva actividad</h2><Textarea value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Describe que accion se realizo..." /><Button className="mt-3 w-full" onClick={async () => { if (activity) { await save({ action: "activity", detalle: activity }); setActivity(""); } }}>Guardar actividad</Button></section>
         <History activities={activities} />
         <InterestSection items={interest} onOpen={(item) => setDialog({ type: "interest", item })} onQuote={(item) => setDialog({ type: "quote", item })} onDelete={(item) => save({ action: "interest", deleteId: item.id })} />
-        <QuotesSection items={quotes} options={options} onOpen={() => setDialog({ type: "quote", item: null })} onEdit={(item) => setDialog({ type: "quote", item })} onAction={save} />
+        <QuotesSection items={quotes} options={options} userPermissions={currentUser.permissions || {}} onOpen={() => setDialog({ type: "quote", item: null })} onEdit={(item) => setDialog({ type: "quote", item })} onAction={save} />
         <ReservationsSection items={reservations || []} onDelete={(item) => save({ action: "reservation-delete", reservaId: item.id })} />
         <TestDriveSection items={testDrives} onOpen={() => setDialog({ type: "testdrive", item: null })} />
         <ClosureSection items={closures} onOpen={() => setDialog({ type: "closure", item: null })} />
@@ -82,10 +83,23 @@ function ReservationsSection({ items, onDelete }) {
   );
 }
 
-function QuotesSection({ items, options, onOpen, onEdit, onAction }) {
+function QuotesSection({ items, options, userPermissions, onOpen, onEdit, onAction }) {
   const [actionMenu, setActionMenu] = useState(null);
   const [itemsDialog, setItemsDialog] = useState(null);
   const [viewsDialog, setViewsDialog] = useState(null);
+  const canFord = hasPerm(userPermissions, ["cotizacion_ford", "view"]);
+  const canOther = hasPerm(userPermissions, ["cotizacion_otros", "view"]);
+  function downloadQuotePdf(quote, full = false, format = "ford") {
+    const link = document.createElement("a");
+    const params = new URLSearchParams();
+    if (full) params.set("full", "1");
+    if (format === "otros") params.set("format", "otros");
+    link.href = `/api/cotizacion-preview/${quote.id}/ford-pdf${params.toString() ? `?${params.toString()}` : ""}`;
+    link.download = `${format === "otros" ? "cotizacion-otros" : "cotizacion"}${full ? "-completa" : ""}-${quote.id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
   async function publicLink(quote) {
     if (!quote.publicUrl) await onAction({ action: "quote-public-link", cotizacionId: quote.id });
     else window.open(quote.publicUrl, "_blank", "noopener,noreferrer");
@@ -144,6 +158,12 @@ function QuotesSection({ items, options, onOpen, onEdit, onAction }) {
           onReserve={() => onAction({ action: "quote-reserve", cotizacionId: actionMenu.quote.id })}
           onDuplicate={() => onAction({ action: "quote-duplicate", cotizacionId: actionMenu.quote.id })}
           onPreview={() => window.open(`/cotizacion-preview/${actionMenu.quote.id}`, "_blank")}
+          canFord={canFord}
+          canOther={canOther}
+          onPdf={() => downloadQuotePdf(actionMenu.quote)}
+          onFullPdf={() => downloadQuotePdf(actionMenu.quote, true)}
+          onOtherPdf={() => downloadQuotePdf(actionMenu.quote, false, "otros")}
+          onOtherFullPdf={() => downloadQuotePdf(actionMenu.quote, true, "otros")}
           onLink={() => actionMenu.quote.publicUrl ? copyLink(actionMenu.quote) : publicLink(actionMenu.quote)}
           onCancel={() => onAction({ action: "quote-cancel", cotizacionId: actionMenu.quote.id })}
         />
@@ -233,7 +253,7 @@ function deviceLabel(userAgent = "") {
   return `${device} - ${browser}`;
 }
 
-function QuoteActionsMenu({ state, onClose, onEdit, onAccessory, onGift, onReserve, onDuplicate, onPreview, onLink, onCancel }) {
+function QuoteActionsMenu({ state, onClose, onEdit, onAccessory, onGift, onReserve, onDuplicate, onPreview, canFord, canOther, onPdf, onFullPdf, onOtherPdf, onOtherFullPdf, onLink, onCancel }) {
   const quote = state.quote;
   function run(action) {
     action();
@@ -248,7 +268,11 @@ function QuoteActionsMenu({ state, onClose, onEdit, onAccessory, onGift, onReser
         <ActionButton icon={Gift} label="Agregar Regalos" onClick={() => run(onGift)} />
         <ActionButton icon={Send} label="Enviar Nota de Pedido" onClick={() => run(onReserve)} />
         <ActionButton icon={Copy} label="Duplicar" onClick={() => run(onDuplicate)} />
-        <ActionButton icon={FileText} label="Descargar PDF" onClick={() => run(onPreview)} />
+        <ActionButton icon={Eye} label="Ver cotizacion" onClick={() => run(onPreview)} />
+        {canFord ? <ActionButton icon={FileText} label="Descargar PDF" onClick={() => run(onPdf)} /> : null}
+        {canFord ? <ActionButton icon={FileText} label="Cotizacion + ficha tecnica" onClick={() => run(onFullPdf)} /> : null}
+        {canOther ? <ActionButton icon={FileText} label="Descargar otros" onClick={() => run(onOtherPdf)} /> : null}
+        {canOther ? <ActionButton icon={FileText} label="Otros + ficha tecnica" onClick={() => run(onOtherFullPdf)} /> : null}
         <ActionButton icon={Link} label={quote.publicUrl ? "Compartir enlace" : "Generar enlace publico"} onClick={() => run(onLink)} />
         <ActionButton icon={Trash2} label="Cancelar" danger onClick={() => run(onCancel)} />
       </div>

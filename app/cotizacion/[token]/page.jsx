@@ -104,16 +104,14 @@ export default async function PublicQuotePage({ params }) {
               <Info label="Color Ext." value={quote.color_externo || "-"} />
               <Info label="Color Int." value={quote.color_interno || "-"} />
               <Info label="SKU" value={quote.sku || "N/A"} />
-              <Info label="Estado" value={quote.estado} />
             </div>
           </section>
 
           <section className="rounded-lg border border-orange-200 bg-orange-50 p-5">
             <h2 className="mb-4 font-bold text-orange-900">Precio del Vehiculo</h2>
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-3">
               <Info label="Modelo/Version" value={`${quote.modelo} ${quote.version}`} />
               <Info label="Stock" value={quote.en_stock ? "Disponible" : "Bajo pedido"} />
-              <Info label="Entrega (dias)" value={quote.tiempo_entrega_dias || 0} />
               <Info label="Precio" value={money(quote.precio_base)} />
             </div>
             {vehicleDiscount ? <div className="mt-4 rounded-md border border-orange-300 bg-orange-100 p-3 font-bold text-orange-900">Descuento aplicado: -{money(vehicleDiscount)} ({discountPercent || 0}%)</div> : null}
@@ -195,9 +193,9 @@ function ItemsSection({ title, rows, partKey }) {
       <h2 className="mb-4 flex items-center gap-2 font-bold"><FileText className="size-4" />{title} ({rows.length})</h2>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[760px] text-sm">
-          <thead className="bg-slate-50 text-left"><tr><th className="px-3 py-3">Descripcion</th><th>Referencia</th><th>Cant.</th><th>Unitario</th><th>Desc.</th><th>Total Final</th></tr></thead>
+          <thead className="bg-slate-50 text-left"><tr><th className="px-3 py-3">Descripcion</th><th>Cant.</th><th>Unitario</th><th>Desc.</th><th>Total Final</th></tr></thead>
           <tbody className="divide-y">
-            {rows.map((row) => <tr key={row.id}><td className="px-3 py-3">{row.detalle}</td><td>{row[partKey] || "-"}</td><td>{row.cantidad}</td><td>{money(row.precio_unitario)}</td><td>{money(row.descuento_monto || 0)}</td><td className="font-bold text-blue-700">{money(row.total)}</td></tr>)}
+            {rows.map((row) => <tr key={row.id}><td className="px-3 py-3">{row.detalle}</td><td>{row.cantidad}</td><td>{money(row.precio_unitario)}</td><td>{money(row.descuento_monto || 0)}</td><td className="font-bold text-blue-700">{money(row.total)}</td></tr>)}
             {!rows.length ? <tr><td className="px-3 py-8 text-center text-slate-500" colSpan={6}>Sin registros.</td></tr> : null}
           </tbody>
         </table>

@@ -91,7 +91,7 @@ export async function GET(request, { params }) {
     const [accessories] = await connection.query(`SELECT id, marca_id, modelo_id, detalle, numero_parte, precio, precio_venta, moneda_id FROM ventas_accesorios_disponibles ORDER BY detalle ASC`);
     const [gifts] = await connection.query(`SELECT id, detalle, lote, precio_compra, precio_venta, moneda_id FROM ventas_regalos_disponibles ORDER BY detalle ASC`);
     return NextResponse.json({
-      currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll },
+      currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll, permissions: user.permissions || {} },
       opportunity: {
         id: opportunity.id,
         code: opportunity.oportunidad_id,
