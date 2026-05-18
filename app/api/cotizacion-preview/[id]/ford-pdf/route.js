@@ -735,26 +735,26 @@ function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
 function drawTechnicalTableGroup(doc, group, origin) {
   const gridX = 42;
   const gridW = 511;
-  const gap = 14;
+  const gap = 12;
   const colW = (gridW - gap) / 2;
-  ensureTechnicalSpace(doc, 26, null);
-  doc.font("Helvetica-Bold").fontSize(8.8).fillColor("#000000").text(String(group.name || "").toUpperCase(), gridX, doc.y, { width: gridW });
-  doc.y += 11;
+  ensureTechnicalSpace(doc, 20, null);
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000").text(String(group.name || "").toUpperCase(), gridX, doc.y, { width: gridW });
+  doc.y += 9;
   doc.moveTo(gridX, doc.y).lineTo(gridX + gridW, doc.y).strokeColor("#000000").lineWidth(0.45).stroke();
-  doc.y += 5;
+  doc.y += 3;
 
   const items = group.items || [];
   for (let i = 0; i < items.length; i += 2) {
     const pair = items.slice(i, i + 2);
     const rowH = Math.max(...pair.map((item) => getTechnicalSpecTileHeight(doc, item, origin, colW)));
-    ensureTechnicalSpace(doc, rowH + 5, null);
+    ensureTechnicalSpace(doc, rowH + 2, null);
     const y = doc.y;
     pair.forEach((item, index) => {
       drawTechnicalSpecTile(doc, item, gridX + index * (colW + gap), y, colW, rowH, origin);
     });
-    doc.y = y + rowH + 3;
+    doc.y = y + rowH + 1;
   }
-  doc.y += 4;
+  doc.y += 2;
 }
 
 function getTechnicalSpecTileHeight(doc, item, origin, width) {
@@ -762,9 +762,9 @@ function getTechnicalSpecTileHeight(doc, item, origin, width) {
   const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
   const keyText = String(item.key || "").toUpperCase();
   const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
-  const keyH = doc.font("Helvetica-Bold").fontSize(7.2).heightOfString(keyText, { width, lineGap: 0.2 });
-  const valueH = valueText ? doc.font("Helvetica").fontSize(8.2).heightOfString(valueText, { width, lineGap: 0.2 }) : 0;
-  return Math.max(mediaLike ? 70 : 18, keyH + valueH + (mediaLike ? 44 : valueText ? 9 : 3));
+  const keyH = doc.font("Helvetica-Bold").fontSize(6.4).heightOfString(keyText, { width, lineGap: 0 });
+  const valueH = valueText ? doc.font("Helvetica").fontSize(7.4).heightOfString(valueText, { width, lineGap: 0 }) : 0;
+  return Math.max(mediaLike ? 62 : 13, keyH + valueH + (mediaLike ? 38 : valueText ? 5 : 1));
 }
 
 function drawTechnicalSpecTile(doc, item, x, y, width, height, origin) {
@@ -772,10 +772,10 @@ function drawTechnicalSpecTile(doc, item, x, y, width, height, origin) {
   const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
   const keyText = String(item.key || "").toUpperCase();
   const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
-  doc.font("Helvetica-Bold").fontSize(7.2).fillColor("#000000").text(keyText, x, y, { width, lineGap: 0.2 });
-  const keyH = doc.heightOfString(keyText, { width, lineGap: 0.2 });
-  if (valueText) doc.font("Helvetica").fontSize(8.2).fillColor("#000000").text(valueText, x, y + keyH + 2, { width, lineGap: 0.2 });
-  if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 36) / 2, y + height - 39, 36);
+  doc.font("Helvetica-Bold").fontSize(6.4).fillColor("#000000").text(keyText, x, y, { width, lineGap: 0 });
+  const keyH = doc.heightOfString(keyText, { width, lineGap: 0 });
+  if (valueText) doc.font("Helvetica").fontSize(7.4).fillColor("#000000").text(valueText, x, y + keyH + 1, { width, lineGap: 0 });
+  if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 32) / 2, y + height - 34, 32);
   doc.moveTo(x, y + height).lineTo(x + width, y + height).strokeColor("#d1d5db").lineWidth(0.25).stroke();
 }
 

@@ -22,6 +22,7 @@ import { hasPerm } from "@/lib/permissions";
 export default function CarPricesPage({ userPermissions }) {
   const data = useCarPrices();
   const fileInputRef = useRef(null);
+  const inventoryFileInputRef = useRef(null);
   const [view, setView] = useState("prices");
   const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", monedaId: "", estado: "" });
   const [dialog, setDialog] = useState({ open: false, item: null });
@@ -36,6 +37,8 @@ export default function CarPricesPage({ userPermissions }) {
   const canExport = hasPerm(userPermissions, ["inventariocarros", "export"]);
   const canHistory = hasPerm(userPermissions, ["inventariocarros", "history"]);
   const canCreateHistory = hasPerm(userPermissions, ["inventariocarros", "history_create"]);
+  const canHistoryImport = hasPerm(userPermissions, ["inventariocarros", "history_import"]);
+  const canHistoryExport = hasPerm(userPermissions, ["inventariocarros", "history_export"]);
   const canPendingPurchase = hasPerm(userPermissions, ["inventariocarros", "pending_purchase"]);
   const availableViews = useMemo(() => [
     canView ? "prices" : null,
@@ -64,23 +67,57 @@ export default function CarPricesPage({ userPermissions }) {
   async function exportPrices() {
     const XLSX = await import("xlsx");
     const rows = data.prices.map((item) => ({
-      marca_id: item.marcaId,
       marca: item.marcaName,
-      modelo_id: item.modeloId,
       modelo: item.modeloName,
       version: item.version,
       combustible: item.combustible || "GASOLINA",
-      moneda_id: item.monedaId,
       moneda: item.monedaCodigo,
       precio_base: item.precioBase,
       en_stock: item.enStock ? 1 : 0,
       existe: item.existe ? 1 : 0,
       tiempo_entrega_dias: item.tiempoEntregaDias,
     }));
-    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ marca_id: "", marca: "", modelo_id: "", modelo: "", version: "", combustible: "GASOLINA", moneda_id: "", moneda: "", precio_base: "", en_stock: 1, existe: 1, tiempo_entrega_dias: 0 }]);
+    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ marca: "", modelo: "", version: "", combustible: "GASOLINA", moneda: "", precio_base: "", en_stock: 1, existe: 1, tiempo_entrega_dias: 0 }]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "precios_carros");
     XLSX.writeFile(workbook, "precios_carros.xlsx");
+  }
+
+  async function exportInventory() {
+    const XLSX = await import("xlsx");
+    const rows = data.history.map((item) => ({
+      vin: item.vin,
+      marca: item.marcaName,
+      modelo: item.modeloName,
+      version: item.version,
+      color_externo: item.colorExterno,
+      color_interno: item.colorInterno,
+      numero_motor: item.numeroMotor,
+      numero_factura: item.numeroFactura,
+      precio_compra: item.precioCompra ?? "",
+      precio_venta: item.precioVenta ?? "",
+      facturacion_at: formatDateTimeForSheet(item.facturacionAt),
+      llegada_centro_at: formatDateTimeForSheet(item.llegadaCentroAt),
+      entrega_at: formatDateTimeForSheet(item.entregaAt),
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{
+      vin: "",
+      marca: "",
+      modelo: "",
+      version: "",
+      color_externo: "",
+      color_interno: "",
+      numero_motor: "",
+      numero_factura: "",
+      precio_compra: "",
+      precio_venta: "",
+      facturacion_at: "",
+      llegada_centro_at: "",
+      entrega_at: "",
+    }]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "inventario_carros");
+    XLSX.writeFile(workbook, "inventario_carros.xlsx");
   }
 
   async function importPrices(event) {
@@ -101,6 +138,24 @@ export default function CarPricesPage({ userPermissions }) {
     }
   }
 
+  async function importInventory(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const result = await data.importHistoryRows(rows);
+      setImportMessage(`Inventario importado ${result.imported}. Actualizados ${result.updated}.`);
+    } catch (error) {
+      setImportMessage(error.message || "No se pudo importar el inventario.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   if (!canView) {
     return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver precios de carros.</div>;
   }
@@ -116,8 +171,10 @@ export default function CarPricesPage({ userPermissions }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canExport ? <Button variant="outline" onClick={exportPrices}><Download className="size-4" />Exportar</Button> : null}
-          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
+          {canExport ? <Button variant="outline" onClick={exportPrices}><Download className="size-4" />Exportar precios</Button> : null}
+          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar precios</Button> : null}
+          {canHistoryExport ? <Button variant="outline" onClick={exportInventory}><Download className="size-4" />Exportar inventario</Button> : null}
+          {canHistoryImport ? <Button variant="outline" onClick={() => inventoryFileInputRef.current?.click()}><Upload className="size-4" />Importar inventario</Button> : null}
           {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Inventario</Button> : null}
           {canHistory && canCreateHistory ? <Button variant="outline" onClick={() => setHistoryDialog({ open: true })}><Plus className="size-4" />Crear carro</Button> : null}
           {canCreate ? (
@@ -127,6 +184,7 @@ export default function CarPricesPage({ userPermissions }) {
             </Button>
           ) : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importPrices} />
+          <input ref={inventoryFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importInventory} />
         </div>
       </div>
       {importMessage ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
@@ -548,4 +606,12 @@ function formatMoney(symbol, value) {
 function formatDate(value) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatDateTimeForSheet(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }

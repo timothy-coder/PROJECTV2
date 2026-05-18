@@ -38,6 +38,7 @@ export function useCarPrices() {
     delete: async (id) => { await carPricesApi.delete(id); await reload(); },
     importRows: async (rows) => { const result = await carPricesApi.import(rows); await reload(); return result; },
     createHistory: async (payload) => { await carPricesApi.createHistory(payload); await reload(); },
+    importHistoryRows: async (rows) => { const result = await carPricesApi.importHistory(rows); await reload(); return result; },
   }), [reload]);
 
   return { ...data, loading, stats, reload, ...actions };

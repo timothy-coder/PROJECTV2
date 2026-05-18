@@ -88,6 +88,12 @@ export function useClients() {
     setClients((current) => current.filter((client) => client.id !== id));
   }, []);
 
+  const importClients = useCallback(async (rows) => {
+    const result = await clientsApi.import(rows);
+    await loadClients();
+    return result;
+  }, [loadClients]);
+
   const createVehicle = useCallback(async (payload) => {
     await clientsApi.createVehicle(payload);
     await loadClients();
@@ -121,6 +127,7 @@ export function useClients() {
     createClient,
     updateClient,
     deleteClient,
+    importClients,
     createVehicle,
     updateVehicle,
     deleteVehicle,

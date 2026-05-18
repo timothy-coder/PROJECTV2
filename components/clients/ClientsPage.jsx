@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { Car, Edit3, Loader2, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { Car, Download, Edit3, Loader2, Plus, Search, Trash2, Upload, UserRound } from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog";
@@ -29,11 +29,14 @@ export default function ClientsPage({ userPermissions }) {
     createClient,
     updateClient,
     deleteClient,
+    importClients,
     createVehicle,
     updateVehicle,
     deleteVehicle,
   } = useClients();
+  const fileInputRef = useRef(null);
   const [query, setQuery] = useState("");
+  const [importMessage, setImportMessage] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [clientDialog, setClientDialog] = useState({ mode: null, client: null });
   const [vehicleDialog, setVehicleDialog] = useState({ mode: null, client: null, vehicle: null });
@@ -42,6 +45,8 @@ export default function ClientsPage({ userPermissions }) {
   const canEdit = hasPerm(userPermissions, ["clientes", "edit"]);
   const canDelete = hasPerm(userPermissions, ["clientes", "delete"]);
   const canViewVehicles = hasPerm(userPermissions, ["clientes", "vehicles"]);
+  const canImport = hasPerm(userPermissions, ["clientes", "import"]);
+  const canExport = hasPerm(userPermissions, ["clientes", "export"]);
   const tableColSpan = canViewVehicles ? 7 : 6;
   const filteredClients = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -61,6 +66,50 @@ export default function ClientsPage({ userPermissions }) {
     );
   }, [clients, query]);
 
+  async function exportClients() {
+    const XLSX = await import("xlsx");
+    const worksheet = XLSX.utils.json_to_sheet([{
+      id_lead: "",
+      nombre: "",
+      apellido: "",
+      email: "",
+      celular: "",
+      tipo_identificacion: "DNI",
+      identificacion_fiscal: "",
+      fecha_nacimiento: "",
+      ocupacion: "",
+      domicilio: "",
+      departamento: "",
+      provincia: "",
+      distrito: "",
+      nombre_conyugue: "",
+      dni_conyugue: "",
+      nombre_comercial: "",
+      created_by: "",
+    }]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "clientes");
+    XLSX.writeFile(workbook, "clientes.xlsx");
+  }
+
+  async function importClientRows(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const result = await importClients(rows);
+      setImportMessage(`Clientes importados ${result.imported}. Actualizados ${result.updated}.`);
+    } catch (error) {
+      setImportMessage(error.message || "No se pudo importar clientes.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
     <div className="min-w-0 rounded-lg bg-slate-50 p-3 text-slate-950 sm:p-4">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -73,13 +122,19 @@ export default function ClientsPage({ userPermissions }) {
             <p className="mt-1 text-xs font-medium text-slate-500">Administra clientes y vehículos</p>
           </div>
         </div>
-        {canCreate ? (
-          <Button onClick={() => setClientDialog({ mode: "create", client: null })} className="bg-violet-700 text-white hover:bg-violet-800">
-            <Plus className="size-4" />
-            Nuevo Cliente
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap justify-end gap-2">
+          {canExport ? <Button variant="outline" onClick={exportClients}><Download className="size-4" />Exportar formato</Button> : null}
+          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
+          {canCreate ? (
+            <Button onClick={() => setClientDialog({ mode: "create", client: null })} className="bg-violet-700 text-white hover:bg-violet-800">
+              <Plus className="size-4" />
+              Nuevo Cliente
+            </Button>
+          ) : null}
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importClientRows} />
+        </div>
       </div>
+      {importMessage ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
 
       <section className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-3">

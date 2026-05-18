@@ -16,6 +16,11 @@ export const clientsApi = {
     apiFetch(`/api/clients/${id}`, {
       method: "DELETE",
     }),
+  import: (rows) =>
+    apiFetch("/api/clients/import", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
   createVehicle: (payload) =>
     apiFetch("/api/clients/vehicles", {
       method: "POST",
