@@ -271,8 +271,8 @@ function QuoteActionsMenu({ state, onClose, onEdit, onAccessory, onGift, onReser
         <ActionButton icon={Eye} label="Ver cotizacion" onClick={() => run(onPreview)} />
         {canFord ? <ActionButton icon={FileText} label="Descargar PDF" onClick={() => run(onPdf)} /> : null}
         {canFord ? <ActionButton icon={FileText} label="Cotizacion + ficha tecnica" onClick={() => run(onFullPdf)} /> : null}
-        {canOther ? <ActionButton icon={FileText} label="Descargar otros" onClick={() => run(onOtherPdf)} /> : null}
-        {canOther ? <ActionButton icon={FileText} label="Otros + ficha tecnica" onClick={() => run(onOtherFullPdf)} /> : null}
+        {canOther ? <ActionButton icon={FileText} label="Descargar PDF" onClick={() => run(onOtherPdf)} /> : null}
+        {canOther ? <ActionButton icon={FileText} label="Cotizacion + ficha tecnica" onClick={() => run(onOtherFullPdf)} /> : null}
         <ActionButton icon={Link} label={quote.publicUrl ? "Compartir enlace" : "Generar enlace publico"} onClick={() => run(onLink)} />
         <ActionButton icon={Trash2} label="Cancelar" danger onClick={() => run(onCancel)} />
       </div>

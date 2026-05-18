@@ -215,7 +215,7 @@ function drawQuotePage(doc, data) {
   doc.font("Helvetica").fontSize(8).text(dateText(quote.created_at), 230, 42, { width: 150, align: "center" });
 
   doc.font("Helvetica-Bold").fontSize(8).text("SR. (A):", x, 112);
-  doc.font("Helvetica-BoldOblique").fontSize(17).text(String(quote.cliente || "-").toUpperCase(), x + 48, 106, { width: 250 });
+  doc.fillColor("#ffffff").font("Helvetica").fontSize(8).text(String(quote.cliente || "-").toUpperCase(), x + 48, 112, { width: 250 });
   doc.font("Helvetica-Bold").fontSize(8).text("ASESOR:", 370, 112);
   doc.font("Helvetica").fontSize(8).text(quote.creado || quote.asignado || "-", 420, 112, { width: 140 });
   doc.font("Helvetica-Bold").fontSize(8).text("EMAIL:", 370, 146);
@@ -291,7 +291,7 @@ function drawQuotePageV2(doc, data) {
   doc.font("Helvetica").fontSize(7).text(dateText(quote.created_at), 220, 34, { width: 160, align: "center" });
 
   doc.font("Helvetica-Bold").fontSize(6.8).text("SR. (A):", x, 92);
-  doc.font("Helvetica-BoldOblique").fontSize(13).text(String(quote.cliente || "-").toUpperCase(), x + 48, 88, { width: 230 });
+  doc.fillColor("#000000").font("Helvetica").fontSize(6.8).text(String(quote.cliente || "-").toUpperCase(), x + 48, 92, { width: 230 });
   doc.font("Helvetica-Bold").fontSize(6.8).text("DNI/RUC:", x, 106);
   doc.font("Helvetica").fontSize(6.8).text(quote.identificacion_fiscal || "-", x + 48, 106, { width: 190 });
   doc.font("Helvetica-Bold").fontSize(6.8).text("TELEF:", x, 118);
@@ -667,10 +667,10 @@ function getTechnicalSpecCardHeight(doc, item, origin, width) {
   if (videoLike || linkLike) return 62;
 
   const keyText = String(item.key || "").toUpperCase();
-  const valueText = String(item.valor || "-");
+  const valueText = technicalSpecValue(item);
   const keyH = doc.heightOfString(keyText, { width: width - 24, lineGap: 1 });
-  const valueH = doc.heightOfString(valueText, { width: width - 24, lineGap: 1 });
-  return Math.max(38, keyH + valueH + 19);
+  const valueH = valueText ? doc.heightOfString(valueText, { width: width - 24, lineGap: 1 }) : 0;
+  return Math.max(26, keyH + valueH + (valueText ? 19 : 12));
 }
 
 function drawTechnicalSpecCard(doc, item, x, y, width, height, origin) {
@@ -695,7 +695,8 @@ function drawTechnicalSpecCard(doc, item, x, y, width, height, origin) {
     return;
   }
 
-  doc.fillColor("#0f172a").fontSize(9.2).font("Helvetica").text(String(item.valor || "-"), x + 10, y + 24, { width: width - 20, lineGap: 1 });
+  const valueText = technicalSpecValue(item);
+  if (valueText) doc.fillColor("#0f172a").fontSize(9.2).font("Helvetica").text(valueText, x + 10, y + 24, { width: width - 20, lineGap: 1 });
 }
 
 function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
@@ -734,48 +735,54 @@ function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
 function drawTechnicalTableGroup(doc, group, origin) {
   const gridX = 42;
   const gridW = 511;
-  const gap = 18;
+  const gap = 14;
   const colW = (gridW - gap) / 2;
-  ensureTechnicalSpace(doc, 34, null);
+  ensureTechnicalSpace(doc, 26, null);
   doc.font("Helvetica-Bold").fontSize(8.8).fillColor("#000000").text(String(group.name || "").toUpperCase(), gridX, doc.y, { width: gridW });
-  doc.y += 14;
+  doc.y += 11;
   doc.moveTo(gridX, doc.y).lineTo(gridX + gridW, doc.y).strokeColor("#000000").lineWidth(0.45).stroke();
-  doc.y += 9;
+  doc.y += 5;
 
   const items = group.items || [];
   for (let i = 0; i < items.length; i += 2) {
     const pair = items.slice(i, i + 2);
     const rowH = Math.max(...pair.map((item) => getTechnicalSpecTileHeight(doc, item, origin, colW)));
-    ensureTechnicalSpace(doc, rowH + 10, null);
+    ensureTechnicalSpace(doc, rowH + 5, null);
     const y = doc.y;
     pair.forEach((item, index) => {
       drawTechnicalSpecTile(doc, item, gridX + index * (colW + gap), y, colW, rowH, origin);
     });
-    doc.y = y + rowH + 8;
+    doc.y = y + rowH + 3;
   }
-  doc.y += 8;
+  doc.y += 4;
 }
 
 function getTechnicalSpecTileHeight(doc, item, origin, width) {
   const href = getQuoteItemHref(item, origin);
   const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
   const keyText = String(item.key || "").toUpperCase();
-  const valueText = mediaLike ? "Ver multimedia con codigo QR" : String(item.valor || "-");
-  const keyH = doc.font("Helvetica-Bold").fontSize(7.2).heightOfString(keyText, { width, lineGap: 1 });
-  const valueH = doc.font("Helvetica").fontSize(8.2).heightOfString(valueText, { width, lineGap: 1 });
-  return Math.max(mediaLike ? 76 : 34, keyH + valueH + (mediaLike ? 48 : 14));
+  const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
+  const keyH = doc.font("Helvetica-Bold").fontSize(7.2).heightOfString(keyText, { width, lineGap: 0.2 });
+  const valueH = valueText ? doc.font("Helvetica").fontSize(8.2).heightOfString(valueText, { width, lineGap: 0.2 }) : 0;
+  return Math.max(mediaLike ? 70 : 18, keyH + valueH + (mediaLike ? 44 : valueText ? 9 : 3));
 }
 
 function drawTechnicalSpecTile(doc, item, x, y, width, height, origin) {
   const href = getQuoteItemHref(item, origin);
   const mediaLike = item.valorTipo === "VIDEO" || isVideoHref(href);
   const keyText = String(item.key || "").toUpperCase();
-  const valueText = mediaLike ? "Ver multimedia con codigo QR" : String(item.valor || "-");
-  doc.font("Helvetica-Bold").fontSize(7.2).fillColor("#000000").text(keyText, x, y, { width, lineGap: 1 });
-  const keyH = doc.heightOfString(keyText, { width, lineGap: 1 });
-  doc.font("Helvetica").fontSize(8.2).fillColor("#000000").text(valueText, x, y + keyH + 5, { width, lineGap: 1 });
-  if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 38) / 2, y + height - 42, 38);
+  const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
+  doc.font("Helvetica-Bold").fontSize(7.2).fillColor("#000000").text(keyText, x, y, { width, lineGap: 0.2 });
+  const keyH = doc.heightOfString(keyText, { width, lineGap: 0.2 });
+  if (valueText) doc.font("Helvetica").fontSize(8.2).fillColor("#000000").text(valueText, x, y + keyH + 2, { width, lineGap: 0.2 });
+  if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 36) / 2, y + height - 39, 36);
   doc.moveTo(x, y + height).lineTo(x + width, y + height).strokeColor("#d1d5db").lineWidth(0.25).stroke();
+}
+
+function technicalSpecValue(item) {
+  const value = item?.valor;
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
 }
 
 function drawFinalTermsAtEnd(doc) {

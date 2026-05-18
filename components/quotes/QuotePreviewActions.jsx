@@ -69,7 +69,7 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
             onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?format=otros`, `cotizacion-otros-${quoteId}`)}
           >
             <FileDown className="size-4" />
-            Descargar otros
+            Descargar PDF
           </button>
           <button
             type="button"
@@ -78,7 +78,7 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
             onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?format=otros&full=1`, `cotizacion-otros-completa-${quoteId}`)}
           >
             <FileDown className="size-4" />
-            Otros + ficha tecnica
+            Cotizacion + ficha tecnica
           </button>
         </>
       ) : null}
