@@ -94,6 +94,18 @@ export function useClients() {
     return result;
   }, [loadClients]);
 
+  const importVehicles = useCallback(async (rows) => {
+    const result = await clientsApi.importVehicles(rows);
+    await loadClients();
+    return result;
+  }, [loadClients]);
+
+  const importMaintenance = useCallback(async (rows) => {
+    const result = await clientsApi.importMaintenance(rows);
+    await loadClients();
+    return result;
+  }, [loadClients]);
+
   const createVehicle = useCallback(async (payload) => {
     await clientsApi.createVehicle(payload);
     await loadClients();
@@ -128,6 +140,8 @@ export function useClients() {
     updateClient,
     deleteClient,
     importClients,
+    importVehicles,
+    importMaintenance,
     createVehicle,
     updateVehicle,
     deleteVehicle,

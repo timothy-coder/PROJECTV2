@@ -1,7 +1,7 @@
 export const USER_PERMISSION_GROUPS = [
   { key: "home", label: "Home", actions: ["view"] },
   { key: "usuarios", label: "Usuarios", actions: ["view", "create", "edit", "delete"] },
-  { key: "clientes", label: "Clientes", actions: ["view", "viewall", "create", "edit", "delete", "vehicles", "import", "export"] },
+  { key: "clientes", label: "Clientes", actions: ["view", "viewall", "create", "edit", "delete", "vehicles", "import", "export", "vehicles_import", "vehicles_export", "maintenance_import", "maintenance_export"] },
   { key: "marcas", label: "Marcas", actions: ["view", "create", "edit", "delete"] },
   { key: "modelos", label: "Modelos", actions: ["view", "create", "edit", "delete"] },
   { key: "clases", label: "Clases de Vehiculos", actions: ["view", "create", "edit", "delete"] },
@@ -10,7 +10,7 @@ export const USER_PERMISSION_GROUPS = [
   { key: "combomantenimiento", label: "Mantenimientos", actions: ["view", "create", "edit", "delete"] },
   { key: "submantenimiento", label: "Submantenimientos", actions: ["view", "create", "edit", "delete"] },
   { key: "configinventario", label: "Config. Inventario", actions: ["view", "create", "edit", "delete"] },
-  { key: "inventariocarros", label: "Precios de Carros", actions: ["view", "create", "edit", "delete", "import", "export", "history", "history_create", "history_import", "history_export", "pending_purchase"] },
+  { key: "inventariocarros", label: "Precios de Carros", actions: ["view", "create", "edit", "delete", "import", "export", "history", "history_create", "history_edit", "history_import", "history_export", "pending_purchase"] },
   { key: "catalogoventa", label: "Catalogo Venta", actions: ["view", "create", "edit", "delete", "import", "export"] },
   { key: "accesoriosventa", label: "Accesorios Venta", actions: ["view", "create", "edit", "delete"] },
   { key: "regalosventa", label: "Regalos Venta", actions: ["view", "create", "edit", "delete"] },

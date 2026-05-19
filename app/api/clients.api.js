@@ -21,6 +21,16 @@ export const clientsApi = {
       method: "POST",
       body: JSON.stringify({ rows }),
     }),
+  importVehicles: (rows) =>
+    apiFetch("/api/clients/vehicles/import", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
+  importMaintenance: (rows) =>
+    apiFetch("/api/clients/vehicles/maintenance/import", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
   createVehicle: (payload) =>
     apiFetch("/api/clients/vehicles", {
       method: "POST",

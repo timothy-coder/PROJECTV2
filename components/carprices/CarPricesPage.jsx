@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Car, Clock, Download, DollarSign, Edit3, Filter, History, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
+import { Car, Clock, Download, DollarSign, Edit3, Eye, Filter, History, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export default function CarPricesPage({ userPermissions }) {
   const canExport = hasPerm(userPermissions, ["inventariocarros", "export"]);
   const canHistory = hasPerm(userPermissions, ["inventariocarros", "history"]);
   const canCreateHistory = hasPerm(userPermissions, ["inventariocarros", "history_create"]);
+  const canHistoryEdit = hasPerm(userPermissions, ["inventariocarros", "history_edit"]);
   const canHistoryImport = hasPerm(userPermissions, ["inventariocarros", "history_import"]);
   const canHistoryExport = hasPerm(userPermissions, ["inventariocarros", "history_export"]);
   const canPendingPurchase = hasPerm(userPermissions, ["inventariocarros", "pending_purchase"]);
@@ -228,9 +230,9 @@ export default function CarPricesPage({ userPermissions }) {
       </section> : null}
 
       {activeView === "prices" ? <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="max-h-[calc(100svh-390px)] overflow-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[1040px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
               <tr>
                 <th className="px-3 py-3">ID</th>
                 <th className="px-3 py-3">Marca</th>
@@ -271,7 +273,7 @@ export default function CarPricesPage({ userPermissions }) {
         </div>
       </section> : null}
 
-      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} /> : null}
+      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} canEdit={canHistoryEdit} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
       {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
@@ -288,13 +290,15 @@ export default function CarPricesPage({ userPermissions }) {
         />
       ) : null}
       <DeleteDialog state={deleteDialog} onClose={() => setDeleteDialog({ open: false, item: null })} onConfirm={async () => { await data.delete(deleteDialog.item.id); setDeleteDialog({ open: false, item: null }); }} />
-      {historyDialog.open && canHistory && canCreateHistory ? (
+      {historyDialog.open && canHistory && (historyDialog.item ? canHistoryEdit : canCreateHistory) ? (
         <HistoryDialog
+          item={historyDialog.item}
           prices={data.prices}
-          onClose={() => setHistoryDialog({ open: false })}
+          onClose={() => setHistoryDialog({ open: false, item: null })}
           onSubmit={async (payload) => {
-            await data.createHistory(payload);
-            setHistoryDialog({ open: false });
+            if (historyDialog.item) await data.updateHistory(historyDialog.item.vin, payload);
+            else await data.createHistory(payload);
+            setHistoryDialog({ open: false, item: null });
             setView("history");
           }}
         />
@@ -303,22 +307,37 @@ export default function CarPricesPage({ userPermissions }) {
   );
 }
 
-function HistoryDialog({ prices, onClose, onSubmit }) {
-  const [form, setForm] = useState({ vin: "", precioId: "", colorExterno: "", colorInterno: "", numeroMotor: "", numeroFactura: "", precioCompra: "", precioVenta: "", facturacionAt: "", llegadaCentroAt: "", entregaAt: "" });
+function HistoryDialog({ item, prices, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    vin: item?.vin || "",
+    precioId: item?.precioId ? String(item.precioId) : "",
+    colorExterno: item?.colorExterno || "",
+    colorInterno: item?.colorInterno || "",
+    numeroMotor: item?.numeroMotor || "",
+    numeroFactura: item?.numeroFactura || "",
+    precioCompra: item?.precioCompra ?? "",
+    precioVenta: item?.precioVenta ?? "",
+    facturacionAt: dateTimeInputValue(item?.facturacionAt),
+    llegadaCentroAt: dateTimeInputValue(item?.llegadaCentroAt),
+    entregaAt: dateTimeInputValue(item?.entregaAt),
+  });
   const priceOptions = prices.map((item) => ({ value: item.id, label: `${item.marcaName} ${item.modeloName} ${item.version}` }));
-  const selected = prices.find((item) => Number(item.id) === Number(form.precioId));
+  const isEdit = Boolean(item);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white text-slate-950">
         <form onSubmit={(event) => { event.preventDefault(); onSubmit(form); }} className="space-y-4">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-violet-700">Crear carro en inventario</DialogTitle>
-            <DialogDescription>Registra un VIN para una version de precio.</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-violet-700">{isEdit ? "Editar carro en inventario" : "Crear carro en inventario"}</DialogTitle>
+            <DialogDescription>{isEdit ? "Actualiza la informacion del VIN seleccionado." : "Registra un VIN para una version de precio."}</DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="VIN *"><Input value={form.vin} onChange={(event) => setForm((current) => ({ ...current, vin: event.target.value }))} required /></Field>
-              <Field label="Vehiculo *"><SearchableSelect value={form.precioId} options={priceOptions} placeholder="Seleccionar vehiculo" onChange={(value) => setForm((current) => ({ ...current, precioId: value, precioVenta: selected?.precioBase ?? current.precioVenta }))} /></Field>
+              <Field label="VIN *"><Input value={form.vin} onChange={(event) => setForm((current) => ({ ...current, vin: event.target.value }))} disabled={isEdit} required /></Field>
+              <Field label="Vehiculo *"><SearchableSelect value={form.precioId} options={priceOptions} placeholder="Seleccionar vehiculo" onChange={(value) => {
+                const selected = prices.find((price) => Number(price.id) === Number(value));
+                setForm((current) => ({ ...current, precioId: value, precioVenta: selected?.precioBase ?? current.precioVenta }));
+              }} /></Field>
               <Field label="Color externo"><Input value={form.colorExterno} onChange={(event) => setForm((current) => ({ ...current, colorExterno: event.target.value }))} placeholder="Ej: Blanco" /></Field>
               <Field label="Color interno"><Input value={form.colorInterno} onChange={(event) => setForm((current) => ({ ...current, colorInterno: event.target.value }))} placeholder="Ej: Negro" /></Field>
               <Field label="Numero de motor"><Input value={form.numeroMotor} onChange={(event) => setForm((current) => ({ ...current, numeroMotor: event.target.value }))} placeholder="Numero de motor" /></Field>
@@ -430,19 +449,32 @@ function DeleteDialog({ state, onClose, onConfirm }) {
   );
 }
 
-function HistorySection({ loading, history }) {
+function HistorySection({ loading, history, canEdit, onEdit }) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredHistory = useMemo(() => {
+    if (!normalizedQuery) return history;
+    return history.filter((item) => `${item.vin} ${item.marcaName} ${item.modeloName} ${item.version} ${item.numeroFactura} ${item.numeroMotor}`.toLowerCase().includes(normalizedQuery));
+  }, [history, normalizedQuery]);
+
   return (
     <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><History className="size-5" />Inventario de Carros</h2>
           <p className="text-xs font-medium text-slate-500">Consulta VIN, factura, precios y fechas del carro</p>
         </div>
-        <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{history.length} registros</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar vehiculo, VIN, factura o motor" className="h-9 w-full bg-white pl-9 sm:w-80" />
+          </div>
+          <span className="w-fit rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filteredHistory.length} de {history.length} registros</span>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <div className="max-h-[calc(100svh-300px)] overflow-auto rounded-lg border border-slate-200">
         <table className="w-full min-w-[1180px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
             <tr>
               <th className="px-3 py-3">VIN</th>
               <th className="px-3 py-3">Vehiculo</th>
@@ -457,14 +489,15 @@ function HistorySection({ loading, history }) {
               <th className="px-3 py-3">Llegada</th>
               <th className="px-3 py-3">Entrega</th>
               <th className="px-3 py-3">Reserva</th>
+              {canEdit ? <th className="px-3 py-3 text-right">Acciones</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {loading ? (
-              <tr><td colSpan={13} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
-            ) : history.map((item) => (
+              <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+            ) : filteredHistory.map((item) => (
               <tr key={item.vin}>
-                <td className="px-3 py-3 font-bold text-violet-700">{item.vin}</td>
+                <td className="px-3 py-3"><InventoryVinCell item={item} /></td>
                 <td className="px-3 py-3">{item.marcaName} {item.modeloName} <span className="font-semibold">{item.version}</span></td>
                 <td className="px-3 py-3">{item.colorExterno || "-"}</td>
                 <td className="px-3 py-3">{item.colorInterno || "-"}</td>
@@ -477,9 +510,10 @@ function HistorySection({ loading, history }) {
                 <td className="px-3 py-3">{formatDate(item.llegadaCentroAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.entregaAt)}</td>
                 <td className="px-3 py-3"><ReservationUsageBadge item={item} /></td>
+                {canEdit ? <td className="px-3 py-3 text-right"><Button variant="outline" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button></td> : null}
               </tr>
             ))}
-            {!loading && history.length === 0 ? <tr><td colSpan={13} className="py-10 text-center text-slate-500">No hay historial registrado.</td></tr> : null}
+            {!loading && filteredHistory.length === 0 ? <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500">No hay historial registrado.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -497,12 +531,11 @@ function PendingPurchasesSection({ loading, rows }) {
         </div>
         <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{rows.length} pendientes</span>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="w-full min-w-[1040px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+      <div className="max-h-[calc(100svh-300px)] overflow-auto rounded-lg border border-slate-200">
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
             <tr>
               <th className="px-3 py-3">Reserva</th>
-              <th className="px-3 py-3">Oportunidad</th>
               <th className="px-3 py-3">Cliente</th>
               <th className="px-3 py-3">Marca</th>
               <th className="px-3 py-3">Modelo</th>
@@ -512,6 +545,7 @@ function PendingPurchasesSection({ loading, rows }) {
               <th className="px-3 py-3">Color Int.</th>
               <th className="px-3 py-3">Estado</th>
               <th className="px-3 py-3">Fecha</th>
+              <th className="px-3 py-3 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -520,7 +554,6 @@ function PendingPurchasesSection({ loading, rows }) {
             ) : rows.map((item) => (
               <tr key={`${item.reservaId}-${item.precioId}`}>
                 <td className="px-3 py-3 font-bold text-violet-700">#{item.reservaId}</td>
-                <td className="px-3 py-3">{item.oportunidadCode}</td>
                 <td className="px-3 py-3 font-medium">{item.cliente}</td>
                 <td className="px-3 py-3">{item.marcaName}</td>
                 <td className="px-3 py-3">{item.modeloName}</td>
@@ -530,6 +563,12 @@ function PendingPurchasesSection({ loading, rows }) {
                 <td className="px-3 py-3">{item.colorInterno || "-"}</td>
                 <td className="px-3 py-3"><span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-bold text-orange-700">{item.estado || "pendiente"}</span></td>
                 <td className="px-3 py-3">{formatDate(item.createdAt)}</td>
+                <td className="px-3 py-3 text-right">
+                  <Link className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-violet-200 bg-white px-2 text-xs font-bold text-violet-700 hover:bg-violet-50" href={`/reservas/${item.reservaId}`}>
+                    <Eye className="size-4" />
+                    Ir a reserva
+                  </Link>
+                </td>
               </tr>
             ))}
             {!loading && rows.length === 0 ? <tr><td colSpan={11} className="py-10 text-center text-slate-500">No hay carros pendientes de compra.</td></tr> : null}
@@ -580,10 +619,23 @@ function ReservationUsageBadge({ item }) {
     return <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">Libre</span>;
   }
   return (
-    <span className="inline-flex flex-col rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">
-      <span>Reserva #{item.reservaId}</span>
-      <span className="font-medium text-violet-600">{item.oportunidadCode || item.reservaEstado || "En uso"}</span>
-    </span>
+    <Link className="inline-flex h-8 items-center justify-center gap-1 rounded-md border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 hover:bg-violet-50" href={`/reservas/${item.reservaId}`}>
+        <Eye className="size-3.5" />
+        Ir a reserva
+    </Link>
+  );
+}
+
+function InventoryVinCell({ item }) {
+  return (
+    <div className="flex min-w-40 flex-col gap-1">
+      <span className="font-bold text-violet-700">{item.vin}</span>
+      {item.enReserva ? (
+        <span className="w-fit rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-bold text-orange-700">
+          Reserva #{item.reservaId}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -614,4 +666,12 @@ function formatDateTimeForSheet(value) {
   if (Number.isNaN(date.getTime())) return String(value);
   const pad = (number) => String(number).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function dateTimeInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }

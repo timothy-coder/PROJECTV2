@@ -7,5 +7,6 @@ export const carPricesApi = {
   delete: (id) => apiFetch(`/api/car-prices/items/${id}`, { method: "DELETE" }),
   import: (rows) => apiFetch("/api/car-prices/import", { method: "POST", body: JSON.stringify({ rows }) }),
   createHistory: (payload) => apiFetch("/api/car-prices/history", { method: "POST", body: JSON.stringify(payload) }),
+  updateHistory: (vin, payload) => apiFetch(`/api/car-prices/history/${encodeURIComponent(vin)}`, { method: "PUT", body: JSON.stringify(payload) }),
   importHistory: (rows) => apiFetch("/api/car-prices/history/import", { method: "POST", body: JSON.stringify({ rows }) }),
 };

@@ -30,11 +30,15 @@ export default function ClientsPage({ userPermissions }) {
     updateClient,
     deleteClient,
     importClients,
+    importVehicles,
+    importMaintenance,
     createVehicle,
     updateVehicle,
     deleteVehicle,
   } = useClients();
   const fileInputRef = useRef(null);
+  const vehicleFileInputRef = useRef(null);
+  const maintenanceFileInputRef = useRef(null);
   const [query, setQuery] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -47,6 +51,10 @@ export default function ClientsPage({ userPermissions }) {
   const canViewVehicles = hasPerm(userPermissions, ["clientes", "vehicles"]);
   const canImport = hasPerm(userPermissions, ["clientes", "import"]);
   const canExport = hasPerm(userPermissions, ["clientes", "export"]);
+  const canImportVehicles = hasPerm(userPermissions, ["clientes", "vehicles_import"]);
+  const canExportVehicles = hasPerm(userPermissions, ["clientes", "vehicles_export"]);
+  const canImportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_import"]);
+  const canExportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_export"]);
   const tableColSpan = canViewVehicles ? 7 : 6;
   const filteredClients = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -92,6 +100,39 @@ export default function ClientsPage({ userPermissions }) {
     XLSX.writeFile(workbook, "clientes.xlsx");
   }
 
+  async function exportVehicles() {
+    const XLSX = await import("xlsx");
+    const worksheet = XLSX.utils.json_to_sheet([{
+      cliente_documento: "",
+      cliente_id_lead: "",
+      placas: "",
+      vin: "",
+      marca: "",
+      modelo: "",
+      anio: "",
+      color: "",
+      kilometraje: "",
+      fecha_ultima_visita: "",
+    }]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "vehiculos");
+    XLSX.writeFile(workbook, "vehiculos_clientes.xlsx");
+  }
+
+  async function exportMaintenance() {
+    const XLSX = await import("xlsx");
+    const worksheet = XLSX.utils.json_to_sheet([{
+      vin: "",
+      placas: "",
+      fecha_visita_taller: "",
+      kilometraje_taller: "",
+      created_by: "",
+    }]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "mantenimientos");
+    XLSX.writeFile(workbook, "mantenimientos_vehiculos.xlsx");
+  }
+
   async function importClientRows(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -105,6 +146,42 @@ export default function ClientsPage({ userPermissions }) {
       setImportMessage(`Clientes importados ${result.imported}. Actualizados ${result.updated}.`);
     } catch (error) {
       setImportMessage(error.message || "No se pudo importar clientes.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function importVehicleRows(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const result = await importVehicles(rows);
+      setImportMessage(`Vehiculos importados ${result.imported}. Actualizados ${result.updated}.`);
+    } catch (error) {
+      setImportMessage(error.message || "No se pudo importar vehiculos.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function importMaintenanceRows(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportMessage("");
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const result = await importMaintenance(rows);
+      setImportMessage(`Mantenimientos importados ${result.imported}.`);
+    } catch (error) {
+      setImportMessage(error.message || "No se pudo importar mantenimientos.");
     } finally {
       event.target.value = "";
     }
@@ -125,6 +202,10 @@ export default function ClientsPage({ userPermissions }) {
         <div className="flex flex-wrap justify-end gap-2">
           {canExport ? <Button variant="outline" onClick={exportClients}><Download className="size-4" />Exportar formato</Button> : null}
           {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
+          {canExportVehicles ? <Button variant="outline" onClick={exportVehicles}><Download className="size-4" />Formato vehiculos</Button> : null}
+          {canImportVehicles ? <Button variant="outline" onClick={() => vehicleFileInputRef.current?.click()}><Upload className="size-4" />Importar vehiculos</Button> : null}
+          {canExportMaintenance ? <Button variant="outline" onClick={exportMaintenance}><Download className="size-4" />Formato mantenimientos</Button> : null}
+          {canImportMaintenance ? <Button variant="outline" onClick={() => maintenanceFileInputRef.current?.click()}><Upload className="size-4" />Importar mantenimientos</Button> : null}
           {canCreate ? (
             <Button onClick={() => setClientDialog({ mode: "create", client: null })} className="bg-violet-700 text-white hover:bg-violet-800">
               <Plus className="size-4" />
@@ -132,6 +213,8 @@ export default function ClientsPage({ userPermissions }) {
             </Button>
           ) : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importClientRows} />
+          <input ref={vehicleFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importVehicleRows} />
+          <input ref={maintenanceFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importMaintenanceRows} />
         </div>
       </div>
       {importMessage ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
