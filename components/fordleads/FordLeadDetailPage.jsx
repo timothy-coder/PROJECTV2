@@ -1,0 +1,641 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Edit3, Info, Loader2, Save, Send, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+const STATUS_OPTIONS = ["New", "Certified", "Seller", "Order", "Signed", "Billing", "Contacted", "Assigned", "Warming", "Agency Classification", "ChatBot Classification", "Rescheduled", "SalesManager", "ContactFail", "Test-Drive", "Negotiating", "OnVisit", "Quotation", "Purchase Order", "Closed Won", "Closed Lost"];
+const CONTACT_PREFERENCE_OPTIONS = ["Phone", "Email", "Mobile message", "WhatsApp", "Mobile"];
+const DOCUMENT_TYPE_OPTIONS = ["CPF", "CNPJ", "CUIT", "CUIL", "DNI", "RUC", "RUT", "NIT", "Identity Card", "Passport", "Foreign Card"];
+const COUNTRY_OPTIONS = ["ARG", "BRA", "CHL", "COL", "PER"];
+const YES_NO_OPTIONS = ["YES", "NO"];
+const BOOLEAN_OPTIONS = ["true", "false"];
+const TEST_DRIVE_STATUS_OPTIONS = ["Scheduled", "Cancelled", "Done"];
+const TEST_DRIVE_CONDUCTED_OPTIONS = ["NO", "YES"];
+const OPPORTUNITY_STAGE_OPTIONS = ["Created", "In Attendance", "Test Drive", "Quotation", "Pre-Order", "Order", "Facturada", "Billed", "Vehicle Delivered", "No Interest", "Closed Lost"];
+const FACEBOOK_PLATFORM_OPTIONS = ["META"];
+const FACEBOOK_SUB_PLATFORM_OPTIONS = ["FB", "IG"];
+const LEAD_ORIGIN_OPTIONS = ["Manual", "Web", "Ford Credit", "Event", "Oportunidade Credit", "Smart Lab", "Compre sem sair de casa", "EcoSport - Incentivo Tabela FIPE", "Leads Enriquecidos por Parceiros", "Ford Go", "Oportunidade Ford Credit", "One Click To Lead", "Ford Go - Resgate", "Ford Digital Chile", "Dealer Digital Chile", "Manual Chile", "Event Chile", "Financial Chile", "Ford Digital Colombia", "Dealer Digital Colombia", "Ford Analog Colombia", "Dealer Analog Colombia", "Financial Colombia", "Ford Digital Peru", "Dealer Digital Peru", "Ford Analog Peru", "Dealer Analog Peru", "Financial Peru", "Distributor", "WhatsApp", "Digital Ford", "Digital"];
+const LEAD_SUB_ORIGIN_OPTIONS = ["Website", "Hotsite", "Facebook", "Phone", "Showroom", "Ford Credit", "Linkedin", "Instagram", "Direct Sales Fleet", "Edge Leads Especiais", "Ford Sempre", "Agrishow", "BOT", "Test Drive Delivery", "Prospecção", "Quote Peru", "Form at Site Ford Peru", "Form at Forum Peru", "Website Peru", "Phone Peru", "Facebook Peru", "Showroom Peru", "Landing Page Peru", "Event Peru", "SMS Peru", "Website Ford Chile", "Website Chile", "Phone Chile", "Facebook Chile", "Showroom Chile", "Landing Page", "Event Chile", "Media Chile", "Form at Site Ford.cl Chile", "Form at Forum.cl Chile", "Website Colombia", "Web Page Colombia", "Phone Colombia", "Showroom Colombia", "Landing Page Colombia", "SMS Colombia", "Event + Sales Beach Colombia", "Database Colombia", "Clients Workshop Colombia", "Social Media Colombia", "Ford Call Center Telephone Event Colombia", "Form at SUFI.com.co Colombia", "Form at Ford.com.co Colombia", "Praia da grama", "VIPs Ford", "Fazenda Boa Vista", "Shopping Cidade Jardim", "Resgate", "Social Networks", "Recommended", "Expointer", "Geral", "Genérica", "Agrotins", "Bahia Farm Show", "Norte Show", "Expoingá", "Agrobrasilia", "Rondonia Rural Show", "Expoama", "Ranger Day Campo Grande", "Ranger Day Goiânia", "Ranger Day Salvador", "Ranger Day Bauru", "Event", "Transposul", "Fordi", "Bike Series", "FIPAN", "Ranger Day São José do Rio Preto", "Superminas", "Fleet", "SMS Chile", "SMS", "Chatbot", "Website Oval Plan", "Landing Page"];
+const LEAD_SUB_ORIGIN2_OPTIONS = ["Organic", "Email Campaign", "Facebook Campaign", "Instagram Campaign", "Xaxis Campaign", "YouTube Campaign", "Adwords Campaign", "Red Display Campaign", "Facebook Lead Ads", "Whatsapp/SMS Campaign", "Display Campaign", "Chatbot / Chat online", "Chatbot", "Specialized Portal Campaigns", "Quote", "Test Drive", "Remote Purchase", "Facebook", "Instagram", "Twitter", "e-Agro"];
+const PLAN_CODE_OPTIONS = ["EMP10", "MAFI1", "MAFI3", "PRFT2", "PRFT4", "PRXL3", "PRXL5", "RAFI1", "RAFI2", "RAFI5", "RAFI6", "TEFI2", "TEFI4"];
+
+const DEFAULT_CREATE_LEAD = {
+  status: "New",
+  contact: {
+    name: "Renato Machado",
+    documentType: "CPF",
+    documentNumber: "84730242300",
+    country: "BRA",
+    email: "renatomachado@gmail.com",
+    rg: "159674001",
+    phone: "9926526161",
+    mobilePhone: "4728332218",
+    businessPhone: "6735843739",
+    fax: "1637821406",
+    contactPreference: "Phone",
+    description: "Renato Machado",
+    maritalStatus: "Married",
+    personBirthdate: "1990-07-14",
+    gender: "Male",
+    address: {
+      city: "São Paulo",
+      countryCode: "BRA",
+      postalCode: "5555",
+      state: "SP",
+      street: "Avenida Paulista",
+    },
+  },
+  vehicle: {
+    model: "Ecosport Chile",
+    tma: "7BC",
+    accessories: "wheel",
+    vin: "3FMCR9E93PRD58746",
+  },
+  preferenceDealer: {
+    code: "123456",
+  },
+  leadSource: {
+    origin: "Manual",
+    subOrigin: "Website",
+    subOrigin2: "Organic",
+  },
+  testDrive: {
+    product: {
+      tma: "CUB",
+      catalog: "XZA1",
+    },
+    conducted: "NO",
+    date: "2023-08-01T08:00:00Z",
+    periodOfDay: "Manhã",
+    reasonNo: "Lost automatically",
+    otherReasonNo: "Lost interest",
+    status: "Scheduled",
+  },
+  buyingUnderSomeoneElseName: "YES",
+  buyer: {
+    firstName: "Carlos",
+    lastName: "Francisco",
+    documentType: "CPF",
+    documentNumber: "13887841301",
+    email: "carlos.franscisco@gmail.com",
+    address: "Rua H, 320",
+    zip: "60165090",
+    city: "Fortaleza",
+    state: "CE",
+    postalCode: "12345",
+    street: "123 Main St",
+  },
+  vehicleAsPartPayment: true,
+  vehicleUsed: {
+    brand: "north",
+    model: "KA",
+    year: "2020",
+    price: 30000,
+    plate: "ABC123",
+  },
+  billingAddress: {
+    street: "Rua Norte",
+    number: "366",
+    complement: "casa",
+    neighborhood: "Helena maria",
+    city: "São Paulo",
+    country: "Brasil",
+    zip: "60165090",
+    state: "SP",
+  },
+  opportunity: {
+    name: "Tiago Carvalho",
+    stage: "In Attendance",
+    closeDate: "2023-09-26",
+    quotation: {
+      name: "Quote 1",
+      expirationDate: "2024-01-01",
+      deliveryDateNegotiated: "2023-09-01",
+      paymentMethods: "Money",
+      signalValue: "100.50",
+      financingType: "Leasing",
+      numberOfInstallments: "1000",
+      valueOfInstallments: "100",
+      financingTax: "123",
+    },
+  },
+  previousContactAttempts: "1",
+  catalog: "QWDS",
+  purchaseDate: "2023-10-01",
+  seller: {
+    email: "renata@kolekto.com.br.invalid",
+  },
+  deliveryDate: "2023-09-20",
+  eagro: {
+    id: "1198792482321",
+    createdDate: "2025-04-14",
+  },
+  facebook: {
+    id: "477930011987924",
+    formId: "543978538344729",
+    plaform: "META",
+    subPlaform: "IG",
+    createdTime: "2024-12-21T00:00:00",
+  },
+};
+
+const FIELD_INFO = {
+  id: "Minimo de caracteres: 18. Maximo de caracteres: 18.",
+  status: "Valores permitidos: New, Certified, Seller, Order, Signed, Billing, Contacted, Assigned, Warming, Agency Classification, ChatBot Classification, Rescheduled, SalesManager, ContactFail, Test-Drive, Negotiating, OnVisit, Quotation, Purchase Order, Closed Won, Closed Lost. Maximo: 255 caracteres.",
+  mediaOption: "String. Maximo: 50 caracteres.",
+  "contact.firstName": "String. Maximo: 40 caracteres. Ejemplo: John.",
+  "contact.lastName": "String. Maximo: 80 caracteres. Ejemplo: Doe.",
+  "contact.phone": "String. Maximo: 40 caracteres.",
+  "contact.phoneAreaCode": "String. Maximo: 40 caracteres.",
+  "contact.mobilePhone": "String. Maximo: 40 caracteres.",
+  "contact.mobilePhoneType": "String. Maximo: 40 caracteres. Valores: Casa, Otros, Personal, Trabajo.",
+  "contact.documentType": "Document Type. Brazil: CPF/CNPJ. Argentina: CUIT/CUIL. Chile: RUT. Colombia: NIT. Peru: DNI/RUC. Patron: ^[a-zA-Z0-9\\- ]+$. Maximo: 255 caracteres.",
+  "contact.documentNumber": "String o null. Document Id Number.",
+  "contact.email": "E-mail address. Maximo: 80 caracteres. Ejemplo: john.doe@ford.invalid.",
+  "contact.contactPreference": "Requerido. Valores: Phone, Email, Mobile message, WhatsApp, Mobile. Maximo: 255 caracteres.",
+  "contact.address": "String u objeto de direccion. Maximo de referencia: 255 caracteres.",
+  "contact.company": "String. Maximo: 255 caracteres.",
+  "vehicle.model": "Vehicle model. Verificar si el modelo esta disponible en el pais. Patron: ^[a-zA-ZÀ-ÿ0-9\\-.+/:_ ]*$. Maximo: 50 caracteres.",
+  "vehicle.version": "String. Maximo: 255 caracteres.",
+  "vehicle.tma": "String. Maximo: 50 caracteres.",
+  "vehicle.seq": "String. Maximo: 50 caracteres.",
+  "vehicle.accessories": "String. Maximo: 255 caracteres.",
+  "preferenceDealer.code": "Requerido. Patron: ^[a-zA-Z0-9]+$. Maximo: 20 caracteres.",
+  "preferenceDealer.uniqueCode": "Requerido. Identificador unico formado por codigo dealer y pais. Maximo: 20 caracteres.",
+  "preferenceDealer.name": "Account Name. Maximo: 255 caracteres.",
+  "leadSource.origin": "String. Patron: ^[a-zA-ZÀ-ÿ0-9\\-.+/ ]*$. Maximo: 255 caracteres.",
+  "leadSource.subOrigin": "String. Patron: ^[a-zA-ZÀ-ÿ0-9\\-.+// ]*$. Maximo: 255 caracteres.",
+  "leadSource.subOrigin2": "String. Patron: ^[a-zA-ZÀ-ÿ0-9\\-.+/ ]*$. Maximo: 255 caracteres.",
+  campaignName: "String. Maximo: 100 caracteres.",
+  "fleet.numberUnits": "String. Maximo: 255 caracteres.",
+  classification: "String. Maximo: 255 caracteres.",
+  preferredContactTime: "String. Maximo: 255 caracteres.",
+  "plan.planCode": "String. Valores: EMP10, MAFI1, MAFI3, PRFT2, PRFT4, PRXL3, PRXL5, RAFI1, RAFI2, RAFI5, RAFI6, TEFI2, TEFI4. Maximo: 255 caracteres.",
+  description: "String. Maximo: 32000 caracteres.",
+  lostReason: "String. Patron: ^[a-zA-ZÀ-ÿ0-9\\-.+/ ]*$. Maximo: 255 caracteres.",
+  "eagro.id": "Requerido. eAgro lead unique identification. Maximo: 250 caracteres.",
+  "eagro.createdDate": "Requerido. Fecha de creacion eAgro en formato ISO-8601. Maximo: 10 caracteres.",
+  modelColor: "String. Maximo: 50 caracteres.",
+  colorCode: "String. Maximo: 50 caracteres.",
+  "recordType.id": "Patron: ^[a-zA-Z0-9]+$. Minimo: 18. Maximo: 18.",
+  "recordType.name": "Account Name. Maximo: 255 caracteres.",
+  "createdBy.id": "Patron: ^[a-zA-Z0-9]+$. Minimo: 18. Maximo: 18.",
+  "createdBy.name": "Account Name. Maximo: 255 caracteres.",
+  "owner.id": "Patron: ^[a-zA-Z0-9]+$. Minimo: 18. Maximo: 18.",
+  "owner.name": "Account Name. Maximo: 255 caracteres.",
+};
+
+const SECTIONS = [
+  { title: "Lead", fields: ["id", "status", "mediaOption", "lastModifiedDate", "campaignName", "classification", "preferredContactTime", "financingFlag", "vehicleAsPartPayment", "currentVehicleExchange", "description", "lostReason", "directSales", "traditionalSales", "modelColor", "colorCode", "ackDate", "createdDate"] },
+  { title: "Contacto", fields: ["contact.name", "contact.firstName", "contact.lastName", "contact.phone", "contact.phoneAreaCode", "contact.mobilePhone", "contact.mobilePhoneType", "contact.documentType", "contact.documentNumber", "contact.email", "contact.contactPreference", "contact.agreeReceiveContact", "contact.company"] },
+  { title: "Direccion contacto", fields: ["contact.address.city", "contact.address.countryCode", "contact.address.street", "contact.address.postalCode", "contact.address.state"] },
+  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.version", "vehicle.tma", "vehicle.seq", "vehicle.accessories", "vehicle.accessoriesDetails"] },
+  { title: "Dealer preferido", fields: ["preferenceDealer.code", "preferenceDealer.uniqueCode", "preferenceDealer.name"] },
+  { title: "Origen", fields: ["leadSource.origin", "leadSource.subOrigin", "leadSource.subOrigin2"] },
+  { title: "Flota y plan", fields: ["fleet.form", "fleet.numberUnits", "plan.planCode", "plan.ovaloPlan"] },
+  { title: "eAgro / auditoria", fields: ["eagro.id", "eagro.createdDate", "recordType.id", "recordType.name", "createdBy.id", "createdBy.name", "owner.id", "owner.name"] },
+];
+
+const CREATE_SECTIONS = [
+  { title: "Lead", fields: ["status", "previousContactAttempts", "catalog", "purchaseDate", "deliveryDate", "buyingUnderSomeoneElseName", "vehicleAsPartPayment"] },
+  { title: "Contacto", fields: ["contact.name", "contact.documentType", "contact.documentNumber", "contact.country", "contact.email", "contact.rg", "contact.phone", "contact.mobilePhone", "contact.businessPhone", "contact.fax", "contact.contactPreference", "contact.description", "contact.maritalStatus", "contact.personBirthdate", "contact.gender"] },
+  { title: "Direccion contacto", fields: ["contact.address.city", "contact.address.countryCode", "contact.address.street", "contact.address.postalCode", "contact.address.state"] },
+  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.tma", "vehicle.accessories", "vehicle.vin"] },
+  { title: "Dealer y origen", fields: ["preferenceDealer.code", "leadSource.origin", "leadSource.subOrigin", "leadSource.subOrigin2"] },
+  { title: "Test Drive", fields: ["testDrive.product.tma", "testDrive.product.catalog", "testDrive.conducted", "testDrive.date", "testDrive.periodOfDay", "testDrive.reasonNo", "testDrive.otherReasonNo", "testDrive.status"] },
+  { title: "Comprador", fields: ["buyer.firstName", "buyer.lastName", "buyer.documentType", "buyer.documentNumber", "buyer.email", "buyer.address", "buyer.zip", "buyer.city", "buyer.state", "buyer.postalCode", "buyer.street"] },
+  { title: "Vehiculo usado", fields: ["vehicleUsed.brand", "vehicleUsed.model", "vehicleUsed.year", "vehicleUsed.price", "vehicleUsed.plate"] },
+  { title: "Direccion de facturacion", fields: ["billingAddress.street", "billingAddress.number", "billingAddress.complement", "billingAddress.neighborhood", "billingAddress.city", "billingAddress.country", "billingAddress.zip", "billingAddress.state"] },
+  { title: "Oportunidad", fields: ["opportunity.name", "opportunity.stage", "opportunity.closeDate", "opportunity.quotation.name", "opportunity.quotation.expirationDate", "opportunity.quotation.deliveryDateNegotiated", "opportunity.quotation.paymentMethods", "opportunity.quotation.signalValue", "opportunity.quotation.financingType", "opportunity.quotation.numberOfInstallments", "opportunity.quotation.valueOfInstallments", "opportunity.quotation.financingTax"] },
+  { title: "Vendedor / eAgro / Facebook", fields: ["seller.email", "eagro.id", "eagro.createdDate", "facebook.id", "facebook.formId", "facebook.plaform", "facebook.subPlaform", "facebook.createdTime"] },
+];
+
+const EDIT_SECTIONS = [
+  { title: "Lead", fields: ["id", "status", "previousContactAttempts", "catalog", "purchaseDate", "deliveryDate", "buyingUnderSomeoneElseName", "vehicleAsPartPayment", "createdDate", "lastModifiedDate", "ackDate"] },
+  ...CREATE_SECTIONS.slice(1),
+  { title: "Datos Ford bloqueados", fields: ["recordType.id", "recordType.name", "createdBy.id", "createdBy.name", "owner.id", "owner.name"] },
+];
+
+const EDITABLE_FIELDS = new Set(CREATE_SECTIONS.flatMap((section) => section.fields));
+
+const FIELD_LABELS = {
+  id: "ID",
+  status: "Estado",
+  mediaOption: "Opcion de medio",
+  lastModifiedDate: "Fecha de modificacion",
+  campaignName: "Campania",
+  classification: "Clasificacion",
+  preferredContactTime: "Horario preferido",
+  financingFlag: "Tiene financiamiento",
+  vehicleAsPartPayment: "Vehiculo como parte de pago",
+  currentVehicleExchange: "Intercambio de vehiculo actual",
+  description: "Descripcion",
+  lostReason: "Motivo de perdida",
+  directSales: "Venta directa",
+  traditionalSales: "Venta tradicional",
+  modelColor: "Color del modelo",
+  colorCode: "Codigo de color",
+  ackDate: "Fecha ACK",
+  createdDate: "Fecha de creacion",
+  previousContactAttempts: "Intentos previos de contacto",
+  catalog: "Catalogo",
+  purchaseDate: "Fecha de compra",
+  deliveryDate: "Fecha de entrega",
+  buyingUnderSomeoneElseName: "Compra a nombre de otra persona",
+  "contact.name": "Nombre del contacto",
+  "contact.firstName": "Nombres",
+  "contact.lastName": "Apellidos",
+  "contact.documentType": "Tipo de documento",
+  "contact.documentNumber": "Numero de documento",
+  "contact.country": "Pais",
+  "contact.email": "Email",
+  "contact.rg": "RG",
+  "contact.phone": "Telefono",
+  "contact.phoneAreaCode": "Codigo de area",
+  "contact.mobilePhone": "Celular",
+  "contact.mobilePhoneType": "Tipo de celular",
+  "contact.businessPhone": "Telefono laboral",
+  "contact.fax": "Fax",
+  "contact.contactPreference": "Preferencia de contacto",
+  "contact.description": "Descripcion del contacto",
+  "contact.maritalStatus": "Estado civil",
+  "contact.personBirthdate": "Fecha de nacimiento",
+  "contact.gender": "Genero",
+  "contact.agreeReceiveContact": "Acepta recibir contacto",
+  "contact.address": "Direccion",
+  "contact.company": "Empresa",
+  "contact.address.city": "Ciudad",
+  "contact.address.countryCode": "Codigo pais direccion",
+  "contact.address.postalCode": "Codigo postal",
+  "contact.address.state": "Estado/Region",
+  "contact.address.street": "Calle",
+  "vehicle.model": "Modelo",
+  "vehicle.version": "Version",
+  "vehicle.tma": "TMA",
+  "vehicle.seq": "SEQ",
+  "vehicle.accessories": "Accesorios",
+  "vehicle.accessoriesDetails": "Detalle de accesorios",
+  "vehicle.vin": "VIN",
+  "preferenceDealer.code": "Codigo dealer",
+  "preferenceDealer.uniqueCode": "Codigo unico dealer",
+  "preferenceDealer.name": "Nombre dealer",
+  "leadSource.origin": "Origen",
+  "leadSource.subOrigin": "Suborigen",
+  "leadSource.subOrigin2": "Suborigen 2",
+  "fleet.form": "Formulario de flota",
+  "fleet.numberUnits": "Numero de unidades",
+  "plan.planCode": "Codigo de plan",
+  "plan.ovaloPlan": "Plan ovalo",
+  "testDrive.product.tma": "TMA producto",
+  "testDrive.product.catalog": "Catalogo producto",
+  "testDrive.conducted": "Test drive realizado",
+  "testDrive.date": "Fecha test drive",
+  "testDrive.periodOfDay": "Periodo del dia",
+  "testDrive.reasonNo": "Motivo de no test drive",
+  "testDrive.otherReasonNo": "Otro motivo",
+  "testDrive.status": "Estado test drive",
+  "buyer.firstName": "Nombres comprador",
+  "buyer.lastName": "Apellidos comprador",
+  "buyer.documentType": "Tipo documento comprador",
+  "buyer.documentNumber": "Documento comprador",
+  "buyer.email": "Email comprador",
+  "buyer.address": "Direccion comprador",
+  "buyer.zip": "ZIP comprador",
+  "buyer.city": "Ciudad comprador",
+  "buyer.state": "Estado comprador",
+  "buyer.postalCode": "Codigo postal comprador",
+  "buyer.street": "Calle comprador",
+  "vehicleUsed.brand": "Marca usado",
+  "vehicleUsed.model": "Modelo usado",
+  "vehicleUsed.year": "Anio usado",
+  "vehicleUsed.price": "Precio usado",
+  "vehicleUsed.plate": "Placa usado",
+  "billingAddress.street": "Calle facturacion",
+  "billingAddress.number": "Numero facturacion",
+  "billingAddress.complement": "Complemento",
+  "billingAddress.neighborhood": "Barrio",
+  "billingAddress.city": "Ciudad facturacion",
+  "billingAddress.country": "Pais facturacion",
+  "billingAddress.zip": "ZIP facturacion",
+  "billingAddress.state": "Estado facturacion",
+  "opportunity.name": "Nombre oportunidad",
+  "opportunity.stage": "Etapa oportunidad",
+  "opportunity.closeDate": "Fecha cierre",
+  "opportunity.quotation.name": "Nombre cotizacion",
+  "opportunity.quotation.expirationDate": "Vencimiento cotizacion",
+  "opportunity.quotation.deliveryDateNegotiated": "Entrega negociada",
+  "opportunity.quotation.paymentMethods": "Metodos de pago",
+  "opportunity.quotation.signalValue": "Valor senial",
+  "opportunity.quotation.financingType": "Tipo financiamiento",
+  "opportunity.quotation.numberOfInstallments": "Numero de cuotas",
+  "opportunity.quotation.valueOfInstallments": "Valor de cuotas",
+  "opportunity.quotation.financingTax": "Tasa financiamiento",
+  "seller.email": "Email vendedor",
+  "eagro.id": "ID eAgro",
+  "eagro.createdDate": "Fecha eAgro",
+  "facebook.id": "ID Facebook",
+  "facebook.formId": "ID formulario",
+  "facebook.plaform": "Plataforma",
+  "facebook.subPlaform": "Subplataforma",
+  "facebook.createdTime": "Fecha Facebook",
+  "recordType.id": "ID tipo registro",
+  "recordType.name": "Nombre tipo registro",
+  "createdBy.id": "ID creado por",
+  "createdBy.name": "Nombre creado por",
+  "owner.id": "ID propietario",
+  "owner.name": "Nombre propietario",
+};
+
+const SELECT_OPTIONS = {
+  status: STATUS_OPTIONS,
+  "contact.documentType": DOCUMENT_TYPE_OPTIONS,
+  "contact.country": COUNTRY_OPTIONS,
+  "contact.contactPreference": CONTACT_PREFERENCE_OPTIONS,
+  "contact.address.countryCode": COUNTRY_OPTIONS,
+  "buyer.documentType": DOCUMENT_TYPE_OPTIONS,
+  buyingUnderSomeoneElseName: YES_NO_OPTIONS,
+  vehicleAsPartPayment: BOOLEAN_OPTIONS,
+  "testDrive.conducted": TEST_DRIVE_CONDUCTED_OPTIONS,
+  "testDrive.status": TEST_DRIVE_STATUS_OPTIONS,
+  "opportunity.stage": OPPORTUNITY_STAGE_OPTIONS,
+  "facebook.plaform": FACEBOOK_PLATFORM_OPTIONS,
+  "facebook.platform": FACEBOOK_PLATFORM_OPTIONS,
+  "facebook.subPlaform": FACEBOOK_SUB_PLATFORM_OPTIONS,
+  "facebook.subPlatform": FACEBOOK_SUB_PLATFORM_OPTIONS,
+  "leadSource.origin": LEAD_ORIGIN_OPTIONS,
+  "leadSource.subOrigin": LEAD_SUB_ORIGIN_OPTIONS,
+  "leadSource.subOrigin2": LEAD_SUB_ORIGIN2_OPTIONS,
+  "plan.planCode": PLAN_CODE_OPTIONS,
+};
+
+function readPath(data, path) {
+  return path.split(".").reduce((acc, part) => acc?.[part], data);
+}
+
+function writePath(data, path, value) {
+  const clone = structuredClone(data);
+  const parts = path.split(".");
+  let cursor = clone;
+  for (const part of parts.slice(0, -1)) {
+    cursor[part] = cursor[part] && typeof cursor[part] === "object" ? cursor[part] : {};
+    cursor = cursor[part];
+  }
+  cursor[parts.at(-1)] = value;
+  return clone;
+}
+
+function cleanPayload(value) {
+  if (Array.isArray(value)) return value.map(cleanPayload).filter((item) => item !== undefined);
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+      .map(([key, item]) => [key, cleanPayload(item)])
+      .filter(([, item]) => item !== undefined);
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+  if (value === "") return undefined;
+  return value;
+}
+
+function payloadFromSections(source, sections) {
+  return sections.reduce((payload, section) => {
+    section.fields.forEach((field) => {
+      const value = readPath(source, field);
+      if (value !== undefined) {
+        payload = writePath(payload, field, value);
+      }
+    });
+    return payload;
+  }, {});
+}
+
+function blankLeadFromSections() {
+  return CREATE_SECTIONS.reduce((payload, section) => {
+    section.fields.forEach((field) => {
+      payload = writePath(payload, field, "");
+    });
+    return payload;
+  }, {});
+}
+
+function parseFieldValue(field, value) {
+  if (BOOLEAN_OPTIONS.includes(String(value)) && ["vehicleAsPartPayment", "financingFlag", "directSales", "traditionalSales"].includes(field)) return value === "true";
+  if (field === "vehicleUsed.price") {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : "";
+  }
+  return value;
+}
+
+function displayValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Si" : "No";
+  if (Array.isArray(value)) return value.length ? value.map((item) => item?.name || JSON.stringify(item)).join(", ") : "-";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+async function readJson(response) {
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message || "No se pudo cargar el lead.");
+  return payload;
+}
+
+export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
+  const isCreate = mode === "create";
+  const [lead, setLead] = useState(isCreate ? blankLeadFromSections() : null);
+  const [originalLead, setOriginalLead] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(!isCreate);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (isCreate) return;
+    let cancelled = false;
+    fetch(`/api/ford-leads/${encodeURIComponent(id)}`)
+      .then(readJson)
+      .then((data) => {
+        if (!cancelled) {
+          setLead(data);
+          setOriginalLead(data);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isCreate]);
+
+  const title = useMemo(() => isCreate ? "Agregar Lead" : lead?.id || id, [id, isCreate, lead?.id]);
+
+  async function submitLead() {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
+      const response = await fetch("/api/ford-leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await readJson(response);
+      setMessage(data?.message || "Lead enviado a Ford.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateLead() {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload = cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
+      const response = await fetch(`/api/ford-leads/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await readJson(response);
+      setMessage(data?.message || "Lead actualizado en Ford.");
+      setEditing(false);
+      setOriginalLead(lead);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function cancelEdit() {
+    setLead(originalLead);
+    setEditing(false);
+    setError("");
+    setMessage("");
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-4 text-black">
+        <div className="flex items-center gap-3">
+          <Link href="/leads-ford" className="inline-flex size-8 items-center justify-center rounded-md border bg-white hover:bg-slate-50">
+            <ArrowLeft className="size-4" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-black">{isCreate ? "Agregar Lead Ford" : editing ? "Editar Lead Ford" : "Detalle Lead Ford"}</h1>
+            <p className="text-sm text-black">{title}</p>
+          </div>
+          {isCreate ? (
+            <Button className="ml-auto" onClick={submitLead} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+              Enviar Lead
+            </Button>
+          ) : lead && editing ? (
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" onClick={cancelEdit} disabled={saving}>
+                <X className="mr-2 size-4" />
+                Cancelar
+              </Button>
+              <Button onClick={updateLead} disabled={saving}>
+                {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+                Actualizar Lead
+              </Button>
+            </div>
+          ) : lead ? (
+            <Button className="ml-auto" onClick={() => setEditing(true)}>
+              <Edit3 className="mr-2 size-4" />
+              Editar
+            </Button>
+          ) : null}
+        </div>
+
+        {loading ? <div className="rounded-lg bg-white p-6 text-sm font-semibold"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando detalle...</div> : null}
+        {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div> : null}
+        {message ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{message}</div> : null}
+
+        {lead ? (
+          <>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {(isCreate ? CREATE_SECTIONS : editing ? EDIT_SECTIONS : SECTIONS).map((section) => (
+                <section key={section.title} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <h2 className="mb-3 text-base font-bold text-black">{section.title}</h2>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {section.fields.map((field) => <DetailField key={field} lead={lead} field={field} editable={isCreate || (editing && EDITABLE_FIELDS.has(field))} locked={editing && !EDITABLE_FIELDS.has(field)} onChange={(nextValue) => setLead((current) => writePath(current, field, parseFieldValue(field, nextValue)))} />)}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-base font-bold text-black">JSON completo</h2>
+              <pre className="mt-3 max-h-[520px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-black">{JSON.stringify(lead, null, 2)}</pre>
+            </section>
+          </>
+        ) : null}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function DetailField({ lead, field, editable = false, locked = false, onChange }) {
+  const value = readPath(lead, field);
+  const info = FIELD_INFO[field];
+  const options = SELECT_OPTIONS[field];
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <div className="flex items-center gap-1">
+        <span className="truncate text-xs font-bold uppercase text-black">{FIELD_LABELS[field] || field}</span>
+        {locked ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Bloqueado</span> : null}
+        {info ? (
+          <Tooltip>
+            <TooltipTrigger className="inline-flex size-5 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100">
+              <Info className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-sm whitespace-normal bg-slate-950 text-white">
+              {info}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
+      {options ? (
+        <Select value={value === undefined || value === null ? "" : String(value)} onValueChange={(nextValue) => editable && onChange?.(nextValue)} disabled={!editable}>
+          <SelectTrigger className="h-9 w-full bg-white text-black">
+            <SelectValue placeholder="-" />
+          </SelectTrigger>
+          <SelectContent>
+            {(value && !options.includes(String(value)) ? [String(value), ...options] : options).map((option) => (
+              <SelectItem key={option} value={option}>{option}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        editable ? (
+          field === "description" || field.endsWith(".description") ? (
+            <Textarea className="min-h-20 bg-white text-black" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+          ) : (
+            <Input className="h-9 bg-white text-black" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+          )
+        ) : (
+          <div className="min-h-9 break-words rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-black">{displayValue(value)}</div>
+        )
+      )}
+    </div>
+  );
+}

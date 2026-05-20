@@ -1,51 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Eye, Filter, Pencil, Search, Send } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronsUpDown, Eye, Filter, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { hasPerm } from "@/lib/permissions";
-
-const DEFAULT_PAYLOAD = {
-  status: "Assigned",
-  contact: {
-    name: "Nombre Cliente",
-    documentType: "RUC",
-    documentNumber: "00000000000",
-    country: "PER",
-    email: "cliente@email.com",
-    phone: "999999999",
-    mobilePhone: "999999999",
-    contactPreference: "Phone",
-    company: "",
-    agreeReceiveContact: false,
-    address: {
-      city: "Lima",
-      country: "PER",
-      postalCode: "",
-      state: "Lima",
-      street: "",
-    },
-  },
-  vehicle: {
-    model: "Mustang Peru",
-    version: "1.0",
-  },
-  preferenceDealer: {
-    code: "S28817",
-  },
-  leadSource: {
-    origin: "Manual",
-    subOrigin: "Website",
-    subOrigin2: "Organic",
-  },
-  financingFlag: false,
-  currentVehicleExchange: "No",
-};
 
 const TYPE_STATUS_OPTIONS = [
   "",
@@ -73,14 +36,6 @@ const TYPE_STATUS_OPTIONS = [
 ];
 
 const CLOSED_TYPE_STATUS = new Set(["Closed Won", "Closed Lost", "Signed"]);
-
-function safeJson(value) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return "";
-  }
-}
 
 function normalizeDateTime(value) {
   if (!value) return "";
@@ -157,35 +112,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [typeStatusOpen, setTypeStatusOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [items, setItems] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [leadId, setLeadId] = useState("");
-  const [createPayload, setCreatePayload] = useState(safeJson(DEFAULT_PAYLOAD));
-  const [patchPayload, setPatchPayload] = useState("{\n  \"status\": \"Contacted\"\n}");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetch("/api/ford-leads?config=1")
-      .then(readJson)
-      .then((data) => {
-        if (data.dealerCode || data.country) {
-          setCreatePayload((current) => {
-            try {
-              const payload = JSON.parse(current);
-              if (data.dealerCode) payload.preferenceDealer = { ...(payload.preferenceDealer || {}), code: data.dealerCode };
-              if (data.country) {
-                payload.contact = { ...(payload.contact || {}), country: data.country };
-                payload.contact.address = { ...(payload.contact.address || {}), country: data.country };
-              }
-              return safeJson(payload);
-            } catch {
-              return current;
-            }
-          });
-        }
-      })
-      .catch((error) => setMessage(error.message));
-  }, []);
 
   const status = useMemo(() => (CLOSED_TYPE_STATUS.has(typeStatus) ? "closed" : "open"), [typeStatus]);
   const filteredItems = useMemo(() => {
@@ -194,10 +122,10 @@ export default function FordLeadsPage({ userPermissions = {} }) {
     return items.filter((item) => itemSearchText(item).includes(needle));
   }, [items, searchTerm]);
 
-  async function searchLeads() {
+  async function searchLeads({ silent = false } = {}) {
     if (!canSync) return;
     setLoading(true);
-    setMessage("");
+    if (!silent) setMessage("");
     try {
       const params = new URLSearchParams();
       if (startDate) params.set("startDate", normalizeDateTime(startDate));
@@ -215,70 +143,51 @@ export default function FordLeadsPage({ userPermissions = {} }) {
     }
   }
 
-  async function findById() {
-    if (!leadId.trim()) return setMessage("Ingresa el id del lead.");
-    setLoading(true);
-    setMessage("");
-    try {
-      const data = await fetch(`/api/ford-leads/${encodeURIComponent(leadId.trim())}`).then(readJson);
-      setSelected(data);
-      setMessage("Lead encontrado.");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function createLead() {
-    setLoading(true);
-    setMessage("");
-    try {
-      const data = await fetch("/api/ford-leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(JSON.parse(createPayload)),
-      }).then(readJson);
-      setSelected(data);
-      setMessage(data?.message || "Lead enviado a Ford.");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function patchLead() {
-    if (!leadId.trim()) return setMessage("Ingresa el id del lead.");
-    setLoading(true);
-    setMessage("");
-    try {
-      const data = await fetch(`/api/ford-leads/${encodeURIComponent(leadId.trim())}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(JSON.parse(patchPayload)),
-      }).then(readJson);
-      setSelected(data);
-      setMessage(data?.message || "Lead actualizado en Ford.");
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    if (!canSync) return;
+    let cancelled = false;
+    Promise.resolve().then(async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set("startDate", normalizeDateTime("2025-12-02T00:00:00"));
+        params.set("status", "open");
+        const data = await fetch(`/api/ford-leads?${params.toString()}`).then(readJson);
+        if (!cancelled) {
+          setItems(data.items || []);
+          setMessage(`Se encontraron ${data.items?.length || 0} leads.`);
+        }
+      } catch (error) {
+        if (!cancelled) setMessage(error.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canSync]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="min-h-[calc(100svh-80px)] space-y-5 bg-slate-50 p-4 text-black sm:p-6 lg:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-black">Leads Ford</h1>
-          <p className="text-sm text-black">Consulta, crea y actualiza leads usando la configuracion Ford del entorno.</p>
+          <p className="mt-1 text-sm text-slate-600">Consulta, crea y actualiza leads usando la configuracion Ford del entorno.</p>
         </div>
+        {canCreate ? (
+          <Link href="/leads-ford/nuevo">
+            <Button>
+              <Send className="mr-2 size-4" />
+              Agregar Lead
+            </Button>
+          </Link>
+        ) : null}
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
             <Field label="Inicio">
               <Input type="datetime-local" step="1" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
             </Field>
@@ -332,11 +241,16 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             </div>
           </div>
 
-          {message ? <div className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-sm font-medium text-black">{message}</div> : null}
+          {message ? <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-black">{message}</div> : null}
 
-          <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <h2 className="text-sm font-bold text-black">Resultados</h2>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{filteredItems.length} visibles</span>
+            </div>
+            <div className="max-h-[calc(100svh-360px)] overflow-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-black">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase text-black">
                 <tr>
                   <th className="px-3 py-2">Id</th>
                   <th className="px-3 py-2">Estado</th>
@@ -347,8 +261,13 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredItems.map((item, index) => (
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-10 text-center text-black">Cargando leads...</td>
+                  </tr>
+                ) : null}
+                {!loading && filteredItems.map((item, index) => (
                   <tr key={`${item.id || "lead"}-${index}`} className="hover:bg-slate-50">
                     <td className="max-w-[190px] truncate px-3 py-2 font-mono text-xs">{item.id || "-"}</td>
                     <td className="px-3 py-2">{item.status || "-"}</td>
@@ -357,64 +276,28 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                     <td className="px-3 py-2">{vehicleName(item.vehicle)}</td>
                     <td className="px-3 py-2">{formatFordDate(item.lastModifiedDate || item.createdDate)}</td>
                     <td className="px-3 py-2 text-right">
-                      <Button size="icon" variant="ghost" onClick={() => { setSelected(item); setLeadId(item.id || ""); }}>
-                        <Eye className="size-4" />
-                      </Button>
+                      {item.id ? (
+                        <Link href={`/leads-ford/${encodeURIComponent(item.id)}`} className="inline-flex size-7 items-center justify-center rounded-md hover:bg-slate-100" title="Ver detalle">
+                          <Eye className="size-4" />
+                        </Link>
+                      ) : (
+                        <Button size="icon" variant="ghost">
+                          <Eye className="size-4" />
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
-                {!filteredItems.length ? (
+                {!loading && !filteredItems.length ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-black">Busca leads para ver resultados.</td>
+                    <td colSpan={7} className="px-3 py-10 text-center text-slate-600">No hay leads para mostrar con estos filtros.</td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-black">Buscar por ID</h2>
-            <div className="mt-3 flex gap-2">
-              <Input value={leadId} onChange={(event) => setLeadId(event.target.value)} placeholder="00Q..." />
-              <Button size="icon" variant="outline" onClick={findById} disabled={loading}>
-                <Search className="size-4" />
-              </Button>
-            </div>
-          </div>
-
-          {canEdit ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-black">Actualizar Lead</h2>
-              <Textarea className="mt-3 min-h-32 font-mono text-xs" value={patchPayload} onChange={(event) => setPatchPayload(event.target.value)} />
-              <Button className="mt-3 w-full" variant="outline" onClick={patchLead} disabled={loading}>
-                <Pencil className="mr-2 size-4" />
-                Actualizar en Ford
-              </Button>
-            </div>
-          ) : null}
-        </aside>
-      </section>
-
-      {canCreate ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-black">Agregar Lead a Ford</h2>
-            <Button onClick={createLead} disabled={loading}>
-              <Send className="mr-2 size-4" />
-              Enviar Lead
-            </Button>
-          </div>
-          <Textarea className="mt-3 min-h-80 font-mono text-xs" value={createPayload} onChange={(event) => setCreatePayload(event.target.value)} />
-        </section>
-      ) : null}
-
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-black">Respuesta Ford</h2>
-        <pre className="mt-3 max-h-96 overflow-auto rounded-md border border-slate-200 bg-white p-3 text-xs text-black">
-          {selected ? safeJson(selected) : "Sin respuesta seleccionada."}
-        </pre>
       </section>
     </div>
   );

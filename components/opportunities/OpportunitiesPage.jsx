@@ -106,7 +106,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
 }
 
 function GeneralView({ data, loading, canEdit, canViewAll, onView, onEdit, onAssign }) {
-  return <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[1180px] text-left text-sm"><thead className="bg-slate-50 text-xs font-bold"><tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Origen</th><th>Etapa</th><th>Asignado a</th><th>Proxima Agenda</th><th>Estado tiempo</th><th>Temperatura</th><th>Detalle</th><th className="text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-200">{loading ? <tr><td colSpan={10} className="py-10 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr> : data.map((item) => <tr key={item.id} style={rowTimeStyle(item)}><td className="px-3 py-3"><button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>{item.code}</button></td><td>{item.clienteNombre}</td><td>{item.origenNombre}</td><td><StageBadge item={item} /></td><td>{item.asignadoANombre}</td><td className="px-3 py-3 font-semibold">{item.nextAgenda || "-"}</td><td><TimeStateBadge item={item} /></td><td><span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-bold text-orange-700">{item.temperature}%</span></td><td>{item.detail}</td><td><div className="flex justify-end gap-2 px-3"><Button size="icon" variant="ghost" onClick={() => onView(item)}><Eye className="size-4" /></Button>{canEdit ? <Button size="icon" variant="ghost" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button> : null}{canViewAll ? <Button size="icon" variant="ghost" onClick={() => onAssign(item)}><Send className="size-4" /></Button> : null}</div></td></tr>)}</tbody></table></div></section>;
+  return <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[1260px] text-left text-sm"><thead className="bg-slate-50 text-xs font-bold"><tr><th className="px-3 py-3">Codigo</th><th>Fecha creacion</th><th>Cliente</th><th>Origen</th><th>Etapa</th><th>Asignado a</th><th>Proxima Agenda</th><th>Estado tiempo</th><th>Temperatura</th><th>Detalle</th><th className="text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-200">{loading ? <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr> : data.map((item) => <tr key={item.id} style={rowTimeStyle(item)}><td className="px-3 py-3"><button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>{item.code}</button></td><td><DateTimeStack value={item.createdAt} /></td><td>{item.clienteNombre}</td><td>{item.origenNombre}</td><td><StageBadge item={item} /></td><td>{item.asignadoANombre}</td><td className="px-3 py-3 font-semibold"><DateTimeStack value={item.nextAgenda} /></td><td><TimeStateBadge item={item} /></td><td><span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-bold text-orange-700">{item.temperature}%</span></td><td>{item.detail}</td><td><div className="flex justify-end gap-2 px-3"><Button size="icon" variant="ghost" onClick={() => onView(item)}><Eye className="size-4" /></Button>{canEdit ? <Button size="icon" variant="ghost" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button> : null}{canViewAll ? <Button size="icon" variant="ghost" onClick={() => onAssign(item)}><Send className="size-4" /></Button> : null}</div></td></tr>)}</tbody></table></div></section>;
 }
 
 function TimelineView({ data, mode, setMode }) {
@@ -284,4 +284,19 @@ function matchesTime(value, mode) {
 function formatShortDate(value) {
   if (!value) return "";
   return new Date(value).toLocaleString("es-PE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function DateTimeStack({ value }) {
+  const formatted = formatDateTime(value);
+  if (!formatted) return "-";
+  const [date, time] = formatted.split(" ");
+  return <span className="inline-flex min-w-28 flex-col leading-tight"><span>{date}</span><span className="mt-1 text-xs font-semibold text-slate-600">{time}</span></span>;
 }
