@@ -4,10 +4,15 @@ import { Eye, FileDown } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { hasPerm } from "@/lib/permissions";
 
 export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quoteId, userPermissions = {} }) {
   const [downloading, setDownloading] = useState(false);
+  const [tcDialog, setTcDialog] = useState(null);
+  const [tcValue, setTcValue] = useState("");
   const canFord = hasPerm(userPermissions, ["cotizacion_ford", "view"]);
   const canOther = hasPerm(userPermissions, ["cotizacion_otros", "view"]);
 
@@ -36,68 +41,106 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
     }
   }
 
+  function requestOtherPdf(full = false) {
+    setTcValue("");
+    setTcDialog({
+      full,
+      url: `/api/cotizacion-preview/${quoteId}/ford-pdf?format=otros${full ? "&full=1" : ""}`,
+      name: full ? `cotizacion-otros-completa-${quoteId}` : `cotizacion-otros-${quoteId}`,
+    });
+  }
+
+  function confirmOtherPdf() {
+    if (!tcValue.trim()) {
+      toast.error("Ingresa el TC");
+      return;
+    }
+    const separator = tcDialog.url.includes("?") ? "&" : "?";
+    const url = `${tcDialog.url}${separator}tc=${encodeURIComponent(tcValue.trim())}`;
+    const name = tcDialog.name;
+    setTcDialog(null);
+    downloadServerPdf(url, name);
+  }
+
   return (
-    <div className="mt-5 flex justify-center gap-3 print:hidden">
-      {quoteId && canFord ? (
-        <>
+    <>
+      <div className="mt-5 flex justify-center gap-3 print:hidden">
+        {quoteId && canFord ? (
+          <>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-60"
+              disabled={downloading}
+              onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf`, fileName)}
+            >
+              <FileDown className="size-4" />
+              {downloading ? "Generando..." : "Descargar PDF"}
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-60"
+              disabled={downloading}
+              onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?full=1`, `cotizacion-completa-${quoteId}`)}
+            >
+              <FileDown className="size-4" />
+              Cotizacion + ficha tecnica
+            </button>
+          </>
+        ) : null}
+        {quoteId && canOther ? (
+          <>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-900 px-4 text-sm font-bold text-white disabled:opacity-60"
+              disabled={downloading}
+              onClick={() => requestOtherPdf(false)}
+            >
+              <FileDown className="size-4" />
+              Descargar PDF
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-neutral-700 px-4 text-sm font-bold text-white disabled:opacity-60"
+              disabled={downloading}
+              onClick={() => requestOtherPdf(true)}
+            >
+              <FileDown className="size-4" />
+              Cotizacion + ficha tecnica
+            </button>
+          </>
+        ) : null}
+        {publicToken ? (
+          <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white" href={`/cotizacion/${publicToken}`}>
+            <Eye className="size-4" />
+            Ver Enlace Publico
+          </Link>
+        ) : (
           <button
             type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-60"
-            disabled={downloading}
-            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf`, fileName)}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white opacity-50"
+            disabled
           >
-            <FileDown className="size-4" />
-            {downloading ? "Generando..." : "Descargar PDF"}
+            <Eye className="size-4" />
+            Ver Enlace Publico
           </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-60"
-            disabled={downloading}
-            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?full=1`, `cotizacion-completa-${quoteId}`)}
-          >
-            <FileDown className="size-4" />
-            Cotizacion + ficha tecnica
-          </button>
-        </>
-      ) : null}
-      {quoteId && canOther ? (
-        <>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-900 px-4 text-sm font-bold text-white disabled:opacity-60"
-            disabled={downloading}
-            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?format=otros`, `cotizacion-otros-${quoteId}`)}
-          >
-            <FileDown className="size-4" />
-            Descargar PDF
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-neutral-700 px-4 text-sm font-bold text-white disabled:opacity-60"
-            disabled={downloading}
-            onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?format=otros&full=1`, `cotizacion-otros-completa-${quoteId}`)}
-          >
-            <FileDown className="size-4" />
-            Cotizacion + ficha tecnica
-          </button>
-        </>
-      ) : null}
-      {publicToken ? (
-        <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white" href={`/cotizacion/${publicToken}`}>
-          <Eye className="size-4" />
-          Ver Enlace Publico
-        </Link>
-      ) : (
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white opacity-50"
-          disabled
-        >
-          <Eye className="size-4" />
-          Ver Enlace Publico
-        </button>
-      )}
-    </div>
+        )}
+      </div>
+      <Dialog open={Boolean(tcDialog)} onOpenChange={(open) => !open && setTcDialog(null)}>
+        <DialogContent className="max-w-sm bg-white text-slate-950">
+          <DialogHeader>
+            <DialogTitle>Tipo de cambio</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="quote-tc">TC para la cotizacion otros</Label>
+            <Input id="quote-tc" value={tcValue} onChange={(event) => setTcValue(event.target.value)} placeholder="3.55" autoFocus />
+          </div>
+          <DialogFooter>
+            <button type="button" className="h-9 rounded-md border px-4 text-sm font-bold" onClick={() => setTcDialog(null)}>Cancelar</button>
+            <button type="button" className="h-9 rounded-md bg-slate-950 px-4 text-sm font-bold text-white" onClick={confirmOtherPdf}>Descargar</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

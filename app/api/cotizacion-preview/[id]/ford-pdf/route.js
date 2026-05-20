@@ -32,6 +32,11 @@ function dateLongText(value = new Date()) {
   return d.toLocaleDateString("es-PE", { day: "2-digit", month: "long", year: "numeric" });
 }
 
+function normalizeExchangeRate(value) {
+  const cleaned = String(value || "").trim().replace(/[^\d.,]/g, "");
+  return cleaned || "3.55";
+}
+
 export async function GET(request, { params }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
@@ -43,6 +48,7 @@ export async function GET(request, { params }) {
   const id = Number(rawId);
   const full = request.nextUrl.searchParams.get("full") === "1";
   const format = request.nextUrl.searchParams.get("format") === "otros" ? "otros" : "ford";
+  const tc = normalizeExchangeRate(request.nextUrl.searchParams.get("tc"));
 
   try {
     const requiredPermission = format === "otros" ? ["cotizacion_otros", "view"] : ["cotizacion_ford", "view"];
@@ -51,7 +57,7 @@ export async function GET(request, { params }) {
     }
     const data = await loadQuoteData(id);
     if (!data.quote) return NextResponse.json({ message: "Cotizacion no encontrada." }, { status: 404 });
-    const pdf = await buildFordQuotePdf(data, { full, origin: request.nextUrl.origin, format });
+    const pdf = await buildFordQuotePdf(data, { full, origin: request.nextUrl.origin, format, tc });
     return new NextResponse(pdf, {
       headers: {
         "Content-Type": "application/pdf",
@@ -173,7 +179,7 @@ async function loadTemplate(type, brand = "") {
   };
 }
 
-async function buildFordQuotePdf(data, { full, origin, format = "ford" }) {
+async function buildFordQuotePdf(data, { full, origin, format = "ford", tc = "3.55" }) {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true });
   const chunks = [];
   doc.on("data", (chunk) => chunks.push(chunk));
@@ -190,7 +196,7 @@ async function buildFordQuotePdf(data, { full, origin, format = "ford" }) {
   doc._catalogUrl = catalogUrl;
   doc._fullQuote = full;
 
-  if (format === "otros") drawOtherQuotePage(doc, data);
+  if (format === "otros") drawOtherQuotePage(doc, data, { tc });
   else drawQuotePageV2(doc, data);
   if (full) drawTechnicalSheetPages(doc, data);
 
@@ -360,7 +366,7 @@ function drawQuotePageV2(doc, data) {
   doc.restore();
 }
 
-function drawOtherQuotePage(doc, data) {
+function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   const { quote, template } = data;
   const x = 18;
   const w = PAGE_W - 36;
@@ -382,7 +388,7 @@ function drawOtherQuotePage(doc, data) {
   doc.font("Helvetica-Bold").fontSize(9).text(dateLongText(quote.created_at || new Date()), x + w - 150, 26, { width: 150, align: "right" });
   doc.font("Helvetica-Bold").fontSize(8).text("Estimado (a):", x, 78);
   doc.font("Helvetica-Bold").fontSize(8).text("DNI:", x + 338, 78);
-  doc.font("Helvetica").fontSize(8).text(String(quote.cliente || "-").toUpperCase(), x, 94, { width: 250 });
+  doc.font("Helvetica-Bold").fontSize(8).text(String(quote.cliente || "-").toUpperCase(), x, 94, { width: 250 });
   doc.text(quote.identificacion_fiscal || "-", x + 372, 94, { width: 130 });
   doc.font("Helvetica-Bold").fontSize(7.5).text(
     "Sirva la presente para saludarlo cordialmente y a la vez hacerle llegar nuestra oferta economica por el modelo detallado a continuacion:",
@@ -416,21 +422,23 @@ function drawOtherQuotePage(doc, data) {
     "Los precios estan expresados en dolares americanos e incluyen el I.G.V. 18%",
     "Precios sujetos a variacion sin previo aviso",
     "Tipo de cambio referencial sujeto a variacion diaria.",
-    "El tipo de cambio es valido solo por hoy. TC: s/3.55",
+    `El tipo de cambio es valido solo por hoy. TC: s/${tc}`,
     "Promocion valida deacuerdo a stock.",
   ];
-  doc.font("Helvetica").fontSize(8.4).fillColor("#000000");
+  doc.font("Helvetica-Bold").fontSize(8.4).fillColor("#000000");
   bullets.forEach((item, index) => {
     doc.font("Helvetica-Bold").text("*", x + 22, 560 + index * 17);
-    doc.font("Helvetica").text(item, x + 42, 560 + index * 17, { width: w - 70 });
+    doc.font("Helvetica-Bold").text(item, x + 42, 560 + index * 17, { width: w - 70 });
   });
 
-  doc.font("Helvetica-Bold").fontSize(8).text("NOTA:", x + 22, 654);
-  doc.font("Helvetica").fontSize(8).text(
+  drawSignature(doc, quote.creado || quote.asignado || "Asesor", x + w - 188, 620);
+
+  doc.font("Helvetica-Bold").fontSize(8).text("NOTA:", x + 22, 674);
+  doc.font("Helvetica-Bold").fontSize(8).text(
     "Nuestros precios son pactados en dolares americanos de conformidad con el articulo 1237 del codigo civil debiendo ser pagados en dicha moneda. El importe en nuevos soles en esta cotizacion se consigna solo como referencia en cumplimiento de la ley 28300 y considera el tipo de cambio de venta vigente a la fecha de la presente cotizacion.",
     x + 22,
-    678,
-    { width: w - 44, lineGap: 2, height: Math.max(40, contentBottom - 678) }
+    692,
+    { width: w - 238, lineGap: 1, height: Math.max(32, contentBottom - 692) }
   );
 
   doc.restore();
@@ -580,7 +588,7 @@ function drawWhiteTermsFooter(doc) {
   const w = PAGE_W - 48;
   doc.rect(0, y - 10, PAGE_W, PAGE_H - y + 10).fill("#ffffff");
   doc.font("Helvetica-Bold").fontSize(6.6).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, y, { width: w });
-  doc.font("Helvetica").fontSize(4.8).fillColor("#000000").text(getQuoteTerms(), x, y + 10, { width: w, lineGap: 0.4 });
+  doc.font("Helvetica-Bold").fontSize(4.8).fillColor("#000000").text(getQuoteTerms(), x, y + 10, { width: w, lineGap: 0.4 });
 }
 
 function drawTechnicalSheetPages(doc, data) {

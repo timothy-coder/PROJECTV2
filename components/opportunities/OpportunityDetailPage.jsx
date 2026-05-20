@@ -87,18 +87,30 @@ function QuotesSection({ items, options, userPermissions, onOpen, onEdit, onActi
   const [actionMenu, setActionMenu] = useState(null);
   const [itemsDialog, setItemsDialog] = useState(null);
   const [viewsDialog, setViewsDialog] = useState(null);
+  const [tcDialog, setTcDialog] = useState(null);
+  const [tcValue, setTcValue] = useState("");
   const canFord = hasPerm(userPermissions, ["cotizacion_ford", "view"]);
   const canOther = hasPerm(userPermissions, ["cotizacion_otros", "view"]);
-  function downloadQuotePdf(quote, full = false, format = "ford") {
+  function downloadQuotePdf(quote, full = false, format = "ford", tc = "") {
     const link = document.createElement("a");
     const params = new URLSearchParams();
     if (full) params.set("full", "1");
     if (format === "otros") params.set("format", "otros");
+    if (format === "otros" && tc) params.set("tc", tc);
     link.href = `/api/cotizacion-preview/${quote.id}/ford-pdf${params.toString() ? `?${params.toString()}` : ""}`;
     link.download = `${format === "otros" ? "cotizacion-otros" : "cotizacion"}${full ? "-completa" : ""}-${quote.id}.pdf`;
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+  function requestOtherPdf(quote, full = false) {
+    setTcValue("");
+    setTcDialog({ quote, full });
+  }
+  function confirmOtherPdf() {
+    if (!tcValue.trim()) return;
+    downloadQuotePdf(tcDialog.quote, tcDialog.full, "otros", tcValue.trim());
+    setTcDialog(null);
   }
   async function publicLink(quote) {
     if (!quote.publicUrl) await onAction({ action: "quote-public-link", cotizacionId: quote.id });
@@ -162,8 +174,8 @@ function QuotesSection({ items, options, userPermissions, onOpen, onEdit, onActi
           canOther={canOther}
           onPdf={() => downloadQuotePdf(actionMenu.quote)}
           onFullPdf={() => downloadQuotePdf(actionMenu.quote, true)}
-          onOtherPdf={() => downloadQuotePdf(actionMenu.quote, false, "otros")}
-          onOtherFullPdf={() => downloadQuotePdf(actionMenu.quote, true, "otros")}
+          onOtherPdf={() => requestOtherPdf(actionMenu.quote, false)}
+          onOtherFullPdf={() => requestOtherPdf(actionMenu.quote, true)}
           onLink={() => actionMenu.quote.publicUrl ? copyLink(actionMenu.quote) : publicLink(actionMenu.quote)}
           onCancel={() => onAction({ action: "quote-cancel", cotizacionId: actionMenu.quote.id })}
         />
@@ -177,6 +189,21 @@ function QuotesSection({ items, options, userPermissions, onOpen, onEdit, onActi
         />
       ) : null}
       {viewsDialog ? <QuoteViewsDialog quote={viewsDialog} onClose={() => setViewsDialog(null)} /> : null}
+      <Dialog open={Boolean(tcDialog)} onOpenChange={(open) => !open && setTcDialog(null)}>
+        <DialogContent className="max-w-sm bg-white text-slate-950">
+          <DialogHeader>
+            <DialogTitle>Tipo de cambio</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-quote-tc">TC para cotizacion otros</Label>
+            <Input id="opportunity-quote-tc" value={tcValue} onChange={(event) => setTcValue(event.target.value)} placeholder="3.55" autoFocus />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTcDialog(null)}>Cancelar</Button>
+            <Button type="button" disabled={!tcValue.trim()} onClick={confirmOtherPdf}>Descargar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
