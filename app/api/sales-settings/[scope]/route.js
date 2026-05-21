@@ -12,6 +12,7 @@ const MAP = {
     schedule: "configuracion_posventa_citas_centro",
     stages: "configuracion_posventa_etapasconversion",
     times: "configuracion_posventa_estados_tiempo",
+    closings: "configuracion_posventas_cierres_detalle",
   },
 };
 

@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function PostventaOpportunityDialog({ open, vehicle, options, currentUser, canViewAll, onClose, onSubmit }) {
   const defaultStage = options.stages.find((item) => item.nombre?.toLowerCase() === "nuevo") || options.stages[0];
+  const closedStage = options.stages.find((item) => ["cerrado", "cerrada"].includes(item.nombre?.toLowerCase()));
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [form, setForm] = useState({
     origenId: "",
     suborigenId: "",
@@ -21,6 +23,7 @@ export function PostventaOpportunityDialog({ open, vehicle, options, currentUser
     activities: [],
     asignadoA: canViewAll ? "" : String(currentUser?.id || ""),
     details: [],
+    close: { enabled: false, cierreDetalleId: "", detalle: "" },
   });
   const originOptions = options.origins.map((item) => ({ value: item.id, label: item.name }));
   const suboriginOptions = useMemo(() => {
@@ -38,7 +41,8 @@ export function PostventaOpportunityDialog({ open, vehicle, options, currentUser
       details: form.details,
       activities: form.activities,
       asignadoA: form.asignadoA,
-      etapaId: defaultStage?.id,
+      etapaId: form.close.enabled ? closedStage?.id : defaultStage?.id,
+      close: form.close,
     });
   }
 
@@ -76,9 +80,21 @@ export function PostventaOpportunityDialog({ open, vehicle, options, currentUser
             <Field label="Vehiculo seleccionado"><Input disabled value={vehicle?.vehiculo || ""} /></Field>
             <Field label="Origen *"><SearchableSelect value={form.origenId} options={originOptions} placeholder="Seleccionar origen" onChange={(value) => setForm((current) => ({ ...current, origenId: value, suborigenId: "" }))} /></Field>
             <Field label="Suborigen"><SearchableSelect value={form.suborigenId} options={suboriginOptions} placeholder="Seleccionar suborigen" onChange={(value) => setForm((current) => ({ ...current, suborigenId: value }))} /></Field>
-            <Field label="Etapa"><Input disabled value={defaultStage?.nombre || "Nuevo"} /></Field>
+            <Field label="Etapa"><Input disabled value={form.close.enabled ? (closedStage?.nombre || "Cerrado") : (defaultStage?.nombre || "Nuevo")} /></Field>
             <Field label="Asignado a"><SearchableSelect disabled={!canViewAll} value={form.asignadoA} options={userOptions} placeholder="Seleccionar usuario" onChange={(value) => setForm((current) => ({ ...current, asignadoA: value }))} /></Field>
           </div>
+          <section className="rounded-lg border border-red-200 bg-red-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-red-800">Cerrar oportunidad</h3>
+                <p className="text-xs text-red-700">Al cerrar, la oportunidad se creara en etapa Cerrado y quedara registrada con el motivo seleccionado.</p>
+              </div>
+              <Button type="button" variant={form.close.enabled ? "destructive" : "outline"} onClick={() => setCloseDialogOpen(true)}>
+                {form.close.enabled ? "Editar cierre" : "Cerrar"}
+              </Button>
+            </div>
+            {form.close.enabled ? <p className="mt-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-red-700">{closeSummary(form.close, options.closings)}</p> : null}
+          </section>
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
             <h3 className="mb-3 text-sm font-bold text-emerald-800">Agendas de la oportunidad</h3>
             <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
@@ -116,8 +132,73 @@ export function PostventaOpportunityDialog({ open, vehicle, options, currentUser
           </DialogFooter>
         </form>
       </DialogContent>
+      {closeDialogOpen ? (
+        <CloseOpportunityDialog
+          value={form.close}
+          options={options.closings || []}
+          onClose={() => setCloseDialogOpen(false)}
+          onSubmit={(close) => {
+            setForm((current) => ({ ...current, close: { ...close, enabled: true } }));
+            setCloseDialogOpen(false);
+          }}
+          onClear={() => {
+            setForm((current) => ({ ...current, close: { enabled: false, cierreDetalleId: "", detalle: "" } }));
+            setCloseDialogOpen(false);
+          }}
+        />
+      ) : null}
     </Dialog>
   );
+}
+
+function CloseOpportunityDialog({ value, options, onClose, onSubmit, onClear }) {
+  const [form, setForm] = useState({
+    cierreDetalleId: value?.cierreDetalleId || "",
+    detalle: value?.detalle || "",
+  });
+  const closeOptions = options.map((item) => ({ value: item.id, label: item.detalle }));
+  const selected = options.find((item) => String(item.id) === String(form.cierreDetalleId));
+  const canSave = Boolean(form.cierreDetalleId || form.detalle.trim());
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle>Cerrar oportunidad</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Field label="Motivo de cierre">
+            <SearchableSelect
+              value={form.cierreDetalleId}
+              options={closeOptions}
+              placeholder="Seleccionar motivo"
+              onChange={(cierreDetalleId) => {
+                const nextSelected = options.find((item) => String(item.id) === String(cierreDetalleId));
+                setForm((current) => ({ ...current, cierreDetalleId, detalle: current.detalle || nextSelected?.detalle || "" }));
+              }}
+            />
+          </Field>
+          <Field label="Detalle">
+            <Textarea
+              className="min-h-24"
+              value={form.detalle}
+              placeholder={selected?.detalle || "Describe el motivo de cierre..."}
+              onChange={(event) => setForm((current) => ({ ...current, detalle: event.target.value }))}
+            />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+          {value?.enabled ? <Button type="button" variant="destructive" onClick={onClear}>Quitar cierre</Button> : null}
+          <Button type="button" disabled={!canSave} onClick={() => onSubmit({ ...form, detalle: form.detalle.trim() || selected?.detalle || "Cierre registrado" })}>Aplicar cierre</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function closeSummary(close, options = []) {
+  const selected = options.find((item) => String(item.id) === String(close.cierreDetalleId));
+  return close.detalle || selected?.detalle || "Cierre registrado";
 }
 
 function Field({ label, children }) {

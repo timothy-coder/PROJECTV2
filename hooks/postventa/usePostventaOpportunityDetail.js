@@ -24,6 +24,11 @@ export function usePostventaOpportunityDetail(id) {
       await apiFetch(`/api/postventa-opportunities/${id}`, { method: "POST", body: JSON.stringify(payload) });
       await reload();
     },
+    createAppointment: async (payload) => {
+      const result = await apiFetch("/api/postventa-appointments", { method: "POST", body: JSON.stringify({ ...payload, oportunidadId: id }) });
+      await reload();
+      return result;
+    },
   }), [id, reload]);
 
   return { data, loading, reload, ...actions };

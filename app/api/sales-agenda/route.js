@@ -47,7 +47,14 @@ export async function GET(request) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
-    if (!hasPerm(user.permissions, ["agenda", "view"]) && !hasPerm(user.permissions, ["oportunidades", "view"]) && !hasPerm(user.permissions, ["leads", "view"])) {
+    if (
+      !hasPerm(user.permissions, ["agenda", "view"]) &&
+      !hasPerm(user.permissions, ["agenda", "viewall"]) &&
+      !hasPerm(user.permissions, ["oportunidades", "view"]) &&
+      !hasPerm(user.permissions, ["oportunidades", "viewall"]) &&
+      !hasPerm(user.permissions, ["leads", "view"]) &&
+      !hasPerm(user.permissions, ["leads", "viewall"])
+    ) {
       return NextResponse.json({ message: "No tienes permiso para ver la agenda." }, { status: 403 });
     }
     const canAll = canSeeAll(user);

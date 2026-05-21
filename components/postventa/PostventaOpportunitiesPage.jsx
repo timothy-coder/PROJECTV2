@@ -20,6 +20,7 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   const data = usePostventaOpportunities(kind);
   const [query, setQuery] = useState("");
   const [stageId, setStageId] = useState("");
+  const [timeStateId, setTimeStateId] = useState("");
   const [editDialog, setEditDialog] = useState({ open: false, item: null, detail: null });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
   const perm = permissionKey(kind);
@@ -37,9 +38,10 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     return data.opportunities.filter((item) => {
       const matchesText = !text || `${item.code} ${item.clienteNombre} ${item.vehiculoNombre} ${item.placa} ${item.vin || ""}`.toLowerCase().includes(text);
       const matchesStage = !stageId || Number(item.etapaId) === Number(stageId);
-      return matchesText && matchesStage;
+      const matchesTimeState = !timeStateId || Number(item.timeState?.id) === Number(timeStateId);
+      return matchesText && matchesStage && matchesTimeState;
     });
-  }, [data.opportunities, query, stageId]);
+  }, [data.opportunities, query, stageId, timeStateId]);
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta pagina.</div>;
 
   async function openEdit(item) {
@@ -60,21 +62,22 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         </div>
       </header>
       <section className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[320px_240px_120px]">
+        <div className="grid gap-3 md:grid-cols-[320px_220px_220px_120px]">
           <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input className="pl-9" placeholder="Buscar cliente, vehiculo o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} /></div>
           <SearchableSelect value={stageId} options={[{ value: "", label: "Todas las etapas" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setStageId} />
-          <Button variant="outline" onClick={() => { setQuery(""); setStageId(""); }}>Limpiar</Button>
+          <SearchableSelect value={timeStateId} options={[{ value: "", label: "Todos los estados de tiempo" }, ...(data.options.timeStates || []).map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setTimeStateId} />
+          <Button variant="outline" onClick={() => { setQuery(""); setStageId(""); setTimeStateId(""); }}>Limpiar</Button>
         </div>
       </section>
       <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[1220px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold text-slate-700">
-              <tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Vehiculo</th><th>Origen</th><th>Etapa</th><th>Asignado</th><th>Fecha agenda</th><th className="text-right">Acciones</th></tr>
+              <tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Vehiculo</th><th>Origen</th><th>Etapa</th><th>Asignado</th><th>Fecha agenda</th><th>Cita</th><th>Estado tiempo</th><th className="text-right">Acciones</th></tr>
             </thead>
             <tbody className="divide-y">
               {rows.map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id} style={rowTimeStyle(item)}>
                   <td className="px-3 py-3 font-bold text-blue-700">{item.code}</td>
                   <td>{item.clienteNombre}</td>
                   <td>{item.vehiculoNombre}</td>
@@ -82,6 +85,14 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                   <td><span className="rounded-full px-2 py-1 text-xs font-bold" style={{ color: item.etapaColor, backgroundColor: `${item.etapaColor}1f` }}>{item.etapaNombre}</span></td>
                   <td>{item.asignadoNombre}</td>
                   <td>{item.agendaDate ? `${item.agendaDate} ${item.agendaTime}` : "-"}</td>
+                  <td>
+                    {item.citaId ? (
+                      <Button size="sm" variant="outline" onClick={() => { window.location.href = `/citaspv?id=${item.citaId}`; }}>
+                        Ir a cita
+                      </Button>
+                    ) : <span className="text-xs text-slate-400">Sin cita</span>}
+                  </td>
+                  <td><TimeStateBadge item={item} /></td>
                   <td className="px-3 text-right">
                     <div className="flex justify-end gap-2">
                       <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => { window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}><Eye className="size-4" /></Button>
@@ -91,7 +102,7 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                   </td>
                 </tr>
               ))}
-              {!rows.length ? <tr><td colSpan={8} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={10} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -262,6 +273,35 @@ function AgendaList({ title, details, onDelete }) {
       {!details.length ? <p className="rounded-lg border border-dashed border-emerald-300 bg-white p-3 text-center text-sm text-slate-500">Sin registros.</p> : null}
     </div>
   );
+}
+
+function TimeStateBadge({ item }) {
+  if (!item.timeState) return <span className="text-xs text-slate-400">-</span>;
+  return (
+    <span
+      className="rounded-full border px-2 py-1 text-xs font-bold"
+      style={{ borderColor: item.timeState.color, color: item.timeState.color, backgroundColor: hexToRgba(item.timeState.color, 0.12) }}
+    >
+      {item.timeState.nombre}
+    </span>
+  );
+}
+
+function rowTimeStyle(item) {
+  if (!item.timeState?.color) return undefined;
+  return {
+    backgroundColor: hexToRgba(item.timeState.color, 0.14),
+    boxShadow: `inset 4px 0 0 ${item.timeState.color}`,
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || "").replace("#", "");
+  if (clean.length !== 6) return `rgba(148, 163, 184, ${alpha})`;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function Field({ label, children }) {

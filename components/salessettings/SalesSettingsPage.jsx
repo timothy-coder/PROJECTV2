@@ -31,6 +31,13 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
   const canCreate = hasPerm(userPermissions, [permKey, "create"]);
   const canEdit = hasPerm(userPermissions, [permKey, "edit"]);
   const canDelete = hasPerm(userPermissions, [permKey, "delete"]);
+  const closePermKey = scope === "ventas" ? permKey : "config_posventa_cierres";
+  const canViewClosings = hasPerm(userPermissions, [closePermKey, "view"]) || canView;
+  const closingPerms = {
+    canCreate: hasPerm(userPermissions, [closePermKey, "create"]) || canCreate,
+    canEdit: hasPerm(userPermissions, [closePermKey, "edit"]) || canEdit,
+    canDelete: hasPerm(userPermissions, [closePermKey, "delete"]) || canDelete,
+  };
   const canViewTemplates = scope === "ventas" && (hasPerm(userPermissions, ["config_ventas_plantillas", "view"]) || canView);
   const templatePerms = {
     canCreate: hasPerm(userPermissions, ["config_ventas_plantillas", "create"]) || canCreate,
@@ -41,7 +48,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
     { id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" },
     { id: "stages", label: "Etapas de Conversion" },
     { id: "times", label: "Tiempos" },
-    ...(scope === "ventas" ? [{ id: "closings", label: "Detalles de cierre" }] : []),
+    ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
     ...(canViewTemplates ? [{ id: "templates", label: "Plantillas" }] : []),
   ];
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
@@ -54,7 +61,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
       {tab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
       {tab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
       {tab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
-      {tab === "closings" ? <ClosingTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
+      {tab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
       {tab === "templates" ? <TemplatesTab perms={templatePerms} /> : null}
       {dialog.open ? <EntityDialog state={dialog} onClose={() => setDialog({ open: false, resource: "", item: null })} onSubmit={async (payload) => { await data.save({ ...payload, resource: dialog.resource }); setDialog({ open: false, resource: "", item: null }); }} /> : null}
     </div>
@@ -290,8 +297,9 @@ function StageTab({ data, canCreate, canEdit, canDelete, openDialog }) {
 function TimeTab({ data, canCreate, canEdit, canDelete, openDialog }) {
   return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={Clock} title="Estados de Tiempo" subtitle="Configura los rangos de tiempo y codigos de color" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo Estado</Button> : null} /><div className="mb-4 grid gap-3 md:grid-cols-3"><Stat label="Total de Estados" value={data.times.length} /><Stat label="Rango Minimo" value={data.times.length ? Math.min(...data.times.map((t) => t.minutosDesde)) : 0} /><Stat label="Rango Maximo" value={data.times.length ? Math.max(...data.times.map((t) => t.minutosHasta)) : 0} /></div><List>{data.times.map((item) => <Row key={item.id} title={item.nombre} subtitle={`${item.minutosDesde} a ${item.minutosHasta} min - ${item.descripcion || ""}`} badges={[item.estado, item.colorHexadecimal]} color={item.colorHexadecimal} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("time", item.id) : null} />)}</List></section>;
 }
-function ClosingTab({ data, canCreate, canEdit, canDelete, openDialog }) {
-  return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={FileText} title="Detalles de Cierre" subtitle="Gestiona los detalles y notas de cierres de periodo" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
+function ClosingTab({ data, scope, canCreate, canEdit, canDelete, openDialog }) {
+  const subtitle = scope === "ventas" ? "Gestiona los detalles y notas de cierres de ventas" : "Gestiona los detalles disponibles para cierres de PostVenta";
+  return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
 }
 
 function ElementCreateBar({ section, onCreate }) {

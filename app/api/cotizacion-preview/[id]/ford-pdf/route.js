@@ -383,7 +383,7 @@ function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   doc.translate(24, 24);
   doc.scale(0.91);
   doc.fillColor("#000000");
-  drawTemplateSection(doc, template?.header, x, 16, 150, 72, "#000000");
+  drawTemplateSection(doc, template?.header, x, 16, 150, 72, "#000000", true);
 
   doc.font("Helvetica-Bold").fontSize(9).text(dateLongText(quote.created_at || new Date()), x + w - 150, 26, { width: 150, align: "right" });
   doc.font("Helvetica-Bold").fontSize(8).text("Estimado (a):", x, 78);
@@ -861,7 +861,7 @@ function isVideoHref(value) {
   return /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(text) || /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(text);
 }
 
-function drawTemplateSection(doc, section, x, y, w, h, color) {
+function drawTemplateSection(doc, section, x, y, w, h, color, forceBold = false) {
   if (!section?.elementos?.length) return;
   const rows = groupElementsByOrder(section.elementos);
   const rowH = h / Math.max(rows.length, 1);
@@ -874,7 +874,7 @@ function drawTemplateSection(doc, section, x, y, w, h, color) {
       if (item.tipo === "IMAGEN") {
         drawImageOrLink(doc, item.imagenPath, cellX, cellY, Math.min(Number(item.widthPx || 0) || colW - 4, colW - 4), Math.min(Number(item.heightPx || 0) || rowH - 2, rowH - 2), align, colW);
       } else {
-        doc.font(item.tipo === "LINK" ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor(color).text(item.texto || item.url || "", cellX, cellY + 2, { width: colW - 4, align, link: item.url || undefined });
+        doc.font(forceBold || item.tipo === "LINK" ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor(color).text(item.texto || item.url || "", cellX, cellY + 2, { width: colW - 4, align, link: item.url || undefined });
       }
     });
   });

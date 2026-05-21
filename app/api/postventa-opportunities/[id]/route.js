@@ -32,7 +32,8 @@ function datePart(value) {
 
 function timePart(value) {
   if (!value) return "";
-  return String(value).slice(0, 5);
+  if (value instanceof Date) return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  return String(value).slice(11, 16) || String(value).slice(0, 5);
 }
 
 async function loadOpportunity(connection, id, user, canAll) {
@@ -97,6 +98,21 @@ export async function GET(_request, { params }) {
        ORDER BY a.created_at DESC, a.id DESC`,
       [id]
     );
+    const [appointments] = await connection.query(
+      `SELECT pc.id, pc.start_at, pc.end_at, pc.estado, pc.tipo_servicio,
+              cc.nombre AS centro_nombre, ct.nombre AS taller_nombre, asesor.fullname AS asesor_nombre
+       FROM posventa_citas pc
+       INNER JOIN configuracion_centros cc ON cc.id=pc.centro_id
+       LEFT JOIN configuracion_talleres ct ON ct.id=pc.taller_id
+       LEFT JOIN administracion_usuarios asesor ON asesor.id=pc.asesor_id
+       WHERE pc.oportunidadespv_id=?
+       ORDER BY pc.start_at DESC, pc.id DESC`,
+      [id]
+    );
+    const [centers] = await connection.query(`SELECT id,nombre FROM configuracion_centros ORDER BY nombre ASC`);
+    const [workshops] = await connection.query(`SELECT id,centro_id,nombre FROM configuracion_talleres ORDER BY nombre ASC`);
+    const [origins] = await connection.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
+    const [users] = await connection.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
 
     return NextResponse.json({
       currentUser: {
@@ -104,6 +120,7 @@ export async function GET(_request, { params }) {
         fullname: user.fullname,
         canViewAll: canAll,
         canCreateQuote: hasPerm(user.permissions, ["cotizacion", "create"]),
+        canCreateAppointment: hasPerm(user.permissions, ["citas", "create"]),
       },
       opportunity: {
         id: opportunity.id,
@@ -143,6 +160,24 @@ export async function GET(_request, { params }) {
         code: row.oportunidad_id || "",
         createdAt: row.created_at,
       })),
+      appointments: appointments.map((row) => ({
+        id: row.id,
+        startDate: datePart(row.start_at),
+        startTime: timePart(row.start_at),
+        endDate: datePart(row.end_at),
+        endTime: timePart(row.end_at),
+        estado: row.estado,
+        tipoServicio: row.tipo_servicio,
+        centroNombre: row.centro_nombre,
+        tallerNombre: row.taller_nombre || "",
+        asesorNombre: row.asesor_nombre || "Sin asesor",
+      })),
+      appointmentOptions: {
+        centers: centers.map((row) => ({ id: row.id, nombre: row.nombre })),
+        workshops: workshops.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
+        origins: origins.map((row) => ({ id: row.id, name: row.name })),
+        users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+      },
       activities: activities.map((row) => ({
         id: row.id,
         etapaId: row.etapasconversion_id,

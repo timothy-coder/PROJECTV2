@@ -18,7 +18,7 @@ const dayLabels = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
 export default function SalesAgendaPage({ userPermissions }) {
   const data = useSalesAgenda();
-  const canViewAll = Boolean(hasPerm(userPermissions, ["agenda", "viewall"]) || hasPerm(userPermissions, ["oportunidades", "viewall"]) || data.currentUser?.canViewAll);
+  const canViewAll = Boolean(hasPerm(userPermissions, ["agenda", "viewall"]) || hasPerm(userPermissions, ["oportunidades", "viewall"]) || hasPerm(userPermissions, ["leads", "viewall"]) || data.currentUser?.canViewAll);
   const canCreate = hasPerm(userPermissions, ["oportunidades", "create"]);
   const [nowTime] = useState(() => Date.now());
   const [baseDate, setBaseDate] = useState(new Date());

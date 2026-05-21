@@ -17,12 +17,15 @@ const montserrat = localFont({
 export const metadata = {
   title: "One Solution",
   description: "One Solution",
+  other: {
+    google: "notranslate",
+  },
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${montserrat.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">
+    <html lang="es" translate="no" className={`${montserrat.variable} h-full antialiased notranslate`}>
+      <body translate="no" className="notranslate min-h-full flex flex-col font-sans">
         {children}
         <Toaster richColors position="top-right" />
       </body>

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/app/api/client";
 
 export function useMaintenanceDue() {
-  const [data, setData] = useState({ currentUser: null, vehicles: [], options: { origins: [], suborigins: [], users: [], stages: [] } });
+  const [data, setData] = useState({ currentUser: null, vehicles: [], options: { origins: [], suborigins: [], users: [], stages: [], closings: [] } });
   const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     setLoading(true);
@@ -18,8 +18,26 @@ export function useMaintenanceDue() {
   }, [reload]);
   const actions = useMemo(() => ({
     createOpportunity: async (payload) => {
-      await apiFetch("/api/postventa-opportunities?kind=opportunity", { method: "POST", body: JSON.stringify({ ...payload, kind: "opportunity" }) });
-      await reload();
+      const created = await apiFetch("/api/postventa-opportunities?kind=opportunity", { method: "POST", body: JSON.stringify({ ...payload, kind: "opportunity" }) });
+      const firstDetail = Array.isArray(payload.details) ? payload.details.find((item) => item?.fechaAgenda && item?.horaAgenda) : null;
+      const closed = Boolean(payload.close?.enabled);
+      setData((current) => ({
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => Number(vehicle.id) === Number(payload.vehiculoId)
+          ? {
+              ...vehicle,
+              oportunidadId: created.id,
+              oportunidadCodigo: created.code || "",
+              fechaAgendada: firstDetail ? `${firstDetail.fechaAgenda} ${String(firstDetail.horaAgenda || "").slice(0, 5)}` : created.code || "",
+              estadoRecordatorio: closed ? "Cerrado" : "Programado",
+              cierreMotivo: closed ? payload.close.detalle || "Cierre registrado" : vehicle.cierreMotivo,
+            }
+          : vehicle),
+      }));
+      window.setTimeout(() => {
+        reload().catch(() => {});
+      }, 1200);
+      return created;
     },
   }), [reload]);
   return { ...data, loading, reload, ...actions };

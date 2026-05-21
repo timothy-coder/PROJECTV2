@@ -6,12 +6,22 @@ import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function datePart(value) {
   if (!value) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
   return String(value).slice(0, 10);
 }
 
 function timePart(value) {
   if (!value) return "";
+  if (value instanceof Date) {
+    const hours = String(value.getHours()).padStart(2, "0");
+    const minutes = String(value.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+  }
   return String(value).slice(0, 5);
 }
 
@@ -39,7 +49,14 @@ export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
-    if (!hasPerm(user.permissions, ["citas", "view"]) && !hasPerm(user.permissions, ["oportunidadespv", "view"]) && !hasPerm(user.permissions, ["leadspv", "view"])) {
+    if (
+      !hasPerm(user.permissions, ["citas", "view"]) &&
+      !hasPerm(user.permissions, ["citas", "viewall"]) &&
+      !hasPerm(user.permissions, ["oportunidadespv", "view"]) &&
+      !hasPerm(user.permissions, ["oportunidadespv", "viewall"]) &&
+      !hasPerm(user.permissions, ["leadspv", "view"]) &&
+      !hasPerm(user.permissions, ["leadspv", "viewall"])
+    ) {
       return NextResponse.json({ message: "No tienes permiso para ver la agenda de PostVenta." }, { status: 403 });
     }
     const canAll = Boolean(hasPerm(user.permissions, ["citas", "viewall"]) || hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"]));
@@ -48,7 +65,7 @@ export async function GET() {
       ? await pool.query(`SELECT centro_id, slot_minutes, week_json FROM configuracion_posventa_citas_centro WHERE centro_id IN (?)`, [centers.map((center) => center.id)])
       : [[]];
     const [rows] = await pool.query(
-      `SELECT o.id, o.oportunidad_id, o.created_by, o.asignado_a, o.etapasconversionpv_id,
+      `SELECT o.id, o.oportunidad_id, o.created_by, o.asignado_a, o.created_at, o.etapasconversionpv_id,
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
               e.nombre AS etapa_nombre, e.color AS etapa_color,
               au.fullname AS asignado_nombre,
@@ -59,9 +76,12 @@ export async function GET() {
        INNER JOIN configuracion_posventa_etapasconversion e ON e.id=o.etapasconversionpv_id
        LEFT JOIN administracion_usuarios au ON au.id=o.asignado_a
        LEFT JOIN (
-         SELECT od.*
-         FROM posventa_oportunidades_detalles od
-         INNER JOIN (SELECT oportunidad_padre_id, MAX(id) AS max_id FROM posventa_oportunidades_detalles GROUP BY oportunidad_padre_id) x ON x.max_id=od.id
+         SELECT *
+         FROM (
+           SELECT od.*, ROW_NUMBER() OVER (PARTITION BY od.oportunidad_padre_id ORDER BY od.created_at DESC, od.id DESC) AS rn
+           FROM posventa_oportunidades_detalles od
+         ) latest_detail
+         WHERE latest_detail.rn=1
        ) d ON d.oportunidad_padre_id=o.id
        LEFT JOIN (
          SELECT act.*
@@ -79,21 +99,25 @@ export async function GET() {
         const schedule = schedules.find((item) => Number(item.centro_id) === Number(center.id));
         return { centroId: center.id, slotMinutes: schedule?.slot_minutes || 30, week: safeJson(schedule?.week_json, defaultWeek()) };
       }),
-      items: rows.map((row) => ({
-        id: row.id,
-        code: row.oportunidad_id,
-        kind: String(row.oportunidad_id || "").startsWith("LDPV-") ? "lead" : "opportunity",
-        clienteNombre: row.cliente_nombre.trim(),
-        etapaId: row.etapasconversionpv_id,
-        etapaNombre: row.etapa_nombre,
-        etapaColor: row.etapa_color || "#2563eb",
-        asignadoA: row.asignado_a,
-        asignadoNombre: row.asignado_nombre || "Sin asignar",
-        createdBy: row.created_by,
-        agendaDate: datePart(row.fecha_agenda),
-        agendaTime: timePart(row.hora_agenda),
-        detail: row.ultimo_detalle || "",
-      })),
+      items: rows.map((row) => {
+        const agendaDate = datePart(row.fecha_agenda) || datePart(row.created_at);
+        const agendaTime = timePart(row.hora_agenda) || timePart(row.created_at);
+        return {
+          id: row.id,
+          code: row.oportunidad_id,
+          kind: String(row.oportunidad_id || "").startsWith("LDPV-") ? "lead" : "opportunity",
+          clienteNombre: row.cliente_nombre.trim(),
+          etapaId: row.etapasconversionpv_id,
+          etapaNombre: row.etapa_nombre,
+          etapaColor: row.etapa_color || "#2563eb",
+          asignadoA: row.asignado_a,
+          asignadoNombre: row.asignado_nombre || "Sin asignar",
+          createdBy: row.created_by,
+          agendaDate,
+          agendaTime,
+          detail: row.ultimo_detalle || "",
+        };
+      }),
       options: { users: [] },
     });
   } catch (error) {

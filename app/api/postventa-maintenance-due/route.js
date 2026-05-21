@@ -115,13 +115,21 @@ export async function GET() {
           ma.name AS marca_nombre, mo.name AS modelo_nombre,
           av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
           opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
-          od.fecha_agenda, od.hora_agenda
+          od.fecha_agenda, od.hora_agenda,
+          cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo
        FROM administracion_vehiculos v
        INNER JOIN administracion_clientes c ON c.id=v.cliente_id
        LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
        LEFT JOIN administracion_modelos mo ON mo.id=v.modelo_id
        LEFT JOIN administracion_algoritmo_visita av ON av.marca_id=v.marca_id AND av.modelo_id=v.modelo_id
-       LEFT JOIN posventa_oportunidades opp ON opp.vehiculo_id=v.id
+       LEFT JOIN (
+         SELECT *
+         FROM (
+           SELECT o.*, ROW_NUMBER() OVER (PARTITION BY o.vehiculo_id ORDER BY o.created_at DESC, o.id DESC) AS rn
+           FROM posventa_oportunidades o
+         ) latest_opp
+         WHERE latest_opp.rn=1
+       ) opp ON opp.vehiculo_id=v.id
        LEFT JOIN (
          SELECT d.*
          FROM posventa_oportunidades_detalles d
@@ -131,6 +139,15 @@ export async function GET() {
            GROUP BY oportunidad_padre_id
          ) x ON x.max_id=d.id
        ) od ON od.oportunidad_padre_id=opp.id
+       LEFT JOIN (
+         SELECT *
+         FROM (
+           SELECT pc.*, ROW_NUMBER() OVER (PARTITION BY pc.oportunidad_id ORDER BY pc.created_at DESC, pc.id DESC) AS rn
+           FROM posventa_oportunidades_cierres pc
+         ) latest_close
+         WHERE latest_close.rn=1
+       ) cierre ON cierre.oportunidad_id=opp.id
+       LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id=cierre.cierre_detalle_id
        WHERE v.deleted_at IS NULL
        ORDER BY c.nombre ASC, v.id DESC`
     );
@@ -241,7 +258,10 @@ export async function GET() {
       if (reminderDate) reminderDate.setDate(reminderDate.getDate() - Number(matchedFrequency.dias));
 
       // ✅ estados según tu regla
-      const estadoRecordatorio = !hasHistory
+      const isClosed = Boolean(row.cierre_detalle || row.cierre_motivo);
+      const estadoRecordatorio = isClosed
+        ? "Cerrado"
+        : !hasHistory
         ? "Sin historial"
         : !hasAlgorithm
           ? "Sin algoritmo"
@@ -274,6 +294,7 @@ export async function GET() {
         vehiculo: [row.modelo_nombre, row.marca_nombre].filter(Boolean).join(" - ") || row.placas || row.vin || "-",
         marca: row.marca_nombre || "",
         modelo: row.modelo_nombre || "",
+        version: "",
         placa: row.placas || "",
         vin: row.vin || "",
         anio: row.anio,
@@ -295,6 +316,7 @@ export async function GET() {
         diasRestantes: daysRemaining,
         recordatorio: reminderDate ? datePart(reminderDate) : "",
         estadoRecordatorio,
+        cierreMotivo: row.cierre_motivo || row.cierre_detalle || "",
 
         oportunidadId: row.oportunidad_abierta_id,
         oportunidadCodigo: row.oportunidad_codigo || "",
@@ -313,6 +335,9 @@ export async function GET() {
     );
     const [stages] = await pool.query(
       `SELECT id,nombre,color,sort_order FROM configuracion_posventa_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`
+    );
+    const [closings] = await pool.query(
+      `SELECT id, detalle FROM configuracion_posventas_cierres_detalle ORDER BY id DESC`
     );
 
     return NextResponse.json({
@@ -334,6 +359,7 @@ export async function GET() {
           color: row.color || "#2563eb",
           sortOrder: row.sort_order || row.id,
         })),
+        closings: closings.map((row) => ({ id: row.id, detalle: row.detalle })),
       },
     });
   } catch (error) {
