@@ -39,6 +39,14 @@ export async function POST(request, { params }) {
       return NextResponse.json({ ok: true });
     }
 
+    if (body.type === "vehicle-colors") {
+      await connection.query(
+        `UPDATE ventas_cotizaciones SET color_externo=?, color_interno=? WHERE id=?`,
+        [String(body.colorExterno || "").trim() || null, String(body.colorInterno || "").trim() || null, cotizacionId]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     if (body.mode === "delete") {
       const table = body.type === "gift" ? "ventas_cotizaciones_regalos" : "ventas_cotizaciones_accesorios";
       await connection.query(`DELETE FROM ${table} WHERE id=? AND cotizacion_id=?`, [Number(body.itemId), cotizacionId]);

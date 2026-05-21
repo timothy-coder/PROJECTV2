@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 import { hasPerm } from "@/lib/permissions";
 import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
-import { QuotePreviewItems, QuoteVehicleDiscountEditor } from "@/components/quotes/QuotePreviewItems";
+import { QuotePreviewItems, QuoteVehicleColorEditor, QuoteVehicleDiscountEditor } from "@/components/quotes/QuotePreviewItems";
 import { QuotePreviewActions } from "@/components/quotes/QuotePreviewActions";
 
 function money(value) {
@@ -109,6 +109,7 @@ export default async function Page({ params }) {
               <Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Versión" value={quote.version} /><Info label="Año" value={quote.anio || "-"} />
               <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="SKU" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
             </div>
+            <QuoteVehicleColorEditor quoteId={id} colorExterno={quote.color_externo || ""} colorInterno={quote.color_interno || ""} />
           </section>
           <details className="group rounded-xl border border-blue-200 bg-blue-50 p-5">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4">

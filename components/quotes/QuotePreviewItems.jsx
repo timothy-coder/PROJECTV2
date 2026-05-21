@@ -62,6 +62,47 @@ export function QuoteVehicleDiscountEditor({ quoteId, discountAmount, discountPe
   );
 }
 
+export function QuoteVehicleColorEditor({ quoteId, colorExterno, colorInterno }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    colorExterno: colorExterno || "",
+    colorInterno: colorInterno || "",
+  });
+
+  async function save() {
+    await apiFetch(`/api/cotizacion-preview/${quoteId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ type: "vehicle-colors", ...form }),
+    });
+    setOpen(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <Button variant="outline" className="mt-4" onClick={() => setOpen(true)}><Pencil className="size-4" />Editar colores</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md bg-white text-slate-950">
+          <DialogHeader><DialogTitle>Colores del vehiculo</DialogTitle></DialogHeader>
+          <div className="grid gap-4">
+            <Field label="Color externo">
+              <Input value={form.colorExterno} onChange={(event) => setForm((prev) => ({ ...prev, colorExterno: event.target.value }))} />
+            </Field>
+            <Field label="Color interno">
+              <Input value={form.colorInterno} onChange={(event) => setForm((prev) => ({ ...prev, colorInterno: event.target.value }))} />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={save}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function QuotePreviewItems({ quoteId, accessories, gifts, accessoryOptions, giftOptions }) {
   const router = useRouter();
   const [dialog, setDialog] = useState(null);
