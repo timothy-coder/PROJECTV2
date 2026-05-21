@@ -185,6 +185,7 @@ async function buildFordQuotePdf(data, { full, origin, format = "ford", tc = "3.
   doc.on("data", (chunk) => chunks.push(chunk));
   const done = new Promise((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
   registerPdfFonts(doc);
+  forceBoldQuoteText(doc);
   const publicUrl = data.publicToken ? `${origin}/cotizacion/${data.publicToken}` : "";
   const catalogUrl = `${origin}/catalogo/${data.quote.precio_id}`;
   const rawMediaHrefs = data.specGroups.flatMap((group) => group.items.map((item) => item.href)).filter(Boolean);
@@ -202,6 +203,17 @@ async function buildFordQuotePdf(data, { full, origin, format = "ford", tc = "3.
 
   doc.end();
   return done;
+}
+
+function forceBoldQuoteText(doc) {
+  const originalFont = doc.font.bind(doc);
+  doc.font = (font, ...args) => {
+    const fontName = String(font || "");
+    if (fontName === "Helvetica" || fontName === "Helvetica-Oblique" || fontName === "Helvetica-BoldOblique") {
+      return originalFont("Helvetica-Bold", ...args);
+    }
+    return originalFont(font, ...args);
+  };
 }
 
 function drawQuotePage(doc, data) {
