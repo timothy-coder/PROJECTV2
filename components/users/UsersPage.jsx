@@ -85,7 +85,7 @@ export default function UsersPage({ userPermissions }) {
 
   return (
     // ✅ layout full height
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       {/* Header */}
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
@@ -136,7 +136,7 @@ export default function UsersPage({ userPermissions }) {
         ) : null}
 
         {/* ✅ Tabla scrolleable: ocupa el espacio disponible */}
-        <div className="min-h-0 flex-1 overflow-auto border-t border-slate-200">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-slate-200">
           <table className="w-full min-w-[760px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
@@ -225,16 +225,6 @@ export default function UsersPage({ userPermissions }) {
           </div>
         </div>
       </section>
-
-      {/* Info (abajo) */}
-      <div className="mt-3 shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
-        <p className="text-sm font-bold">Informacion importante:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs font-medium">
-          <li>Los usuarios activos tienen acceso al sistema</li>
-          <li>Los permisos controlan acceso a modulos y acciones</li>
-          <li>Los sitios definen centros, talleres y mostradores disponibles</li>
-        </ul>
-      </div>
 
       <UserDialog
         open={dialogMode === "create" || dialogMode === "edit" || dialogMode === "view"}

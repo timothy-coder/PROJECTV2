@@ -447,8 +447,8 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <div className="md:col-span-2"><label className="flex items-center gap-2 text-sm font-bold"><Switch disabled={readOnly} checked={form.vinExiste} onCheckedChange={(checked) => setForm((f) => ({ ...f, vinExiste: checked, vin: checked ? f.vin : "", numeroMotor: checked ? f.numeroMotor : "" }))} /> VIN existe</label></div>
           {form.vinExiste ? <Field label={`VIN (${vins.length} disponibles)`}><SearchableSelect disabled={readOnly} value={form.vin} options={vins} placeholder="Seleccionar VIN" onChange={applySelectedVin} /></Field> : <p className="text-xs font-bold text-red-600 md:col-span-2">{vinMessage}</p>}
           <Field label="Uso del Vehiculo"><Input disabled={readOnly} value={form.usoVehiculo} onChange={(e) => setForm((f) => ({ ...f, usoVehiculo: e.target.value }))} /></Field>
-          <Field label="Color Externo"><Input value={form.colorExterno}/></Field>
-          <Field label="Color Interno"><Input value={form.colorInterno}/></Field>
+          <Field label="Color Externo"><Input disabled={readOnly} value={form.colorExterno || ""} onChange={(e) => setForm((f) => ({ ...f, colorExterno: e.target.value }))} /></Field>
+          <Field label="Color Interno"><Input disabled={readOnly} value={form.colorInterno || ""} onChange={(e) => setForm((f) => ({ ...f, colorInterno: e.target.value }))} /></Field>
           <Field label="Numero de Motor"><Input disabled={readOnly} value={form.numeroMotor} onChange={(e) => setForm((f) => ({ ...f, numeroMotor: e.target.value }))} /></Field>
         </Block>
         <Block title="DESCUENTOS Y MONTOS">
