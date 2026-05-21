@@ -36,15 +36,18 @@ export default function ClientsPage({ userPermissions }) {
     updateVehicle,
     deleteVehicle,
   } = useClients();
+
   const fileInputRef = useRef(null);
   const vehicleFileInputRef = useRef(null);
   const maintenanceFileInputRef = useRef(null);
+
   const [query, setQuery] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [clientDialog, setClientDialog] = useState({ mode: null, client: null });
   const [vehicleDialog, setVehicleDialog] = useState({ mode: null, client: null, vehicle: null });
   const [deleteDialog, setDeleteDialog] = useState({ type: null, client: null, vehicle: null });
+
   const canCreate = hasPerm(userPermissions, ["clientes", "create"]);
   const canEdit = hasPerm(userPermissions, ["clientes", "edit"]);
   const canDelete = hasPerm(userPermissions, ["clientes", "delete"]);
@@ -55,7 +58,9 @@ export default function ClientsPage({ userPermissions }) {
   const canExportVehicles = hasPerm(userPermissions, ["clientes", "vehicles_export"]);
   const canImportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_import"]);
   const canExportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_export"]);
+
   const tableColSpan = canViewVehicles ? 7 : 6;
+
   const filteredClients = useMemo(() => {
     const clean = query.trim().toLowerCase();
     if (!clean) return clients;
@@ -76,25 +81,27 @@ export default function ClientsPage({ userPermissions }) {
 
   async function exportClients() {
     const XLSX = await import("xlsx");
-    const worksheet = XLSX.utils.json_to_sheet([{
-      id_lead: "",
-      nombre: "",
-      apellido: "",
-      email: "",
-      celular: "",
-      tipo_identificacion: "DNI",
-      identificacion_fiscal: "",
-      fecha_nacimiento: "",
-      ocupacion: "",
-      domicilio: "",
-      departamento: "",
-      provincia: "",
-      distrito: "",
-      nombre_conyugue: "",
-      dni_conyugue: "",
-      nombre_comercial: "",
-      created_by: "",
-    }]);
+    const worksheet = XLSX.utils.json_to_sheet([
+      {
+        id_lead: "",
+        nombre: "",
+        apellido: "",
+        email: "",
+        celular: "",
+        tipo_identificacion: "DNI",
+        identificacion_fiscal: "",
+        fecha_nacimiento: "",
+        ocupacion: "",
+        domicilio: "",
+        departamento: "",
+        provincia: "",
+        distrito: "",
+        nombre_conyugue: "",
+        dni_conyugue: "",
+        nombre_comercial: "",
+        created_by: "",
+      },
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "clientes");
     XLSX.writeFile(workbook, "clientes.xlsx");
@@ -102,18 +109,20 @@ export default function ClientsPage({ userPermissions }) {
 
   async function exportVehicles() {
     const XLSX = await import("xlsx");
-    const worksheet = XLSX.utils.json_to_sheet([{
-      cliente_documento: "",
-      cliente_id_lead: "",
-      placas: "",
-      vin: "",
-      marca: "",
-      modelo: "",
-      anio: "",
-      color: "",
-      kilometraje: "",
-      fecha_ultima_visita: "",
-    }]);
+    const worksheet = XLSX.utils.json_to_sheet([
+      {
+        cliente_documento: "",
+        cliente_id_lead: "",
+        placas: "",
+        vin: "",
+        marca: "",
+        modelo: "",
+        anio: "",
+        color: "",
+        kilometraje: "",
+        fecha_ultima_visita: "",
+      },
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "vehiculos");
     XLSX.writeFile(workbook, "vehiculos_clientes.xlsx");
@@ -121,13 +130,15 @@ export default function ClientsPage({ userPermissions }) {
 
   async function exportMaintenance() {
     const XLSX = await import("xlsx");
-    const worksheet = XLSX.utils.json_to_sheet([{
-      vin: "",
-      placas: "",
-      fecha_visita_taller: "",
-      kilometraje_taller: "",
-      created_by: "",
-    }]);
+    const worksheet = XLSX.utils.json_to_sheet([
+      {
+        vin: "",
+        placas: "",
+        fecha_visita_taller: "",
+        kilometraje_taller: "",
+        created_by: "",
+      },
+    ]);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "mantenimientos");
     XLSX.writeFile(workbook, "mantenimientos_vehiculos.xlsx");
@@ -188,48 +199,95 @@ export default function ClientsPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 rounded-lg bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    // ✅ página full-height; la tabla será la que scrollea
+    <div className="flex min-h-[calc(100svh-0px)] flex-col min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
+      {/* ✅ Header + botones import/export siempre arriba */}
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
             <UserRound className="size-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold leading-tight text-slate-950">Gestión de Clientes</h1>
             <p className="mt-1 text-xs font-medium text-slate-500">Administra clientes y vehículos</p>
           </div>
         </div>
+
         <div className="flex flex-wrap justify-end gap-2">
-          {canExport ? <Button variant="outline" onClick={exportClients}><Download className="size-4" />Exportar formato</Button> : null}
-          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
-          {canExportVehicles ? <Button variant="outline" onClick={exportVehicles}><Download className="size-4" />Formato vehiculos</Button> : null}
-          {canImportVehicles ? <Button variant="outline" onClick={() => vehicleFileInputRef.current?.click()}><Upload className="size-4" />Importar vehiculos</Button> : null}
-          {canExportMaintenance ? <Button variant="outline" onClick={exportMaintenance}><Download className="size-4" />Formato mantenimientos</Button> : null}
-          {canImportMaintenance ? <Button variant="outline" onClick={() => maintenanceFileInputRef.current?.click()}><Upload className="size-4" />Importar mantenimientos</Button> : null}
-          {canCreate ? (
-            <Button onClick={() => setClientDialog({ mode: "create", client: null })} className="bg-violet-700 text-white hover:bg-violet-800">
-              <Plus className="size-4" />
-              Nuevo Cliente
+          {canExport ? (
+            <Button variant="outline" onClick={exportClients} className="h-10">
+              <Download className="size-4" />
+              Formato Clientes
             </Button>
           ) : null}
+          {canImport ? (
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="h-10">
+              <Upload className="size-4" />
+              Importar Clientes
+            </Button>
+          ) : null}
+
+          {canExportVehicles ? (
+            <Button variant="outline" onClick={exportVehicles} className="h-10">
+              <Download className="size-4" />
+              Formato vehiculos
+            </Button>
+          ) : null}
+          {canImportVehicles ? (
+            <Button variant="outline" onClick={() => vehicleFileInputRef.current?.click()} className="h-10">
+              <Upload className="size-4" />
+              Importar vehiculos
+            </Button>
+          ) : null}
+
+          {canExportMaintenance ? (
+            <Button variant="outline" onClick={exportMaintenance} className="h-10">
+              <Download className="size-4" />
+              Formato mantenimientos
+            </Button>
+          ) : null}
+          {canImportMaintenance ? (
+            <Button variant="outline" onClick={() => maintenanceFileInputRef.current?.click()} className="h-10">
+              <Upload className="size-4" />
+              Importar mantenimientos
+            </Button>
+          ) : null}
+
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importClientRows} />
           <input ref={vehicleFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importVehicleRows} />
           <input ref={maintenanceFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importMaintenanceRows} />
         </div>
       </div>
-      {importMessage ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <div className="relative max-w-sm">
+      {importMessage ? (
+        <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
+          {importMessage}
+        </p>
+      ) : null}
+
+      {/* ✅ Card principal ocupa el resto */}
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
+        {/* ✅ Barra buscar + botón "Nuevo Cliente" al costado; misma altura */}
+        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar por nombre, apellido, DNI..."
-              className="h-9 bg-white pl-9"
+              className="h-10 w-full bg-white pl-9"
             />
           </div>
+
+          {canCreate ? (
+            <Button
+              onClick={() => setClientDialog({ mode: "create", client: null })}
+              className="h-10 shrink-0 bg-violet-700 text-white hover:bg-violet-800"
+            >
+              <Plus className="size-4" />
+              Nuevo Cliente
+            </Button>
+          ) : null}
         </div>
 
         {error ? (
@@ -238,9 +296,10 @@ export default function ClientsPage({ userPermissions }) {
           </div>
         ) : null}
 
-        <div className="overflow-x-auto">
+        {/* ✅ SOLO la tabla hace scroll */}
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[860px] border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-2.5">Nombre</th>
                 <th className="px-3 py-2.5">Apellido</th>
@@ -251,6 +310,7 @@ export default function ClientsPage({ userPermissions }) {
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-200 bg-white">
               {loading ? (
                 <tr>
@@ -270,33 +330,57 @@ export default function ClientsPage({ userPermissions }) {
                       <td className="px-3 py-3">{client.idLead || "-"}</td>
                       <td className="px-3 py-3">{client.celular || "-"}</td>
                       <td className="px-3 py-3">{client.identificacionFiscal || "-"}</td>
-                      {canViewVehicles ? <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedId(expandedId === client.id ? null : client.id)}
-                          className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700"
-                        >
-                          {client.vehicles.length}
-                        </button>
-                      </td> : null}
+
+                      {canViewVehicles ? (
+                        <td className="px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(expandedId === client.id ? null : client.id)}
+                            className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700"
+                          >
+                            {client.vehicles.length}
+                          </button>
+                        </td>
+                      ) : null}
+
                       <td className="px-3 py-3">
                         <div className="flex justify-end gap-2">
-                          {canViewVehicles ? <Button variant="ghost" size="icon" onClick={() => setExpandedId(expandedId === client.id ? null : client.id)} title="Ver vehículos">
-                            <Car className="size-4" />
-                          </Button> : null}
+                          {canViewVehicles ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setExpandedId(expandedId === client.id ? null : client.id)}
+                              title="Ver vehículos"
+                            >
+                              <Car className="size-4" />
+                            </Button>
+                          ) : null}
+
                           {canEdit ? (
-                            <Button variant="ghost" size="icon" onClick={() => setClientDialog({ mode: "edit", client })} title="Editar cliente">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setClientDialog({ mode: "edit", client })}
+                              title="Editar cliente"
+                            >
                               <Edit3 className="size-4" />
                             </Button>
                           ) : null}
+
                           {canDelete ? (
-                            <Button variant="destructive" size="icon" onClick={() => setDeleteDialog({ type: "client", client, vehicle: null })} title="Eliminar cliente">
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => setDeleteDialog({ type: "client", client, vehicle: null })}
+                              title="Eliminar cliente"
+                            >
                               <Trash2 className="size-4" />
                             </Button>
                           ) : null}
                         </div>
                       </td>
                     </tr>
+
                     {canViewVehicles && expandedId === client.id ? (
                       <tr>
                         <td colSpan={tableColSpan} className="bg-white p-0">
@@ -333,9 +417,7 @@ export default function ClientsPage({ userPermissions }) {
         options={options}
         onClose={() => setClientDialog({ mode: null, client: null })}
         onSubmit={(payload) =>
-          clientDialog.mode === "edit"
-            ? updateClient(clientDialog.client.id, payload)
-            : createClient(payload)
+          clientDialog.mode === "edit" ? updateClient(clientDialog.client.id, payload) : createClient(payload)
         }
       />
 
@@ -347,9 +429,7 @@ export default function ClientsPage({ userPermissions }) {
         options={options}
         onClose={() => setVehicleDialog({ mode: null, client: null, vehicle: null })}
         onSubmit={(payload) =>
-          vehicleDialog.mode === "edit"
-            ? updateVehicle(vehicleDialog.vehicle.id, payload)
-            : createVehicle(payload)
+          vehicleDialog.mode === "edit" ? updateVehicle(vehicleDialog.vehicle.id, payload) : createVehicle(payload)
         }
       />
 
@@ -362,11 +442,7 @@ export default function ClientsPage({ userPermissions }) {
             : `Se eliminará el cliente ${deleteDialog.client ? clientName(deleteDialog.client) : ""}.`
         }
         onClose={() => setDeleteDialog({ type: null, client: null, vehicle: null })}
-        onConfirm={() =>
-          deleteDialog.type === "vehicle"
-            ? deleteVehicle(deleteDialog.vehicle.id)
-            : deleteClient(deleteDialog.client.id)
-        }
+        onConfirm={() => (deleteDialog.type === "vehicle" ? deleteVehicle(deleteDialog.vehicle.id) : deleteClient(deleteDialog.client.id))}
       />
     </div>
   );
@@ -386,15 +462,17 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
           </div>
         </div>
         {canCreate ? (
-          <Button onClick={onCreate} className="bg-violet-700 text-white hover:bg-violet-800">
+          <Button onClick={onCreate} className="h-10 bg-violet-700 text-white hover:bg-violet-800">
             <Plus className="size-4" />
             Nuevo Vehículo
           </Button>
         ) : null}
       </div>
+
       <div className="p-4">
         <p className="mb-3 text-sm font-bold text-slate-950">Vehículos</p>
         <p className="mb-3 text-xs text-slate-500">Cliente: {clientName(client)}</p>
+
         <div className="space-y-2">
           {client.vehicles.length ? (
             client.vehicles.map((vehicle) => (
@@ -409,9 +487,18 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
                   <p className="mt-2 text-xs text-slate-500">VIN: {vehicle.vin || "-"}</p>
                   <p className="text-xs text-slate-500">Última visita: {formatDate(vehicle.fechaUltimaVisita)}</p>
                 </div>
+
                 <div className="flex shrink-0 gap-2">
-                  {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(vehicle)}><Edit3 className="size-4" /></Button> : null}
-                  {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(vehicle)}><Trash2 className="size-4" /></Button> : null}
+                  {canEdit ? (
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(vehicle)}>
+                      <Edit3 className="size-4" />
+                    </Button>
+                  ) : null}
+                  {canDelete ? (
+                    <Button variant="destructive" size="icon" onClick={() => onDelete(vehicle)}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ))
@@ -421,6 +508,7 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
             </div>
           )}
         </div>
+
         <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
           Total de vehículos: {client.vehicles.length}
         </div>

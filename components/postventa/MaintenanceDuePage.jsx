@@ -98,7 +98,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-4 text-slate-950">
+    <div className="min-w-0 overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Proximos mantenimientos</h1>
@@ -115,35 +115,40 @@ export default function MaintenanceDuePage({ userPermissions }) {
       <section className="rounded-lg border bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold">Vista general de proximos mantenimientos</h2>
 
-        <div className="mb-4 grid gap-3 md:grid-cols-[280px_240px_200px_160px_160px_200px_120px]">
-          <div className="relative">
+        <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+          <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Buscar cliente, vehiculo, placa o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Input className="w-full pl-9" placeholder="Buscar cliente, vehiculo, placa o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
 
-          <SearchableSelect
-            value={vehicleFilter}
-            options={vehicleOptions}
-            placeholder="Marca / modelo / version"
-            searchPlaceholder="Buscar marca, modelo o version..."
-            onChange={setVehicleFilter}
-          />
+          <div className="min-w-0">
+            <SearchableSelect
+              value={vehicleFilter}
+              options={vehicleOptions}
+              placeholder="Marca / modelo / version"
+              searchPlaceholder="Buscar marca, modelo o version..."
+              onChange={setVehicleFilter}
+            />
+          </div>
 
-          <SearchableSelect
-            value={status}
-            options={[
-              { value: "", label: "Todos" },
-              { value: "Vencido", label: "Vencido" },
-              { value: "Pendiente contacto", label: "Pendiente contacto" },
-              { value: "Programado", label: "Programado" },
-              { value: "Sin algoritmo", label: "Sin algoritmo" },
-              { value: "Cerrado", label: "Cerrado" },
-            ]}
-            onChange={setStatus}
-          />
+          <div className="min-w-0">
+            <SearchableSelect
+              value={status}
+              options={[
+                { value: "", label: "Todos" },
+                { value: "Vencido", label: "Vencido" },
+                { value: "Pendiente contacto", label: "Pendiente contacto" },
+                { value: "Programado", label: "Programado" },
+                { value: "Sin algoritmo", label: "Sin algoritmo" },
+                { value: "Cerrado", label: "Cerrado" },
+              ]}
+              onChange={setStatus}
+            />
+          </div>
 
           <Input
             type="date"
+            className="min-w-0"
             value={fromDate}
             onChange={(event) => {
               setFromDate(event.target.value);
@@ -154,6 +159,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
           <Input
             type="date"
+            className="min-w-0"
             value={toDate}
             onChange={(event) => {
               setToDate(event.target.value);
@@ -162,20 +168,23 @@ export default function MaintenanceDuePage({ userPermissions }) {
             aria-label="Fecha hasta"
           />
 
-          <SearchableSelect
-            value={quickRange}
-            options={[
-              { value: "", label: "Rango manual" },
-              { value: "today", label: "Hoy" },
-              { value: "30", label: "Ultimos 30 dias" },
-              { value: "60", label: "Ultimos 60 dias" },
-              { value: "90", label: "Ultimos 90 dias" },
-            ]}
-            onChange={applyQuickRange}
-          />
+          <div className="min-w-0">
+            <SearchableSelect
+              value={quickRange}
+              options={[
+                { value: "", label: "Rango manual" },
+                { value: "today", label: "Hoy" },
+                { value: "30", label: "Ultimos 30 dias" },
+                { value: "60", label: "Ultimos 60 dias" },
+                { value: "90", label: "Ultimos 90 dias" },
+              ]}
+              onChange={applyQuickRange}
+            />
+          </div>
 
           <Button
             variant="outline"
+            className="w-full"
             onClick={() => {
               setQuery("");
               setStatus("");
@@ -193,39 +202,39 @@ export default function MaintenanceDuePage({ userPermissions }) {
           Mostrando {rows.length} de {(data.vehicles || []).length} vehiculos segun la fecha de proximo mantenimiento.
         </p>
 
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[1200px] text-left text-sm">
+        <div className="max-w-full overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <thead className="bg-slate-100 text-xs font-bold text-slate-700">
               <tr>
-                <th className="px-3 py-3">Cliente</th>
-                <th>Vehiculo</th>
-                <th>Prox. Mantenimiento</th>
-                <th>Tipo de prediccion</th>
-                <th>Dias restantes</th>
-                <th>Recordatorio</th>
-                <th>Estado</th>
-                <th>Fecha agendada</th>
-                <th className="text-right">Acciones</th>
+                <th className="w-[260px] px-3 py-3">Cliente</th>
+                <th className="w-[220px]">Vehiculo</th>
+                <th className="w-[130px]">Prox. Mantenimiento</th>
+                <th className="w-[120px]">Tipo de prediccion</th>
+                <th className="w-[110px]">Dias restantes</th>
+                <th className="w-[110px]">Recordatorio</th>
+                <th className="w-[105px]">Estado</th>
+                <th className="w-[130px]">Fecha agendada</th>
+                <th className="w-[145px] text-right">Acciones</th>
               </tr>
             </thead>
 
             <tbody className="divide-y">
               {rows.map((item) => (
                 <tr key={item.id}>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
+                  <td className="px-3 py-3 align-top">
+                    <div className="flex items-start gap-2">
                       <Button size="icon-sm" variant="outline" onClick={() => setClientDetail(item)}>
                         <Eye className="size-3.5" />
                       </Button>
-                      <span className="font-semibold">{item.clienteNombre}</span>
+                      <span className="line-clamp-2 min-w-0 max-w-[210px] whitespace-normal break-words font-semibold leading-snug">{item.clienteNombre}</span>
                       
                     </div>
                   </td>
-                  <td>
-                    <div className="flex items-center gap-2">
+                  <td className="align-top">
+                    <div className="flex items-start gap-2">
                       <Button size="icon-sm" variant="outline" onClick={() => setVehicleDetail(item)}>
                         <Eye className="size-3.5" />
-                      </Button><span>{item.vehiculo}</span>
+                      </Button><span className="line-clamp-2 min-w-0 whitespace-normal break-words leading-snug">{item.vehiculo}</span>
                       
                     </div>
                     {item.vin ? <p className="mt-1 text-xs font-medium text-slate-500">VIN: {item.vin}</p> : null}
@@ -265,9 +274,9 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
                   <td>{item.fechaAgendada || item.oportunidadCodigo || "Sin oportunidad"}</td>
 
-                  <td className="px-3 text-right">
+                  <td className="px-3 text-right align-top">
                     {item.oportunidadId && canOpenOpportunity ? (
-                      <Button size="sm" variant="outline" onClick={() => { window.location.href = `/oportunidadespv/${item.oportunidadId}`; }}>
+                      <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { window.location.href = `/oportunidadespv/${item.oportunidadId}`; }}>
                         Ver oportunidad
                       </Button>
                     ) : null}
@@ -275,7 +284,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
                     {!item.oportunidadId && canCreate ? (
                       <Button
                         size="sm"
-                        className="bg-emerald-600 text-white hover:bg-emerald-700"
+                        className="whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700"
                         onClick={() => setDialogVehicle(item)}
                       >
                         <Plus className="size-4" />

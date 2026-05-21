@@ -25,6 +25,7 @@ const tabs = [
   { id: "permissions", label: "Permisos", icon: LockKeyhole },
   { id: "sites", label: "Sitios", icon: MapPin },
 ];
+
 const permissionActionLabels = {
   create: "Crear",
   edit: "Editar",
@@ -109,10 +110,12 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
   const [form, setForm] = useState(formFromUser(user));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
   const roleOptions = useMemo(
     () => options.roles.map((role) => ({ value: role.id, label: role.name })),
     [options.roles]
   );
+
   const readonly = mode === "view";
   const title = mode === "view" ? "Detalle de usuario" : mode === "edit" ? "Editar usuario" : "Nuevo usuario";
 
@@ -188,9 +191,10 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
         tallerIds: form.tallerIds,
         mostradorIds: form.mostradorIds,
       });
+
       onClose();
     } catch (err) {
-      setError(err.message || "No se pudo guardar el usuario.");
+      setError(err?.message || "No se pudo guardar el usuario.");
     } finally {
       setSaving(false);
     }
@@ -198,8 +202,10 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(96vw,760px)] overflow-hidden rounded-lg p-0 text-slate-950 sm:max-w-[760px]">
-        <form onSubmit={handleSubmit} className="flex max-h-[94svh] min-h-0 flex-col">
+      {/* ✅ SOLO altura fija (para que no cambie por tab). Ancho se queda igual y responsive */}
+      <DialogContent className="h-[85svh] max-w-[min(96vw,760px)] overflow-hidden rounded-lg p-0 text-slate-950 sm:h-[70svh] sm:max-w-[760px]">
+        {/* ✅ el form ocupa toda la altura fija */}
+        <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
           <DialogHeader className="border-b border-slate-200 pb-3">
             <div className="px-4 pt-4">
               <DialogTitle className="text-lg font-bold text-violet-700">{title}</DialogTitle>
@@ -229,50 +235,111 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
             })}
           </div>
 
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+          {/* ✅ contenido scrolleable dentro del alto fijo */}
+          <div className="mt-4 flex-1 min-h-0 overflow-y-auto px-4 pb-2">
             {activeTab === "general" ? (
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Nombre completo *</Label>
-                  <Input disabled={readonly} value={form.fullname} onChange={(event) => updateField("fullname", event.target.value)} className="h-9 bg-white" />
+                  <Input
+                    disabled={readonly}
+                    value={form.fullname}
+                    onChange={(event) => updateField("fullname", event.target.value)}
+                    className="h-9 bg-white"
+                  />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Usuario *</Label>
-                  <Input disabled={readonly} value={form.username} onChange={(event) => updateField("username", event.target.value)} className="h-9 bg-white" />
+                  <Input
+                    disabled={readonly}
+                    value={form.username}
+                    onChange={(event) => updateField("username", event.target.value)}
+                    className="h-9 bg-white"
+                  />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input disabled={readonly} value={form.email} onChange={(event) => updateField("email", event.target.value)} className="h-9 bg-white" />
+                  <Input
+                    disabled={readonly}
+                    value={form.email}
+                    onChange={(event) => updateField("email", event.target.value)}
+                    className="h-9 bg-white"
+                  />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Telefono</Label>
-                  <Input disabled={readonly} value={form.phone} onChange={(event) => updateField("phone", event.target.value)} className="h-9 bg-white" />
+                  <Input
+                    disabled={readonly}
+                    value={form.phone}
+                    onChange={(event) => updateField("phone", event.target.value)}
+                    className="h-9 bg-white"
+                  />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Rol</Label>
-                  <SearchableSelect disabled={readonly} value={form.roleId} options={roleOptions} placeholder="Selecciona rol" searchPlaceholder="Buscar rol..." onChange={(value) => updateField("roleId", value)} />
+                  <SearchableSelect
+                    disabled={readonly}
+                    value={form.roleId}
+                    options={roleOptions}
+                    placeholder="Selecciona rol"
+                    searchPlaceholder="Buscar rol..."
+                    onChange={(value) => updateField("roleId", value)}
+                  />
                 </div>
+
                 <div className="space-y-2">
                   <Label>Color</Label>
                   <div className="flex gap-2">
-                    <Input disabled={readonly} value={form.color} onChange={(event) => updateField("color", event.target.value)} className="h-9 bg-white" />
-                    <input disabled={readonly} type="color" value={form.color} onChange={(event) => updateField("color", event.target.value)} className="h-9 w-12 rounded-md border border-slate-200 disabled:opacity-60" />
+                    <Input
+                      disabled={readonly}
+                      value={form.color}
+                      onChange={(event) => updateField("color", event.target.value)}
+                      className="h-9 bg-white"
+                    />
+                    <input
+                      disabled={readonly}
+                      type="color"
+                      value={form.color}
+                      onChange={(event) => updateField("color", event.target.value)}
+                      className="h-9 w-12 rounded-md border border-slate-200 disabled:opacity-60"
+                    />
                   </div>
                 </div>
+
                 {!readonly ? (
                   <>
                     <div className="space-y-2">
                       <Label>Contrasena</Label>
-                      <Input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} className="h-9 bg-white" />
+                      <Input
+                        type="password"
+                        value={form.password}
+                        onChange={(event) => updateField("password", event.target.value)}
+                        className="h-9 bg-white"
+                      />
                     </div>
+
                     <div className="space-y-2">
                       <Label>Confirmar contrasena</Label>
-                      <Input type="password" value={form.confirmPassword} onChange={(event) => updateField("confirmPassword", event.target.value)} className="h-9 bg-white" />
+                      <Input
+                        type="password"
+                        value={form.confirmPassword}
+                        onChange={(event) => updateField("confirmPassword", event.target.value)}
+                        className="h-9 bg-white"
+                      />
                     </div>
                   </>
                 ) : null}
+
                 <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
-                  <Checkbox disabled={readonly} checked={form.isActive} onCheckedChange={(checked) => updateField("isActive", Boolean(checked))} />
+                  <Checkbox
+                    disabled={readonly}
+                    checked={form.isActive}
+                    onCheckedChange={(checked) => updateField("isActive", Boolean(checked))}
+                  />
                   <span>
                     <span className="block text-sm font-bold text-violet-700">Usuario activo</span>
                     <span className="text-xs font-medium text-slate-500">Puede acceder al sistema</span>
@@ -289,21 +356,42 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
                     <div key={day.key} className="rounded-lg border border-slate-200 p-3">
                       <div className="mb-3 flex items-center justify-between">
                         <label className="flex items-center gap-2 text-sm font-bold text-violet-700">
-                          <Checkbox disabled={readonly} checked={Boolean(value.active)} onCheckedChange={(checked) => updateSchedule(day.key, "active", Boolean(checked))} />
+                          <Checkbox
+                            disabled={readonly}
+                            checked={Boolean(value.active)}
+                            onCheckedChange={(checked) => updateSchedule(day.key, "active", Boolean(checked))}
+                          />
                           {day.label}
                         </label>
-                        <span className={cn("rounded-md px-2 py-1 text-xs font-semibold", value.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")}>
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-1 text-xs font-semibold",
+                            value.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                          )}
+                        >
                           {value.active ? "Activo" : "Inactivo"}
                         </span>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1">
                           <Label>Entrada</Label>
-                          <Input disabled={readonly} type="time" value={value.start || "08:00"} onChange={(event) => updateSchedule(day.key, "start", event.target.value)} className="h-9 bg-white" />
+                          <Input
+                            disabled={readonly}
+                            type="time"
+                            value={value.start || "08:00"}
+                            onChange={(event) => updateSchedule(day.key, "start", event.target.value)}
+                            className="h-9 bg-white"
+                          />
                         </div>
                         <div className="space-y-1">
                           <Label>Salida</Label>
-                          <Input disabled={readonly} type="time" value={value.end || "18:00"} onChange={(event) => updateSchedule(day.key, "end", event.target.value)} className="h-9 bg-white" />
+                          <Input
+                            disabled={readonly}
+                            type="time"
+                            value={value.end || "18:00"}
+                            onChange={(event) => updateSchedule(day.key, "end", event.target.value)}
+                            className="h-9 bg-white"
+                          />
                         </div>
                       </div>
                     </div>
@@ -330,18 +418,22 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
                       </div>
                     ) : null}
                     <div>
-                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Permisos de botones</p>
+                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        Permisos de botones
+                      </p>
                       <div className="flex flex-wrap gap-4">
-                        {group.actions.filter((action) => action !== "view").map((action) => (
-                          <label key={action} className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                            <Checkbox
-                              disabled={readonly}
-                              checked={Boolean(form.permissions[group.key]?.[action])}
-                              onCheckedChange={() => togglePermission(group.key, action)}
-                            />
-                            {permissionActionLabels[action] || action}
-                          </label>
-                        ))}
+                        {group.actions
+                          .filter((action) => action !== "view")
+                          .map((action) => (
+                            <label key={action} className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                              <Checkbox
+                                disabled={readonly}
+                                checked={Boolean(form.permissions[group.key]?.[action])}
+                                onCheckedChange={() => togglePermission(group.key, action)}
+                              />
+                              {permissionActionLabels[action] || action}
+                            </label>
+                          ))}
                         {group.actions.filter((action) => action !== "view").length ? null : (
                           <span className="text-xs font-medium text-slate-400">Sin botones configurados</span>
                         )}
@@ -357,13 +449,34 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
                 <div className="rounded-lg border border-violet-400 bg-violet-50 p-3">
                   <p className="text-sm font-bold text-violet-700">Centros seleccionados:</p>
                   <p className="text-xs font-medium text-slate-600">
-                    {options.centros.filter((centro) => form.centroIds.includes(centro.id)).map((centro) => centro.nombre).join(", ") || "Ninguno"}
+                    {options.centros
+                      .filter((centro) => form.centroIds.includes(centro.id))
+                      .map((centro) => centro.nombre)
+                      .join(", ") || "Ninguno"}
                   </p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
-                  <SiteColumn readonly={readonly} title="Centros" items={options.centros} selected={form.centroIds} onToggle={(id) => updateField("centroIds", toggleArray(form.centroIds, id))} />
-                  <SiteColumn readonly={readonly} title="Talleres" items={options.talleres} selected={form.tallerIds} onToggle={(id) => updateField("tallerIds", toggleArray(form.tallerIds, id))} />
-                  <SiteColumn readonly={readonly} title="Mostradores" items={options.mostradores} selected={form.mostradorIds} onToggle={(id) => updateField("mostradorIds", toggleArray(form.mostradorIds, id))} />
+                  <SiteColumn
+                    readonly={readonly}
+                    title="Centros"
+                    items={options.centros}
+                    selected={form.centroIds}
+                    onToggle={(id) => updateField("centroIds", toggleArray(form.centroIds, id))}
+                  />
+                  <SiteColumn
+                    readonly={readonly}
+                    title="Talleres"
+                    items={options.talleres}
+                    selected={form.tallerIds}
+                    onToggle={(id) => updateField("tallerIds", toggleArray(form.tallerIds, id))}
+                  />
+                  <SiteColumn
+                    readonly={readonly}
+                    title="Mostradores"
+                    items={options.mostradores}
+                    selected={form.mostradorIds}
+                    onToggle={(id) => updateField("mostradorIds", toggleArray(form.mostradorIds, id))}
+                  />
                 </div>
               </div>
             ) : null}
@@ -374,7 +487,9 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
           ) : null}
 
           <DialogFooter className="mt-4 border-t border-slate-200 px-4 py-3">
-            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancelar
+            </Button>
             {!readonly ? (
               <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">
                 {saving ? <Loader2 className="size-4 animate-spin" /> : null}
