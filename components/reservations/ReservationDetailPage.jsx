@@ -38,10 +38,11 @@ function toDateTimeLocal(value) {
 export default function ReservationDetailPage({ id }) {
   const { data, loading, update } = useReservationDetail(id);
   const [carDataOpen, setCarDataOpen] = useState(false);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   if (loading || !data) return <div className="p-4">Cargando reserva...</div>;
   const { reservation, detail, currentUser, vins, accessories, gifts, options, salesBossName, vinReleaseRequest } = data;
   const isSigned = reservation.estado === "firmado";
-  const downloadReservationPdf = async () => {
+  const downloadReservationPdf = async ({ showPriceList = true } = {}) => {
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF("p", "mm", "a4");
     const hasAutography = await loadAutographyFont(pdf);
@@ -55,8 +56,13 @@ export default function ReservationDetailPage({ id }) {
       createdByName: reservation.creadoPor || "",
       hasAutography,
       template,
+      showPriceList,
     });
     pdf.save(`reserva-${reservation.id}.pdf`);
+  };
+  const confirmPdfDownload = async (showPriceList) => {
+    setPdfDialogOpen(false);
+    await downloadReservationPdf({ showPriceList });
   };
   const resolveVinRelease = async (vinReleaseAction, extra = {}) => {
     try {
@@ -88,7 +94,7 @@ export default function ReservationDetailPage({ id }) {
         </div>
         <div className="mb-5 flex flex-wrap gap-2">
           {reservation.oportunidadId ? <Link className="inline-flex h-7 items-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-4" />Ver Oportunidad</Link> : null}
-          <Button variant="outline" onClick={downloadReservationPdf}><Download className="size-4" />Descargar PDF</Button>
+          <Button variant="outline" onClick={() => setPdfDialogOpen(true)}><Download className="size-4" />Descargar PDF</Button>
           {isSigned && detail?.vin ? (
             <VinReleaseControls
               currentUser={currentUser}
@@ -113,6 +119,18 @@ export default function ReservationDetailPage({ id }) {
             update={update}
           />
         ) : null}
+        <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+          <DialogContent className="max-w-sm bg-white text-slate-950">
+            <DialogHeader>
+              <DialogTitle>Descargar PDF de reserva</DialogTitle>
+              <p className="text-sm text-slate-500">¿Mostrar precio lista en el formato?</p>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => confirmPdfDownload(false)}>No</Button>
+              <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={() => confirmPdfDownload(true)}>Si</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -842,7 +860,7 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, salesBossName, createdByName, hasAutography, template }) {
+async function buildReservationPdf(pdf, { reservation, detail, accessories, gifts, salesBossName, createdByName, hasAutography, template, showPriceList = true }) {
   // Debe quedar 1 hoja: no se llamará addPage (pero se mantiene la estructura)
   const ALLOW_MULTIPAGE = false;
 
@@ -958,10 +976,20 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   let currentY = top;
 
   // Reservamos el bloque de firmas + observaciones al final
+  const itemRowH = 5.2;
+  const joinItemNames = (items, fallback) => (items || [])
+    .map((item) => item.detalle || item.nombre || item.numeroParte || item.numero_parte || item.lote || fallback)
+    .filter(Boolean)
+    .join(" + ");
+  const quoteItemRows = [
+    { type: "ACCESORIOS", name: joinItemNames(accessories, "Accesorio") },
+    { type: "REGALOS", name: joinItemNames(gifts, "Regalo") },
+  ].filter((item) => item.name);
   const obsH = 28;     // alto observaciones (para que entre el texto legal)
   const signH = 26;    // alto firmas
+  const extrasH = quoteItemRows.length ? quoteItemRows.length * itemRowH : 0;
   const footerGap = 2;
-  const contentBottom = bottom - (obsH + signH + footerGap);
+  const contentBottom = bottom - (obsH + signH + extrasH + footerGap);
 
   const ensurePage = (heightNeeded = 0) => {
     if (currentY + heightNeeded <= contentBottom) return;
@@ -1051,9 +1079,18 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     r.totalFinal ??
     d.total ??
     0;
-
   // Depósitos (reservation.depositos con fallback a detail.depositos)
   const depositos = Array.isArray(r.depositos) ? r.depositos : (Array.isArray(d.depositos) ? d.depositos : []);
+  const discountBase = Number(d.precioUnitario || d.precio_unitario || precioLista || 0) * Number(d.cantidad || 1);
+  const discountRows = [
+    { label: "BONO RETOMA", value: d.bonoRetoma || d.dsctobonoretoma },
+    { label: "BONO DEALER", value: d.descuentoTienda || d.dsctotienda },
+    { label: "DESCUENTO RETAIL", value: d.descuentoNper || d.dsctonper },
+    ...(Array.isArray(d.descuentos) ? d.descuentos.map((item) => ({
+      label: item.nombre || "DESCUENTO",
+      value: discountAmount(item, discountBase),
+    })) : []),
+  ].filter((item) => Number(item.value || 0) > 0);
 
   const signed = r.estado === "firmado";
 
@@ -1218,7 +1255,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   text("PRECIOS", left + 2, currentY + 4.9);
   currentY += 6.8;
 
-  row("PRECIO LISTA", money(precioLista));
+  if (showPriceList) row("PRECIO LISTA", money(precioLista));
+  discountRows.forEach((item) => row(item.label, money(item.value)));
   row("PRECIO FINAL", money(totalFinal));
 
   // ===== Depósitos =====
@@ -1228,7 +1266,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   text("DEPOSITOS (MONTO / FECHA / BANCO / OP)", left + 2, currentY + 4.9);
   currentY += 6.8;
 
-  const depRows = 5;
+  const depRows = Math.max(3, depositos.length);
   const depLabelW = 56;
   const montoW = 34;
   const fechaW = 30;
@@ -1261,7 +1299,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // =========================================================
   // ✅ Bloque de firmas EXACTO como tu original (Autography)
   // =========================================================
-  const signAreaTop = bottom - (obsH + signH); // inicia bloque firmas+obs
+  const signAreaTop = bottom - (obsH + signH + extrasH); // inicia bloque firmas+extras+obs
   const labelsY = signAreaTop;
   const lineY = signAreaTop + 18;
 
@@ -1292,7 +1330,22 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // =========================================================
   // ✅ Observaciones: texto fijo + (opcional) extra obs
   // =========================================================
-  const obsY = signAreaTop + signH;
+  const extrasY = signAreaTop + signH;
+  if (quoteItemRows.length) {
+    const typeW = 34;
+    const nameW = (right - left) - typeW;
+    quoteItemRows.forEach((item, index) => {
+      const rowY = extrasY + index * itemRowH;
+      rect(left, rowY, typeW, itemRowH, labelFill);
+      rect(left + typeW, rowY, nameW, itemRowH);
+      setFont("bold", 6.5);
+      text(item.type, left + 1.5, rowY + 3.8);
+      setFont("bold", 7.1);
+      text(clip(item.name, 100), left + typeW + 2, rowY + 3.8);
+    });
+  }
+
+  const obsY = signAreaTop + signH + extrasH;
   rect(left, obsY, right - left, obsH);
   rect(left, obsY, 40, obsH, labelFill);
 
@@ -1325,6 +1378,6 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), obsTextW);
   const lineHeightMm = obsFontSize * 0.3528 * obsLineHeight;
   const maxLines = Math.max(1, Math.floor((obsH - 5) / lineHeightMm));
-  pdf.text(wrapped.slice(0, maxLines), obsTextX, obsTextY, { lineHeightFactor: obsLineHeight });
+  pdf.text(wrapped.slice(0, maxLines), obsTextX, obsTextY, { align: "justify", maxWidth: obsTextW, lineHeightFactor: obsLineHeight });
   await drawTemplateElements(getTemplateSection("PIE"), left + 2, bottom - 7, right - left - 4, 5);
 }
