@@ -101,50 +101,50 @@ export default function CatalogPage({ userPermissions }) {
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver catalogo.</div>;
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white"><BookOpen className="size-5" /></div>
+          <div className="flex size-9 items-center justify-center rounded-md bg-violet-700 text-white"><BookOpen className="size-5" /></div>
           <div>
-            <h1 className="text-3xl font-bold leading-none text-violet-700">Catalogo</h1>
+            <h1 className="text-2xl font-bold leading-none text-violet-700">Catalogo</h1>
             <p className="mt-1 text-xs font-medium text-slate-500">Gestiona especificaciones por version de carro</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canExport ? <Button variant="outline" onClick={exportCatalog}><Download className="size-4" />Exportar</Button> : null}
-          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar</Button> : null}
+          {canExport ? <Button variant="outline" onClick={exportCatalog} className="h-9"><Download className="size-4" />Exportar</Button> : null}
+          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="h-9"><Upload className="size-4" />Importar</Button> : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importCatalog} />
         </div>
       </div>
-      {message ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{message}</p> : null}
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
+      {message ? <p className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700">{message}</p> : null}
+      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-4">
         <Stat label="Versiones" value={data.stats.prices} />
         <Stat label="Grupos" value={data.stats.groups} />
         <Stat label="Specs" value={data.stats.items} />
         <Stat label="Activas" value={data.stats.activeItems} />
       </div>
-      <section className="mb-4 rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+      <section className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-white px-3 py-2 shadow-sm">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar marca, modelo o version..." className="pl-9" />
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar marca, modelo o version..." className="h-9 bg-white pl-9" />
         </div>
       </section>
-      <section className="space-y-3 rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
+      <section className="min-h-0 flex-1 space-y-2 overflow-auto overscroll-contain rounded-lg border border-violet-200 bg-white p-3 shadow-sm">
         {data.loading ? <div className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</div> : filteredPrices.map((price) => {
           const isOpen = expanded[price.id] ?? false;
           return (
             <div key={price.id} className="overflow-hidden rounded-lg border border-slate-200">
-              <button className="flex w-full items-center justify-between bg-slate-50 px-3 py-3 text-left" onClick={() => setExpanded((current) => ({ ...current, [price.id]: !isOpen }))}>
+              <button className="flex w-full items-center justify-between bg-slate-50 px-3 py-2.5 text-left" onClick={() => setExpanded((current) => ({ ...current, [price.id]: !isOpen }))}>
                 <span className="font-bold">{price.marcaName} {price.modeloName} <span className="text-violet-700">{price.version}</span></span>
                 <span className="flex items-center gap-2 text-xs text-slate-500">{price.groups.length} grupos <ChevronDown className={`size-4 transition ${isOpen ? "rotate-180" : ""}`} /></span>
               </button>
               {isOpen ? (
-                <div className="space-y-3 p-3">
+                <div className="space-y-2 p-2.5">
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => window.open(`/catalogo/${price.id}`, "_blank", "noopener,noreferrer")}><ExternalLink className="size-4" />Ficha tecnica</Button>
-                    <Button size="sm" variant="outline" onClick={() => openTechnicalSheetPdf(price)}><Download className="size-4" />Descargar PDF</Button>
-                    <Button size="sm" variant="outline" onClick={() => setSendDialog({ open: true, price })}><Send className="size-4" />Enviar a</Button>
-                    {canCreate ? <Button size="sm" onClick={() => setGroupDialog({ open: true, price, item: null })}><Plus className="size-4" />Nuevo Grupo</Button> : null}
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => window.open(`/catalogo/${price.id}`, "_blank", "noopener,noreferrer")}><ExternalLink className="size-4" />Ficha tecnica</Button>
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => openTechnicalSheetPdf(price)}><Download className="size-4" />Descargar PDF</Button>
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => setSendDialog({ open: true, price })}><Send className="size-4" />Enviar a</Button>
+                    {canCreate ? <Button size="sm" className="h-8" onClick={() => setGroupDialog({ open: true, price, item: null })}><Plus className="size-4" />Nuevo Grupo</Button> : null}
                   </div>
                   {price.groups.map((group) => <GroupCard key={group.id} group={group} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} onEditGroup={() => setGroupDialog({ open: true, price, item: group })} onDeleteGroup={async () => { await data.deleteGroup(group.id); toast.success("Grupo eliminado"); }} onNewItem={() => setItemDialog({ open: true, group, item: null })} onEditItem={(item) => setItemDialog({ open: true, group, item })} onDeleteItem={async (item) => { await data.deleteItem(item.id); toast.success("Spec eliminada"); }} />)}
                   {!price.groups.length ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Sin grupos de especificaciones.</p> : null}
@@ -208,15 +208,15 @@ function SendTechnicalSheetDialog({ state, onClose }) {
 function GroupCard({ group, canCreate, canEdit, canDelete, onEditGroup, onDeleteGroup, onNewItem, onEditItem, onDeleteItem }) {
   return (
     <div className="rounded-lg border border-blue-100">
-      <div className="flex items-center justify-between bg-blue-50 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 bg-blue-50 px-3 py-2">
         <div><h3 className="font-bold text-slate-950">{group.nombre}</h3><p className="text-xs text-slate-500">Orden {group.orden} - {group.isActive ? "Activo" : "Inactivo"}</p></div>
-        <div className="flex gap-2">{canCreate ? <Button size="sm" variant="outline" onClick={onNewItem}><Plus className="size-4" />Spec</Button> : null}{canEdit ? <Button size="icon" variant="outline" onClick={onEditGroup}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" onClick={onDeleteGroup}><Trash2 className="size-4" /></Button> : null}</div>
+        <div className="flex shrink-0 gap-2">{canCreate ? <Button size="sm" variant="outline" className="h-8" onClick={onNewItem}><Plus className="size-4" />Spec</Button> : null}{canEdit ? <Button size="icon" variant="outline" className="size-8" onClick={onEditGroup}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" className="size-8" onClick={onDeleteGroup}><Trash2 className="size-4" /></Button> : null}</div>
       </div>
       <div className="divide-y divide-slate-200">
         {group.items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between px-3 py-2">
+          <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0"><p className="font-semibold">{item.clave}: <SpecValuePreview item={item} /></p><p className="text-xs text-slate-500">Orden {item.orden} - {item.isActive ? "Activo" : "Inactivo"}</p></div>
-            <div className="flex gap-2">{canEdit ? <Button size="icon" variant="outline" onClick={() => onEditItem(item)}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" onClick={() => onDeleteItem(item)}><Trash2 className="size-4" /></Button> : null}</div>
+            <div className="flex shrink-0 gap-2">{canEdit ? <Button size="icon" variant="outline" className="size-8" onClick={() => onEditItem(item)}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" className="size-8" onClick={() => onDeleteItem(item)}><Trash2 className="size-4" /></Button> : null}</div>
           </div>
         ))}
       </div>
@@ -314,7 +314,7 @@ function EntityDialog({ title, children, onClose, onSubmit }) {
 }
 
 function Stat({ label, value }) {
-  return <div className="flex min-h-20 items-center justify-between rounded-lg border border-violet-200 bg-violet-50 p-4 shadow-sm"><div><p className="text-xs font-bold text-violet-700">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div><Layers className="size-7 text-violet-300" /></div>;
+  return <div className="flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2"><div className="min-w-0"><p className="text-[11px] font-semibold leading-4 text-violet-700">{label}</p><p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p></div><Layers className="size-5 shrink-0 text-violet-300" /></div>;
 }
 
 function Field({ label, children }) {

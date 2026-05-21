@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Boxes, Edit3, Eye, Layers3, Loader2, MapPin, Package, Plus, RefreshCw, Search, Settings2, Trash2, TrendingUp, TriangleAlert, X } from "lucide-react";
+import { Boxes, Edit3, Eye, Layers3, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -65,8 +65,8 @@ export default function PostInventoryPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-violet-700 text-white">
             <Package className="size-5" />
@@ -76,21 +76,16 @@ export default function PostInventoryPage({ userPermissions }) {
             <p className="text-xs font-medium text-slate-500">Gestion de productos y stock</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={data.reload}><RefreshCw className="size-4" />Recargar</Button>
-          {canCreate && view === "products" ? <Button onClick={() => setProductDialog({ open: true, item: null, readonly: false })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Producto</Button> : null}
-          {canCreate && view === "combos" ? <Button onClick={() => setComboDialog({ open: true, item: null, readonly: false })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Combo</Button> : null}
-        </div>
       </div>
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-4">
+      <div className="mb-3 grid shrink-0 gap-2 lg:grid-cols-4">
         <Stat label="Total Productos" value={data.stats.products} tone="blue" icon={Package} />
         <Stat label="Stock Total" value={data.stats.totalStock} tone="green" icon={TrendingUp} />
         <Stat label="Stock Bajo" value={lowStock} tone="red" icon={TriangleAlert} />
         <Stat label="Combos" value={data.stats.combos} tone="purple" icon={Layers3} />
       </div>
 
-      <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+      <div className="mb-3 inline-flex shrink-0 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
         <Button type="button" size="sm" variant={view === "products" ? "default" : "ghost"} onClick={() => setView("products")} className={view === "products" ? "bg-violet-700 text-white hover:bg-violet-800" : ""}>
           <Package className="size-4" />Productos
         </Button>
@@ -99,22 +94,24 @@ export default function PostInventoryPage({ userPermissions }) {
         </Button>
       </div>
 
-      <section className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-950"><Settings2 className="size-4" />Filtros y busqueda</h2>
-        </div>
-        <div className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_320px]">
-          <div className="space-y-1.5">
+      <section className="mb-3 shrink-0 rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+          <div className="min-w-0 space-y-1.5">
             <Label>{view === "products" ? "Buscar producto" : "Buscar combo"}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={view === "products" ? "Buscar por N parte o descripcion..." : "Buscar por codigo, nombre o descripcion..."} className="h-9 bg-white pl-9" />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={view === "products" ? "Buscar por N parte o descripcion..." : "Buscar por codigo, nombre o descripcion..."} className="h-10 bg-white pl-9" />
             </div>
           </div>
           {view === "products" ? <div className="space-y-1.5">
             <Label>Minimo stock</Label>
-            <Input type="number" value={minStock} onChange={(event) => setMinStock(event.target.value)} className="h-9 bg-white" />
+            <Input type="number" value={minStock} onChange={(event) => setMinStock(event.target.value)} className="h-10 bg-white" />
           </div> : null}
+          <div className="flex flex-col gap-2 sm:flex-row md:justify-end">
+            <Button variant="outline" onClick={data.reload} className="h-10"><RefreshCw className="size-4" />Recargar</Button>
+            {canCreate && view === "products" ? <Button onClick={() => setProductDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Producto</Button> : null}
+            {canCreate && view === "combos" ? <Button onClick={() => setComboDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Combo</Button> : null}
+          </div>
         </div>
       </section>
 
@@ -183,10 +180,10 @@ export default function PostInventoryPage({ userPermissions }) {
 
 function ProductsTable({ loading, products, total, canEdit, canDelete, onView, onEdit, onStock, onDelete }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
           <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-3">N Parte</th>
                 <th className="px-3 py-3">Descripcion</th>
@@ -222,7 +219,7 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, onView, o
             </tbody>
           </table>
         </div>
-        <div className="flex justify-between bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+        <div className="flex shrink-0 justify-between bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
           <span>Pagina 1 de 1 - {products.length} de {total} productos</span>
           <div className="flex gap-2"><Button variant="outline" disabled>Anterior</Button><Button variant="outline" disabled>Siguiente</Button></div>
         </div>
@@ -232,10 +229,10 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, onView, o
 
 function CombosTable({ loading, combos, total, canEdit, canDelete, onView, onEdit, onDelete }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
         <table className="w-full min-w-[860px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
             <tr>
               <th className="px-3 py-3">Codigo</th>
               <th className="px-3 py-3">Nombre</th>
@@ -276,7 +273,7 @@ function CombosTable({ loading, combos, total, canEdit, canDelete, onView, onEdi
           </tbody>
         </table>
       </div>
-      <div className="flex justify-between bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+      <div className="flex shrink-0 justify-between bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
         <span>Pagina 1 de 1 - {combos.length} de {total} combos</span>
         <div className="flex gap-2"><Button variant="outline" disabled>Anterior</Button><Button variant="outline" disabled>Siguiente</Button></div>
       </div>
@@ -658,7 +655,15 @@ function Stat({ label, value, tone, icon: Icon }) {
     red: "border-red-200 bg-red-50 text-red-700",
     purple: "border-violet-200 bg-violet-50 text-violet-700",
   };
-  return <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 shadow-sm ${tones[tone]}`}><div><p className="text-xs font-bold">{label}</p><p className="mt-3 text-2xl font-bold text-slate-950">{value}</p></div><Icon className="size-8 opacity-40" /></div>;
+  return (
+    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
+      </div>
+      <Icon className="size-5 shrink-0 opacity-50" />
+    </div>
+  );
 }
 
 function MiniStat({ label, value }) {

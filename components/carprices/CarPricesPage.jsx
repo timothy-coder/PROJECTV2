@@ -163,8 +163,8 @@ export default function CarPricesPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white shadow-sm"><Car className="size-5" /></div>
           <div>
@@ -178,20 +178,13 @@ export default function CarPricesPage({ userPermissions }) {
           {canHistoryExport ? <Button variant="outline" onClick={exportInventory}><Download className="size-4" />Exportar inventario</Button> : null}
           {canHistoryImport ? <Button variant="outline" onClick={() => inventoryFileInputRef.current?.click()}><Upload className="size-4" />Importar inventario</Button> : null}
           {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Inventario</Button> : null}
-          {canHistory && canCreateHistory ? <Button variant="outline" onClick={() => setHistoryDialog({ open: true })}><Plus className="size-4" />Crear carro</Button> : null}
-          {canCreate ? (
-            <Button onClick={() => setDialog({ open: true, item: null })} className="bg-violet-700 text-white hover:bg-violet-800">
-              <Plus className="size-4" />
-              Nuevo Precio
-            </Button>
-          ) : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importPrices} />
           <input ref={inventoryFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importInventory} />
         </div>
       </div>
-      {importMessage ? <p className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
+      {importMessage ? <p className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
 
-      <div className="mb-4 grid gap-3 md:grid-cols-5">
+      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-5">
         <Stat label="Total" value={data.stats.total} icon={DollarSign} />
         <Stat label="Marcas" value={data.stats.brands} icon={Car} />
         <Stat label="Modelos" value={data.stats.models} icon={Car} tone="green" />
@@ -199,7 +192,7 @@ export default function CarPricesPage({ userPermissions }) {
         <Stat label="Bajo Pedido" value={data.stats.pedido} icon={Clock} tone="orange" />
       </div>
 
-      <div className="mb-4 w-full overflow-x-auto rounded-lg bg-slate-100 p-1">
+      <div className="mb-3 w-full shrink-0 overflow-x-auto rounded-lg bg-slate-100 p-1">
         <div className="flex min-w-max gap-1">
           {canView ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "prices" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("prices")}>Precios</button> : null}
           {canHistory ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Inventario</button> : null}
@@ -207,30 +200,30 @@ export default function CarPricesPage({ userPermissions }) {
         </div>
       </div>
 
-      {activeView === "prices" ? <section className="mb-4 rounded-lg border border-violet-200 bg-white shadow-sm">
-        <div className="bg-violet-50/40 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Filter className="size-5" />Filtros</h2>
-        </div>
-        <div className="space-y-3 p-4">
-          <Field label="Buscar">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Marca, modelo, version..." className="h-9 bg-white pl-9" />
-            </div>
-          </Field>
-          <div className="grid gap-3 md:grid-cols-5">
+      {activeView === "prices" ? <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
+        <div className="shrink-0 space-y-2 border-b border-slate-200 px-3 py-2">
+          <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_130px_130px_auto_auto] lg:items-end">
+            <Field label="Buscar">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Marca, modelo, version..." className="h-9 bg-white pl-9" />
+              </div>
+            </Field>
             <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
             <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelFilterOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
             <Field label="Moneda"><SearchableSelect value={filters.monedaId} options={currencyOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, monedaId: value }))} /></Field>
             <Field label="Estado"><SearchableSelect value={filters.estado} options={stateOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, estado: value }))} /></Field>
-            <div className="flex items-end"><Button variant="outline" className="h-9 w-full" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "", estado: "" })}>Limpiar</Button></div>
+            <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "", estado: "" })}>Limpiar</Button>
+            {canCreate ? (
+              <Button onClick={() => setDialog({ open: true, item: null })} className="h-9 bg-violet-700 text-white hover:bg-violet-800">
+                <Plus className="size-4" />
+                Nuevo Precio
+              </Button>
+            ) : null}
           </div>
-          <p className="text-sm font-medium text-slate-500">Mostrando {filteredPrices.length} de {data.prices.length} precios</p>
+          <p className="text-xs font-medium text-slate-500">Mostrando {filteredPrices.length} de {data.prices.length} precios</p>
         </div>
-      </section> : null}
-
-      {activeView === "prices" ? <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-        <div className="max-h-[calc(100svh-390px)] overflow-auto rounded-lg border border-slate-200">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[1040px] text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
               <tr>
@@ -273,7 +266,7 @@ export default function CarPricesPage({ userPermissions }) {
         </div>
       </section> : null}
 
-      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} canEdit={canHistoryEdit} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
+      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} canEdit={canHistoryEdit} canCreate={canCreateHistory} onCreate={() => setHistoryDialog({ open: true })} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
       {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
@@ -449,7 +442,7 @@ function DeleteDialog({ state, onClose, onConfirm }) {
   );
 }
 
-function HistorySection({ loading, history, canEdit, onEdit }) {
+function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit }) {
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredHistory = useMemo(() => {
@@ -458,21 +451,22 @@ function HistorySection({ loading, history, canEdit, onEdit }) {
   }, [history, normalizedQuery]);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><History className="size-5" />Inventario de Carros</h2>
-          <p className="text-xs font-medium text-slate-500">Consulta VIN, factura, precios y fechas del carro</p>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-violet-700"><History className="size-4" />Inventario de Carros</h2>
+          <p className="text-[11px] font-medium text-slate-500">Consulta VIN, factura, precios y fechas del carro</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar vehiculo, VIN, factura o motor" className="h-9 w-full bg-white pl-9 sm:w-80" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar vehiculo, VIN, factura o motor" className="h-9 w-full bg-white pl-9 sm:w-72" />
           </div>
           <span className="w-fit rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filteredHistory.length} de {history.length} registros</span>
+          {canCreate ? <Button variant="outline" onClick={onCreate} className="h-9"><Plus className="size-4" />Crear carro</Button> : null}
         </div>
       </div>
-      <div className="max-h-[calc(100svh-300px)] overflow-auto rounded-lg border border-slate-200">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
             <tr>
@@ -522,16 +516,29 @@ function HistorySection({ loading, history, canEdit, onEdit }) {
 }
 
 function PendingPurchasesSection({ loading, rows }) {
+  const [query, setQuery] = useState("");
+  const clean = query.trim().toLowerCase();
+  const filteredRows = useMemo(() => {
+    if (!clean) return rows;
+    return rows.filter((item) => `${item.reservaId} ${item.cliente} ${item.marcaName} ${item.modeloName} ${item.version} ${item.colorExterno} ${item.colorInterno} ${item.estado}`.toLowerCase().includes(clean));
+  }, [clean, rows]);
+
   return (
-    <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Car className="size-5" />Carros pendientes de compra</h2>
-          <p className="text-xs font-medium text-slate-500">Reservas sin VIN asignado que requieren compra o asignacion de unidad</p>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-violet-700"><Car className="size-4" />Carros pendientes de compra</h2>
+          <p className="text-[11px] font-medium text-slate-500">Reservas sin VIN asignado que requieren compra o asignacion de unidad</p>
         </div>
-        <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{rows.length} pendientes</span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar reserva, cliente o vehiculo" className="h-9 w-full bg-white pl-9 sm:w-72" />
+          </div>
+          <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filteredRows.length} de {rows.length} pendientes</span>
+        </div>
       </div>
-      <div className="max-h-[calc(100svh-300px)] overflow-auto rounded-lg border border-slate-200">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
             <tr>
@@ -551,7 +558,7 @@ function PendingPurchasesSection({ loading, rows }) {
           <tbody className="divide-y divide-slate-200">
             {loading ? (
               <tr><td colSpan={11} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
-            ) : rows.map((item) => (
+            ) : filteredRows.map((item) => (
               <tr key={`${item.reservaId}-${item.precioId}`}>
                 <td className="px-3 py-3 font-bold text-violet-700">#{item.reservaId}</td>
                 <td className="px-3 py-3 font-medium">{item.cliente}</td>
@@ -571,7 +578,7 @@ function PendingPurchasesSection({ loading, rows }) {
                 </td>
               </tr>
             ))}
-            {!loading && rows.length === 0 ? <tr><td colSpan={11} className="py-10 text-center text-slate-500">No hay carros pendientes de compra.</td></tr> : null}
+            {!loading && filteredRows.length === 0 ? <tr><td colSpan={11} className="py-10 text-center text-slate-500">No hay carros pendientes de compra.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -586,15 +593,18 @@ function Stat({ label, value, icon: Icon, tone = "purple" }) {
     orange: "border-orange-200 bg-orange-50 text-orange-700",
   };
   return (
-    <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
-      <div><p className="text-xs font-bold">{label}</p><p className="mt-3 text-2xl font-bold text-slate-950">{value}</p></div>
-      <Icon className="size-8 opacity-45" />
+    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
+      </div>
+      <Icon className="size-5 shrink-0 opacity-50" />
     </div>
   );
 }
 
 function Field({ label, children }) {
-  return <div className="space-y-1.5"><Label className="text-xs font-bold text-slate-600">{label}</Label>{children}</div>;
+  return <div className="space-y-1"><Label className="text-[11px] font-bold text-slate-600">{label}</Label>{children}</div>;
 }
 
 function Toggle({ label, description, checked, onCheckedChange }) {

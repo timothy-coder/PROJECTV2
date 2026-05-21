@@ -85,9 +85,9 @@ export default function UsersPage({ userPermissions }) {
 
   return (
     // ✅ layout full height
-    <div className="flex min-h-[calc(100svh-0px)] flex-col bg-slate-50 p-3 sm:p-4 text-slate-950">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
       {/* Header */}
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
           <Users className="size-5" />
         </div>
@@ -98,7 +98,7 @@ export default function UsersPage({ userPermissions }) {
       </div>
 
       {/* Stats compactos */}
-      <div className="grid gap-2 lg:grid-cols-3">
+      <div className="grid shrink-0 gap-2 lg:grid-cols-3">
         <StatCard label="Total de Usuarios" value={stats.total} tone="blue" icon={Users} />
         <StatCard label="Usuarios Activos" value={stats.active} tone="green" icon={Shield} />
         <StatCard label="Usuarios Inactivos" value={stats.inactive} tone="orange" icon={Shield} />
@@ -110,8 +110,8 @@ export default function UsersPage({ userPermissions }) {
         
 
         {/* ✅ Toolbar: search full + button right + misma altura */}
-        <div className="flex items-center gap-3 border-t border-slate-200 px-4 py-3">
-          <div className="relative flex-1">
+        <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={query}
@@ -213,7 +213,7 @@ export default function UsersPage({ userPermissions }) {
         </div>
 
         {/* Footer paginación (fijo, no se va con el scroll) */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
           <span>Pagina 1 de 1</span>
           <div className="flex gap-2">
             <Button variant="outline" disabled className="h-9">
@@ -227,7 +227,7 @@ export default function UsersPage({ userPermissions }) {
       </section>
 
       {/* Info (abajo) */}
-      <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
+      <div className="mt-3 shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
         <p className="text-sm font-bold">Informacion importante:</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs font-medium">
           <li>Los usuarios activos tienen acceso al sistema</li>

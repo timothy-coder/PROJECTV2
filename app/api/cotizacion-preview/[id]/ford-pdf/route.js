@@ -76,7 +76,8 @@ async function loadQuoteData(id) {
     `SELECT q.*, o.oportunidad_id, o.id AS oportunidad_pk,
             CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
             c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal,
-            au.fullname AS asignado, cu.fullname AS creado, cu.email AS asesor_email, cu.phone AS asesor_phone,
+            au.fullname AS asignado, au.email AS asignado_email, au.phone AS asignado_phone,
+            cu.fullname AS creado, cu.email AS asesor_email, cu.phone AS asesor_phone,
             p.id AS precio_id, p.version, p.precio_base, p.en_stock, p.tiempo_entrega_dias,
             ma.name AS marca, mo.name AS modelo
      FROM ventas_cotizaciones q
@@ -269,7 +270,7 @@ function drawQuotePage(doc, data) {
   y = priceRow(doc, y, "TOTAL EN DOLARES", "", money(total), true);
 
   drawBankTable(doc, x, y + 18);
-  drawSignature(doc, quote.creado || quote.asignado || "Asesor", 365, 548);
+  drawSignature(doc, quote.creado || quote.asignado || "Asesor", 365, 548, getAdvisorContact(quote));
 
   doc.font("Helvetica-Bold").fontSize(7).fillColor("#ffffff").text("CONDICIONES DE VENTA", x, 530);
   doc.font("Helvetica").fontSize(7).text("Entrega inmediata sujeta a disponibilidad de stock\nGarantia Ford de 5 años o 150,000 km.\nSeguro: Consulte por su tasa exclusiva y atencion personalizada.", x, 545, { width: 310 });
@@ -290,7 +291,8 @@ function drawQuotePageV2(doc, data) {
   const x = 18;
   const w = PAGE_W - 36;
   const advisorName = quote.creado || quote.asignado || "-";
-  const advisorPhone = quote.asesor_phone || "-";
+  const advisorContact = getAdvisorContact(quote);
+  const advisorPhone = advisorContact.phone || "-";
 
   doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
   doc.save();
@@ -326,7 +328,7 @@ function drawQuotePageV2(doc, data) {
   doc.font("Helvetica-Bold").fontSize(6.8).text("CELULAR:", 355, 120);
   doc.font("Helvetica").fontSize(6.8).text(advisorPhone, 405, 120, { width: 150 });
   doc.font("Helvetica-Bold").fontSize(6.8).text("EMAIL:", 355, 134);
-  doc.font("Helvetica").fontSize(6.2).text(quote.asesor_email || "-", 405, 134, { width: 150 });
+  doc.font("Helvetica").fontSize(6.2).text(advisorContact.email || "-", 405, 134, { width: 150 });
 
   doc.moveTo(x, 170).lineTo(x + w, 170).strokeColor("#000000").lineWidth(0.5).stroke();
   doc.font("Helvetica").fontSize(7).fillColor("#000000").text(
@@ -368,7 +370,7 @@ function drawQuotePageV2(doc, data) {
   if (doc._publicQuoteUrl) {
     drawQrPlaceholder(doc, doc._publicQuoteUrl, x, conditionsY + 116, 70);
   }
-  drawSignature(doc, advisorName, 398, y + 94);
+  drawSignature(doc, advisorName, 398, y + 94, advisorContact);
 
   if (!doc._fullQuote) {
     doc.font("Helvetica-Bold").fontSize(6.8).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, 742);
@@ -443,7 +445,7 @@ function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
     doc.font("Helvetica-Bold").text(item, x + 42, 560 + index * 17, { width: w - 70 });
   });
 
-  drawSignature(doc, quote.creado || quote.asignado || "Asesor", x + w - 188, 620);
+  drawSignature(doc, quote.creado || quote.asignado || "Asesor", x + w - 188, 620, getAdvisorContact(quote));
 
   doc.font("Helvetica-Bold").fontSize(8).text("NOTA:", x + 22, 674);
   doc.font("Helvetica-Bold").fontSize(8).text(
@@ -551,7 +553,13 @@ function drawBankTable(doc, x, y) {
   doc.moveTo(x, y + 28).lineTo(x + 300, y + 28).stroke();
 }
 
-function drawSignature(doc, name, x, y) {
+function getAdvisorContact(quote = {}) {
+  const phone = String(quote.asesor_phone || quote.asignado_phone || "").trim();
+  const email = String(quote.asesor_email || quote.asignado_email || "").trim();
+  return { phone, email };
+}
+
+function drawSignature(doc, name, x, y, contact = {}) {
   doc.rect(x, y, 175, 92).strokeColor("#111111").fillAndStroke("#ffffff", "#111111");
   const fontName = doc._registeredAutography ? "Autography" : "Helvetica-Oblique";
   const cleanName = String(name || "-").trim();
@@ -562,7 +570,12 @@ function drawSignature(doc, name, x, y) {
     doc.fontSize(size);
   }
   doc.fillColor("#000000").text(cleanName, x + 15, y + 32, { width: 145, align: "center", lineBreak: false });
-  doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("Firma del Vendedor", x, y + 96, { width: 175, align: "center" });
+  const labelSize = 7;
+  doc.font("Helvetica-Bold").fontSize(labelSize).fillColor("#000000").text("Firma del Vendedor", x, y + 96, { width: 175, align: "center" });
+  const phone = String(contact.phone || "").trim();
+  const email = String(contact.email || "").trim();
+  if (phone) doc.font("Helvetica-Bold").fontSize(labelSize).text(phone, x, y + 106, { width: 175, align: "center" });
+  if (email) doc.font("Helvetica-Bold").fontSize(labelSize).text(email, x, y + (phone ? 116 : 106), { width: 175, align: "center" });
 }
 
 function drawQuoteImages(doc, items, x, y, w, h) {
@@ -623,7 +636,7 @@ function drawTechnicalSheetPages(doc, data) {
 
   doc.fillColor("#000000").font("Helvetica-Bold").fontSize(10).text("FICHA TECNICA VEHICULAR", 42, 42, { width: 511, align: "center" });
   doc.fontSize(18).text(`${price.marca || ""} ${price.modelo || ""}`.trim().toUpperCase() || "-", 42, 62, { width: 511, align: "center" });
-  doc.font("Helvetica").fontSize(11).text(String(price.version || "-").toUpperCase(), 42, 86, { width: 511, align: "center" });
+  doc.font("Helvetica-Bold").fontSize(11).text(String(price.version || "-").toUpperCase(), 42, 86, { width: 511, align: "center" });
   doc.moveTo(42, 112).lineTo(553, 112).strokeColor("#000000").lineWidth(0.8).stroke();
   doc.y = 128;
 
@@ -670,7 +683,7 @@ function drawTechnicalTemplateElement(doc, item, x, y, width) {
       .text(item.texto || item.url || "", x, y, { width, align, link: item.url || undefined, underline: true });
     return;
   }
-  doc.fillColor("#0f172a").fontSize(10).font("Helvetica").text(item.texto || "", x, y, { width, align });
+  doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold").text(item.texto || "", x, y, { width, align });
 }
 
 function drawTechnicalGroupTitle(doc, title, y) {
@@ -716,7 +729,7 @@ function drawTechnicalSpecCard(doc, item, x, y, width, height, origin) {
   }
 
   const valueText = technicalSpecValue(item);
-  if (valueText) doc.fillColor("#0f172a").fontSize(9.2).font("Helvetica").text(valueText, x + 10, y + 24, { width: width - 20, lineGap: 1 });
+  if (valueText) doc.fillColor("#0f172a").fontSize(9.2).font("Helvetica-Bold").text(valueText, x + 10, y + 24, { width: width - 20, lineGap: 1 });
 }
 
 function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
@@ -746,7 +759,7 @@ function drawTechnicalPreviewItems(doc, previewItems, template, origin) {
     const x = 42 + col * (slotW + gap);
     const y = startY + 24 + row * (qrSize + 24);
     drawQrPlaceholder(doc, href, x + (slotW - qrSize) / 2, y, qrSize);
-    doc.font("Helvetica").fontSize(7).fillColor("#000000").text("Multimedia del codigo QR", x, y + qrSize + 5, { width: slotW, align: "center" });
+    doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("Multimedia del codigo QR", x, y + qrSize + 5, { width: slotW, align: "center" });
   }
 
   doc.y = startY + sectionH + 12;
@@ -783,7 +796,7 @@ function getTechnicalSpecTileHeight(doc, item, origin, width) {
   const keyText = String(item.key || "").toUpperCase();
   const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
   const keyH = doc.font("Helvetica-Bold").fontSize(6.4).heightOfString(keyText, { width, lineGap: 0 });
-  const valueH = valueText ? doc.font("Helvetica").fontSize(7.4).heightOfString(valueText, { width, lineGap: 0 }) : 0;
+  const valueH = valueText ? doc.font("Helvetica-Bold").fontSize(7.4).heightOfString(valueText, { width, lineGap: 0 }) : 0;
   return Math.max(mediaLike ? 62 : 13, keyH + valueH + (mediaLike ? 38 : valueText ? 5 : 1));
 }
 
@@ -794,7 +807,7 @@ function drawTechnicalSpecTile(doc, item, x, y, width, height, origin) {
   const valueText = mediaLike ? "Ver multimedia con codigo QR" : technicalSpecValue(item);
   doc.font("Helvetica-Bold").fontSize(6.4).fillColor("#000000").text(keyText, x, y, { width, lineGap: 0 });
   const keyH = doc.heightOfString(keyText, { width, lineGap: 0 });
-  if (valueText) doc.font("Helvetica").fontSize(7.4).fillColor("#000000").text(valueText, x, y + keyH + 1, { width, lineGap: 0 });
+  if (valueText) doc.font("Helvetica-Bold").fontSize(7.4).fillColor("#000000").text(valueText, x, y + keyH + 1, { width, lineGap: 0 });
   if (mediaLike) drawQrPlaceholder(doc, href, x + (width - 32) / 2, y + height - 34, 32);
   doc.moveTo(x, y + height).lineTo(x + width, y + height).strokeColor("#d1d5db").lineWidth(0.25).stroke();
 }
@@ -810,7 +823,7 @@ function drawFinalTermsAtEnd(doc) {
   const x = 42;
   const w = 511;
   const titleH = 12;
-  doc.font("Helvetica").fontSize(5.6);
+  doc.font("Helvetica-Bold").fontSize(5.6);
   const bodyH = doc.heightOfString(text, { width: w, lineGap: 0.8 });
   const needed = titleH + bodyH + 10;
   const footerY = PAGE_H - 34 - needed;
@@ -821,7 +834,7 @@ function drawFinalTermsAtEnd(doc) {
   doc.y = PAGE_H - 34 - needed;
   doc.font("Helvetica-Bold").fontSize(7).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, doc.y);
   doc.y += titleH;
-  doc.font("Helvetica").fontSize(5.6).fillColor("#000000").text(text, x, doc.y, { width: w, lineGap: 0.8 });
+  doc.font("Helvetica-Bold").fontSize(5.6).fillColor("#000000").text(text, x, doc.y, { width: w, lineGap: 0.8 });
 }
 
 function drawWatermark(doc, watermark) {

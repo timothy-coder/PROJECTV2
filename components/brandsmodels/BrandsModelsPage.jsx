@@ -69,7 +69,10 @@ export default function BrandsModelsPage({ userPermissions }) {
   const filteredBrands = useMemo(() => {
     const clean = query.trim().toLowerCase();
     if (!clean) return data.brands;
-    return data.brands.filter((brand) => brand.name.toLowerCase().includes(clean));
+    return data.brands.filter((brand) =>
+      brand.name.toLowerCase().includes(clean) ||
+      brand.models.some((model) => model.name.toLowerCase().includes(clean))
+    );
   }, [data.brands, query]);
 
   function askDelete({ title, description, onConfirm }) {
@@ -85,70 +88,64 @@ export default function BrandsModelsPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
       <PageHeader />
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-3">
+      <div className="mb-3 grid shrink-0 gap-2 lg:grid-cols-3">
         <Stat label="Total de Marcas" value={data.stats.brands} tone="blue" icon={Car} />
         <Stat label="Total de Modelos" value={data.stats.models} tone="purple" icon={Layers} />
         <Stat label="Total de Clases" value={data.stats.classes} tone="green" icon={Layers} />
       </div>
 
-      <section className="mb-4 rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-bold text-slate-950">Herramientas</h2>
-        </div>
-        <div className="flex flex-wrap gap-2 px-4 py-3">
-          <Button variant="outline" onClick={data.reload} disabled={data.loading}>
-            <RefreshCw className="size-4" />
-            Recargar
-          </Button>
-          {canViewClasses ? (
-            <Button variant="outline" onClick={() => setClassesOpen(true)} className="border-emerald-300 text-emerald-700">
-              <Layers className="size-4" />
-              Clases
+      {canViewClasses || canViewMaintenance ? (
+        <section className="mb-3 shrink-0 rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
+          <div className="flex flex-wrap gap-2 px-4 py-3">
+            <Button variant="outline" onClick={data.reload} disabled={data.loading} className="h-10">
+              <RefreshCw className="size-4" />
+              Recargar
             </Button>
-          ) : null}
-          {canViewMaintenance ? (
-            <Button variant="outline" onClick={() => setMaintenanceOpen(true)} className="border-orange-300 text-orange-700">
-              <Wrench className="size-4" />
-              F. de mantenimiento
-            </Button>
-          ) : null}
-          {canCreateBrand ? (
-            <Button onClick={() => setBrandDialog({ open: true, item: null, readonly: false })} className="bg-violet-700 text-white hover:bg-violet-800">
-              <Plus className="size-4" />
-              Nueva Marca
-            </Button>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
-          <IconBox icon={Car} />
-          <div>
-            <h2 className="text-sm font-bold text-slate-950">Listado de Marcas y Modelos</h2>
-            <p className="text-xs font-medium text-slate-500">Administra todas las marcas con sus modelos asociados</p>
+            {canViewClasses ? (
+              <Button variant="outline" onClick={() => setClassesOpen(true)} className="h-10 border-emerald-300 text-emerald-700">
+                <Layers className="size-4" />
+                Clases
+              </Button>
+            ) : null}
+            {canViewMaintenance ? (
+              <Button variant="outline" onClick={() => setMaintenanceOpen(true)} className="h-10 border-orange-300 text-orange-700">
+                <Wrench className="size-4" />
+                F. de mantenimiento
+              </Button>
+            ) : null}
           </div>
-        </div>
-        <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-sm">
+        </section>
+      ) : null}
+
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar marca..."
-              className="h-9 bg-white pl-9 text-slate-950"
+              placeholder="Buscar marca o modelo..."
+              className="h-10 bg-white pl-9 text-slate-950"
             />
           </div>
-          <span className="text-xs font-medium text-slate-500">
-            {filteredBrands.length} de {data.brands.length} marca(s)
-          </span>
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <span className="whitespace-nowrap text-xs font-medium text-slate-500">
+              {filteredBrands.length} de {data.brands.length} marca(s)
+            </span>
+            {canCreateBrand ? (
+              <Button onClick={() => setBrandDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800">
+                <Plus className="size-4" />
+                Nueva Marca
+              </Button>
+            ) : null}
+          </div>
         </div>
-        <div className="overflow-x-auto px-4 pb-4">
-          <table className="w-full min-w-[760px] border-collapse overflow-hidden rounded-lg border border-slate-200 text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+        <div className="min-h-0 flex-1 overflow-auto border-t border-slate-200">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="w-10 px-3 py-2.5" />
                 <th className="px-3 py-2.5">Marca</th>
@@ -290,7 +287,7 @@ export default function BrandsModelsPage({ userPermissions }) {
 
 function PageHeader() {
   return (
-    <div className="mb-4 border-b border-slate-200 pb-4">
+    <div className="mb-3 shrink-0 border-b border-slate-200 pb-3">
       <div className="flex items-center gap-3">
         <IconBox icon={Car} />
         <div>
@@ -318,12 +315,12 @@ function Stat({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
-      <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-9 opacity-25" />
+      <Icon className="size-5 shrink-0 opacity-50" />
     </div>
   );
 }

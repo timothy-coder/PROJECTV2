@@ -53,8 +53,8 @@ export default function AccessoriesPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Box className="size-8 text-violet-700" />
           <div>
@@ -62,15 +62,9 @@ export default function AccessoriesPage({ userPermissions }) {
             <p className="mt-1 text-xs font-medium text-slate-500">Gestiona todos los accesorios disponibles</p>
           </div>
         </div>
-        {canCreate ? (
-          <Button onClick={() => setDialog({ open: true, item: null })} className="bg-violet-700 text-white hover:bg-violet-800">
-            <Plus className="size-4" />
-            Nuevo Accesorio
-          </Button>
-        ) : null}
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-5">
+      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-5">
         <Stat label="Total" value={data.stats.total} icon={Box} />
         <Stat label="Marcas" value={data.stats.brands} icon={Tags} />
         <Stat label="Modelos" value={data.stats.models} icon={Car} tone="green" />
@@ -78,56 +72,62 @@ export default function AccessoriesPage({ userPermissions }) {
         <Stat label="Impuestos" value={data.stats.taxes} icon={Filter} tone="orange" />
       </div>
 
-      <section className="mb-4 rounded-lg border border-violet-200 bg-white shadow-sm">
-        <div className="bg-violet-50/40 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-violet-700"><Filter className="size-5" />Filtros</h2>
-        </div>
-        <div className="space-y-3 p-4">
-          <div className="space-y-1.5">
-            <Label>Buscar</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Detalle, numero de parte..." className="h-9 bg-white pl-9" />
+      <section className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-white shadow-sm">
+        <div className="space-y-2 px-3 py-2">
+          <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_130px_auto_auto] lg:items-end">
+            <div className="space-y-1">
+              <Label className="text-[11px] font-bold text-slate-600">Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Detalle, numero de parte..." className="h-9 bg-white pl-9" />
+              </div>
             </div>
-          </div>
-          <div className="grid gap-3 md:grid-cols-4">
             <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
             <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
             <Field label="Moneda"><SearchableSelect value={filters.monedaId} options={currencyOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, monedaId: value }))} /></Field>
-            <div className="flex items-end"><Button variant="outline" className="h-9 w-full" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "" })}>Limpiar</Button></div>
+            <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "" })}>Limpiar</Button>
+            {canCreate ? (
+              <Button onClick={() => setDialog({ open: true, item: null })} className="h-9 bg-violet-700 text-white hover:bg-violet-800">
+                <Plus className="size-4" />
+                Nuevo Accesorio
+              </Button>
+            ) : null}
           </div>
-          <p className="text-sm font-medium text-slate-500">Mostrando {filteredAccessories.length} de {data.accessories.length} accesorios</p>
+          <p className="text-xs font-medium text-slate-500">Mostrando {filteredAccessories.length} de {data.accessories.length} accesorios</p>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-lg border border-violet-200 bg-white p-4 shadow-sm">
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-950">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
               <tr>
                 <th className="px-3 py-3">ID</th>
-                <th className="px-3 py-3">Detalle</th>
-                <th className="px-3 py-3">N Parte</th>
-                <th className="px-3 py-3">Marca</th>
-                <th className="px-3 py-3">Modelo</th>
-                <th className="px-3 py-3">Precio Compra</th>
-                <th className="px-3 py-3">Precio Venta</th>
+                <th className="px-3 py-3">Detalle / N Parte</th>
+                <th className="px-3 py-3">Marca / Modelo</th>
+                <th className="px-3 py-3">Precios</th>
                 <th className="px-3 py-3">Impuesto</th>
                 <th className="px-3 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {data.loading ? (
-                <tr><td colSpan={9} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={6} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : filteredAccessories.map((item) => (
                 <tr key={item.id}>
                   <td className="px-3 py-3 font-bold text-violet-700">#{item.id}</td>
-                  <td className="px-3 py-3 font-medium">{item.detalle}</td>
-                  <td className="px-3 py-3">{item.numeroParte}</td>
-                  <td className="px-3 py-3"><Badge>{item.marcaName}</Badge></td>
-                  <td className="px-3 py-3"><Badge>{item.modeloName}</Badge></td>
-                  <td className="px-3 py-3 font-bold text-emerald-700">{item.monedaSimbolo} {item.precio.toFixed(2)}</td>
-                  <td className="px-3 py-3 font-bold text-blue-700">{item.monedaSimbolo} {(item.precioVenta ?? 0).toFixed(2)}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-semibold text-slate-950">{item.detalle}</div>
+                    <div className="mt-1 text-xs font-medium text-slate-500">N Parte: {item.numeroParte}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div><Badge>{item.marcaName}</Badge></div>
+                    <div className="mt-1"><Badge>{item.modeloName}</Badge></div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-emerald-700">Compra: {item.monedaSimbolo} {item.precio.toFixed(2)}</div>
+                    <div className="mt-1 font-bold text-blue-700">Venta: {item.monedaSimbolo} {(item.precioVenta ?? 0).toFixed(2)}</div>
+                  </td>
                   <td className="px-3 py-3">{item.impuestoName ? `${item.impuestoName} (${item.impuestoPorcentaje}%)` : "Sin impuesto"}</td>
                   <td className="px-3 py-3">
                     <div className="flex justify-end gap-2">
@@ -248,9 +248,12 @@ function Stat({ label, value, icon: Icon, tone = "purple" }) {
     orange: "border-orange-200 bg-orange-50 text-orange-700",
   };
   return (
-    <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
-      <div><p className="text-xs font-bold">{label}</p><p className="mt-3 text-2xl font-bold text-violet-700">{value}</p></div>
-      <Icon className="size-8 opacity-45" />
+    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="mt-0.5 text-xl font-bold leading-6 text-violet-700">{value}</p>
+      </div>
+      <Icon className="size-5 shrink-0 opacity-50" />
     </div>
   );
 }
@@ -260,5 +263,5 @@ function Badge({ children }) {
 }
 
 function Field({ label, children }) {
-  return <div className="space-y-1.5"><Label className="text-xs font-bold text-slate-600">{label}</Label>{children}</div>;
+  return <div className="space-y-1"><Label className="text-[11px] font-bold text-slate-600">{label}</Label>{children}</div>;
 }

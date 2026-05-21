@@ -60,8 +60,8 @@ export default function MaintenancePage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4 flex items-center gap-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
+      <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="flex size-9 items-center justify-center rounded-md bg-violet-700 text-white shadow-sm">
           <Wrench className="size-5" />
         </div>
@@ -71,39 +71,33 @@ export default function MaintenancePage({ userPermissions }) {
         </div>
       </div>
 
-      <div className="mb-4 grid gap-2 md:grid-cols-4">
+      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-4">
         <Stat label="Total" value={data.stats.total} tone="purple" icon={ListChecks} />
         <Stat label="Activos" value={data.stats.active} tone="green" icon={Zap} />
         <Stat label="Con base" value={data.stats.withBase} tone="orange" icon={Zap} />
         <Stat label="Subs" value={data.stats.subs} tone="blue" icon={ListChecks} />
       </div>
 
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-sm font-bold text-violet-700">
-              <ListChecks className="size-4" />
-              Listado de Mantenimientos ({data.maintenances.length})
-            </h2>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar..." className="h-10 bg-white pl-9" />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={data.reload} disabled={data.loading}>
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <span className="whitespace-nowrap text-xs font-medium text-slate-500">
+              {filteredMaintenances.length} de {data.maintenances.length} mantenimiento(s)
+            </span>
+            <Button variant="outline" onClick={data.reload} disabled={data.loading} className="h-10">
               <RefreshCw className="size-4" />
               Recargar
             </Button>
             {canCreateMaintenance ? (
-              <Button onClick={() => setDialog({ open: true, type: "maintenance", item: null, readonly: false })} className="bg-violet-700 text-white hover:bg-violet-800">
+              <Button onClick={() => setDialog({ open: true, type: "maintenance", item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800">
                 <Plus className="size-4" />
                 Nuevo Mantenimiento
               </Button>
             ) : null}
-          </div>
-        </div>
-
-        <div className="px-4 py-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar..." className="h-9 bg-white pl-9" />
           </div>
         </div>
 
@@ -178,11 +172,11 @@ function MaintenanceList({
   canEditSub,
   canDeleteSub,
 }) {
-  if (loading) return <EmptyState text="Cargando mantenimientos..." loading />;
-  if (!items.length) return <EmptyState text="No hay mantenimientos" />;
+  if (loading) return <div className="min-h-0 flex-1 overflow-auto"><EmptyState text="Cargando mantenimientos..." loading /></div>;
+  if (!items.length) return <div className="min-h-0 flex-1 overflow-auto"><EmptyState text="No hay mantenimientos" /></div>;
 
   return (
-    <div className="space-y-2 px-4 pb-4">
+    <div className="min-h-0 flex-1 space-y-2 overflow-auto px-4 py-3">
       {items.map((item) => {
         const baseNames = getBaseNames(item.mantenimientoId, maintenances);
         return (
@@ -493,12 +487,12 @@ function Stat({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={cn("flex min-h-20 items-center justify-between rounded-md border p-3", tones[tone])}>
-      <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+    <div className={cn("flex items-center justify-between rounded-lg border px-3 py-2", tones[tone])}>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 opacity-50" />
+      <Icon className="size-5 shrink-0 opacity-50" />
     </div>
   );
 }

@@ -56,8 +56,8 @@ export default function PricesPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-2 text-slate-950 sm:p-3">
-      <div className="mb-3 flex items-center gap-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-2 text-slate-950 sm:p-3">
+      <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="flex size-9 items-center justify-center rounded-md bg-violet-700 text-white">
           <Wrench className="size-5" />
         </div>
@@ -67,16 +67,16 @@ export default function PricesPage({ userPermissions }) {
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/40 p-2">
-        <Button variant="outline"><Download className="size-4" />Descargar formato</Button>
-        <Button variant="outline"><Download className="size-4" />Descargar precios</Button>
-        <Button variant="outline" className="border-violet-600 text-violet-700"><Upload className="size-4" />Cargar Excel</Button>
+      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/40 p-2">
+        <Button variant="outline" className="h-10"><Download className="size-4" />Descargar formato</Button>
+        <Button variant="outline" className="h-10"><Download className="size-4" />Descargar precios</Button>
+        <Button variant="outline" className="h-10 border-violet-600 text-violet-700"><Upload className="size-4" />Cargar Excel</Button>
         <span className="ml-auto text-xs font-medium text-orange-700">Los cambios se guardan automaticamente</span>
       </div>
 
-      <div className="overflow-auto rounded-lg border border-violet-200 bg-white">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-violet-200 bg-white">
         <table className="w-full min-w-[1200px] border-collapse text-xs">
-          <thead>
+          <thead className="sticky top-0 z-30">
             <tr className="bg-violet-50 text-left text-violet-700">
               <th rowSpan={2} className="sticky left-0 z-20 min-w-32 border border-violet-200 bg-violet-50 px-2 py-2">Marca</th>
               <th rowSpan={2} className="sticky left-32 z-20 min-w-36 border border-violet-200 bg-violet-50 px-2 py-2">Modelo</th>

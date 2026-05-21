@@ -447,8 +447,8 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <div className="md:col-span-2"><label className="flex items-center gap-2 text-sm font-bold"><Switch disabled={readOnly} checked={form.vinExiste} onCheckedChange={(checked) => setForm((f) => ({ ...f, vinExiste: checked, vin: checked ? f.vin : "", numeroMotor: checked ? f.numeroMotor : "" }))} /> VIN existe</label></div>
           {form.vinExiste ? <Field label={`VIN (${vins.length} disponibles)`}><SearchableSelect disabled={readOnly} value={form.vin} options={vins} placeholder="Seleccionar VIN" onChange={applySelectedVin} /></Field> : <p className="text-xs font-bold text-red-600 md:col-span-2">{vinMessage}</p>}
           <Field label="Uso del Vehiculo"><Input disabled={readOnly} value={form.usoVehiculo} onChange={(e) => setForm((f) => ({ ...f, usoVehiculo: e.target.value }))} /></Field>
-          <Field label="Color Externo"><Input value={form.colorExterno} disabled /></Field>
-          <Field label="Color Interno"><Input value={form.colorInterno} disabled /></Field>
+          <Field label="Color Externo"><Input value={form.colorExterno}/></Field>
+          <Field label="Color Interno"><Input value={form.colorInterno}/></Field>
           <Field label="Numero de Motor"><Input disabled={readOnly} value={form.numeroMotor} onChange={(e) => setForm((f) => ({ ...f, numeroMotor: e.target.value }))} /></Field>
         </Block>
         <Block title="DESCUENTOS Y MONTOS">
@@ -983,13 +983,21 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   const cliente = r.cliente || [r.nombre, r.apellido].filter(Boolean).join(" ") || "-";
   const copropietarios = Array.isArray(r.copropietarios) ? r.copropietarios : [];
-  const copropietariosTexto = copropietarios
+  const isPresent = (value) => {
+    const textValue = String(value ?? "").trim();
+    return textValue && textValue !== "-";
+  };
+  const nombreConyugue = r.nombreConyugue || r.nombreconyugue || r.conyugue || "";
+  const dniConyugue = r.dniConyugue || r.dniconyugue || "";
+  const copropietariosNombres = copropietarios
     .map((item) => [item.nombre, item.apellido].filter(Boolean).join(" ") || item.nombreComercial || "")
-    .filter(Boolean)
-    .join(", ");
-  const conyugue = copropietariosTexto || r.conyugue || r.nombreconyugue || "-";
+    .filter(isPresent);
+  const copropietariosDocumentos = copropietarios
+    .map((item) => item.numeroDocumento || item.documento || item.identificacionFiscal || "")
+    .filter(isPresent);
+  const conyugue = [nombreConyugue, ...copropietariosNombres].filter(isPresent).join(" / ") || "-";
   const documento = r.documento || r.identificacion_fiscal || "-";
-  const documentoConyugue = r.dniConyugue || r.dniconyugue || "-";
+  const documentoConyugue = [dniConyugue, ...copropietariosDocumentos].filter(isPresent).join(" / ") || "-";
 
   const email = r.email || "-";
   const celular = r.celular || "-";
