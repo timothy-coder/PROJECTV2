@@ -476,6 +476,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <Field label="Descuento Retail"><Input disabled={readOnly} type="number" value={form.descuentoNper} onChange={(e) => setForm((f) => ({ ...f, descuentoNper: e.target.value }))} /></Field>
           <Field label="Cantidad"><Input disabled={readOnly} type="number" value={form.cantidad} onChange={(e) => setForm((f) => ({ ...f, cantidad: e.target.value }))} /></Field>
           <Field label="Precio Unitario"><Input disabled={readOnly} type="number" value={form.precioUnitario} onChange={(e) => setForm((f) => ({ ...f, precioUnitario: e.target.value }))} /></Field>
+          <Field label="TC Referencial"><Input disabled={readOnly} type="number" step="0.0001" value={form.tcReferencial || ""} onChange={(e) => setForm((f) => ({ ...f, tcReferencial: e.target.value }))} /></Field>
           <Field label="Flete"><Input disabled={readOnly} type="number" value={form.flete} onChange={(e) => setForm((f) => ({ ...f, flete: e.target.value }))} /></Field>
           <Field label="Tarjeta Placa"><Input disabled={readOnly} type="number" value={form.tarjetaPlaca} onChange={(e) => setForm((f) => ({ ...f, tarjetaPlaca: e.target.value }))} /></Field>
           <Field label="GLP"><Input disabled={readOnly} type="number" value={form.glp} onChange={(e) => setForm((f) => ({ ...f, glp: e.target.value }))} /></Field>
@@ -901,7 +902,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   const setFont = (weight = "normal", size = 8) => {
     pdf.setFont("helvetica", weight);
-    pdf.setFontSize(size);
+    pdf.setFontSize(size * 0.92);
   };
 
   const rect = (x, y, w, h, fill = null) => {
@@ -976,7 +977,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   let currentY = top;
 
   // Reservamos el bloque de firmas + observaciones al final
-  const itemRowH = 5.2;
+  const itemRowH = 4.8;
   const joinItemNames = (items, fallback) => (items || [])
     .map((item) => item.detalle || item.nombre || item.numeroParte || item.numero_parte || item.lote || fallback)
     .filter(Boolean)
@@ -987,8 +988,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   ].filter((item) => item.name);
   const obsH = 28;     // alto observaciones (para que entre el texto legal)
   const signH = 26;    // alto firmas
-  const serviceRowH = 5.2;
-  const serviceH = serviceRowH * 4;
+  const serviceRowH = 4.8;
+  const serviceH = serviceRowH * 8;
   const extrasH = quoteItemRows.length ? quoteItemRows.length * itemRowH : 0;
   const footerGap = 2;
   const contentBottom = bottom - (obsH + signH + serviceH + extrasH + footerGap);
@@ -1081,6 +1082,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     r.totalFinal ??
     d.total ??
     0;
+  const tcReferencial = r.tcReferencial || r.tc_referencial || d.tcReferencial || d.tc_referencial || "";
   // Depósitos (reservation.depositos con fallback a detail.depositos)
   const depositos = Array.isArray(r.depositos) ? r.depositos : (Array.isArray(d.depositos) ? d.depositos : []);
   const discountBase = Number(d.precioUnitario || d.precio_unitario || precioLista || 0) * Number(d.cantidad || 1);
@@ -1155,7 +1157,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   currentY += titleH;
 
   // Helper filas
-  const rowH = 5.8;
+  const rowH = 5.3;
   const labelW = 56;
   const col1W = 82;
   const col2W = (right - left) - labelW - col1W;
@@ -1280,6 +1282,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   if (showPriceList) row("PRECIO LISTA", money(precioLista));
   discountRows.forEach((item) => row(item.label, money(item.value)));
   row("PRECIO FINAL", money(totalFinal));
+  row("TIPO DE CAMBIO", tcReferencial || "-");
 
   // ===== Depósitos =====
   ensurePage(7);
@@ -1322,7 +1325,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // ✅ Bloque de firmas EXACTO como tu original (Autography)
   // =========================================================
   const signAreaTop = bottom - (obsH + signH + serviceH + extrasH); // inicia bloque extras de venta+firmas+extras+obs
-  const serviceLabelW = 46;
+  const serviceLabelW = 72;
   const serviceFlagW = 24;
   const servicePriceLabelW = 34;
   const serviceValueW = (right - left) - serviceLabelW - serviceFlagW - servicePriceLabelW;
@@ -1332,22 +1335,44 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     { label: "PLACAS Y TARJETAS", value: d.tarjetaPlaca ?? d.tarjeta_placa ?? r.tarjetaPlaca ?? r.tarjeta_placa },
   ];
 
-  serviceItems.forEach((item, index) => {
-    const rowY = signAreaTop + index * serviceRowH;
-    const value = Number(item.value || 0);
-    rect(left, rowY, serviceLabelW, serviceRowH, labelFill);
+  let summaryRowIndex = 0;
+  const drawSummaryRow = (label, value, { flag = "", priceLabel = "", fillLabel = true, boldValue = false } = {}) => {
+    const rowY = signAreaTop + summaryRowIndex * serviceRowH;
+    rect(left, rowY, serviceLabelW, serviceRowH, fillLabel ? labelFill : null);
     rect(left + serviceLabelW, rowY, serviceFlagW, serviceRowH);
-    rect(left + serviceLabelW + serviceFlagW, rowY, servicePriceLabelW, serviceRowH, labelFill);
+    rect(left + serviceLabelW + serviceFlagW, rowY, servicePriceLabelW, serviceRowH, priceLabel ? labelFill : null);
     rect(left + serviceLabelW + serviceFlagW + servicePriceLabelW, rowY, serviceValueW, serviceRowH);
     setFont("bold", 6.8);
-    text(item.label, left + 2, rowY + 3.8);
-    text("PRECIO", left + serviceLabelW + serviceFlagW + 2, rowY + 3.8);
-    setFont("normal", 7.2);
-    text(value > 0 ? "SI" : "NO", left + serviceLabelW + 2, rowY + 3.8);
-    text(money(value), left + serviceLabelW + serviceFlagW + servicePriceLabelW + 2, rowY + 3.8);
+    text(label, left + 2, rowY + 3.8);
+    text(priceLabel, left + serviceLabelW + serviceFlagW + 2, rowY + 3.8);
+    setFont(boldValue ? "bold" : "normal", 7.2);
+    text(flag, left + serviceLabelW + 2, rowY + 3.8);
+    text(value, left + serviceLabelW + serviceFlagW + servicePriceLabelW + 2, rowY + 3.8);
+    summaryRowIndex += 1;
+  };
+
+  drawSummaryRow("TIPO DE CAMBIO", tcReferencial || "-", { fillLabel: true });
+
+  const discountSlots = Math.max(0, 7 - 1 - serviceItems.length);
+  const fixedDiscountRows = discountRows.length > discountSlots
+    ? discountRows.slice(0, Math.max(0, discountSlots - 1))
+    : discountRows.slice(0, discountSlots);
+  fixedDiscountRows.forEach((item) => {
+    drawSummaryRow(item.label, `-${money(item.value)}`);
+  });
+  if (discountSlots > 0 && discountRows.length > fixedDiscountRows.length) {
+    const remainingDiscount = discountRows
+      .slice(fixedDiscountRows.length)
+      .reduce((sum, item) => sum + Number(item.value || 0), 0);
+    drawSummaryRow("OTROS DESCUENTOS", `-${money(remainingDiscount)}`);
+  }
+
+  serviceItems.forEach((item) => {
+    const value = Number(item.value || 0);
+    drawSummaryRow(item.label, money(value), { flag: value > 0 ? "SI" : "NO", priceLabel: "PRECIO" });
   });
 
-  const finalSaleY = signAreaTop + serviceRowH * 3;
+  const finalSaleY = signAreaTop + summaryRowIndex * serviceRowH;
   rect(left, finalSaleY, right - left, serviceRowH);
   rect(left, finalSaleY, 62, serviceRowH, labelFill);
   setFont("bold", 7.4);
@@ -1359,7 +1384,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   // Labels
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(9);
+  pdf.setFontSize(8.2);
   pdf.text("FIRMA DEL CLIENTE:", left + 0, labelsY);
   pdf.text("FIRMA ASESOR:", left + 70, labelsY);
   pdf.text("FIRMA AUTORIZADO:", left + 132, labelsY);
@@ -1372,7 +1397,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   if (signed) {
     pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
-    pdf.setFontSize(17);
+    pdf.setFontSize(15.5);
 
     // asesor (columna medio)
     pdf.text(asesor || "Asesor", left + 70, lineY - 3);
