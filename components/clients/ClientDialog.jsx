@@ -41,6 +41,7 @@ function emptyClient() {
     nombreConyugue: "",
     dniConyugue: "",
     nombreComercial: "",
+    createdBy: "",
   };
 }
 
@@ -63,6 +64,7 @@ function formFromClient(client) {
     nombreConyugue: client.nombreConyugue || "",
     dniConyugue: client.dniConyugue || "",
     nombreComercial: client.nombreComercial || "",
+    createdBy: client.createdBy || "",
   };
 }
 
@@ -117,6 +119,10 @@ function ClientDialogBody({ mode, client, options, onClose, onSubmit }) {
   const distritoOptions = (options?.distritos || [])
     .filter((item) => !form.provinciaId || Number(form.provinciaId) === item.provinciaId)
     .map((item) => ({ value: item.id, label: item.nombre }));
+  const userOptions = (options?.users || []).map((item) => ({
+    value: item.id,
+    label: item.name,
+  }));
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -209,6 +215,19 @@ function ClientDialogBody({ mode, client, options, onClose, onSubmit }) {
               />
               {form.tipoIdentificacion === "RUC" ? (
                 <Field label="Nombre comercial" value={form.nombreComercial} onChange={(value) => updateField("nombreComercial", value)} />
+              ) : null}
+              {mode === "edit" ? (
+                <div className="space-y-2">
+                  <Label>Propietario</Label>
+                  <SearchableSelect
+                    value={form.createdBy}
+                    options={userOptions}
+                    placeholder="Selecciona propietario"
+                    searchPlaceholder="Buscar usuario..."
+                    emptyText="Sin usuarios"
+                    onChange={(value) => updateField("createdBy", value)}
+                  />
+                </div>
               ) : null}
               <Field type="date" label="Fecha nacimiento" value={form.fechaNacimiento} onChange={(value) => updateField("fechaNacimiento", value)} />
               <Field label="Ocupacion" value={form.ocupacion} onChange={(value) => updateField("ocupacion", value)} />

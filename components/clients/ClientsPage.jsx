@@ -60,7 +60,7 @@ export default function ClientsPage({ userPermissions }) {
   const canImportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_import"]);
   const canExportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_export"]);
 
-  const tableColSpan = canViewVehicles ? 7 : 6;
+  const tableColSpan = canViewVehicles ? 8 : 7;
 
   const filteredClients = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -74,6 +74,7 @@ export default function ClientsPage({ userPermissions }) {
         client.identificacionFiscal,
         client.celular,
         client.email,
+        client.createdByName,
       ]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(clean))
@@ -299,7 +300,7 @@ export default function ClientsPage({ userPermissions }) {
 
         {/* ✅ SOLO la tabla hace scroll */}
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-2.5">Nombre</th>
@@ -307,6 +308,7 @@ export default function ClientsPage({ userPermissions }) {
                 <th className="px-3 py-2.5">ID Lead</th>
                 <th className="px-3 py-2.5">Celular</th>
                 <th className="px-3 py-2.5">DNI</th>
+                <th className="px-3 py-2.5">Creado por / propietario</th>
                 {canViewVehicles ? <th className="px-3 py-2.5">Vehículos</th> : null}
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
@@ -330,6 +332,10 @@ export default function ClientsPage({ userPermissions }) {
                       <td className="px-3 py-3">{client.idLead || "-"}</td>
                       <td className="px-3 py-3">{client.celular || "-"}</td>
                       <td className="px-3 py-3">{client.identificacionFiscal || "-"}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-semibold">{client.createdByName || "-"}</div>
+                        <div className="text-xs text-slate-500">{formatDate(client.createdAt)}</div>
+                      </td>
 
                       {canViewVehicles ? (
                         <td className="px-3 py-3">

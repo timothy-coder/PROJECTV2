@@ -20,6 +20,7 @@ function normalizeClient(body) {
     nombreConyugue: String(body.nombreConyugue || "").trim() || null,
     dniConyugue: String(body.dniConyugue || "").trim() || null,
     nombreComercial: String(body.nombreComercial || "").trim() || null,
+    createdBy: body.createdBy ? Number(body.createdBy) : null,
   };
 }
 
@@ -39,7 +40,8 @@ export async function PUT(request, { params }) {
            tipo_identificacion = ?, identificacion_fiscal = ?,
            fecha_nacimiento = ?, ocupacion = ?, domicilio = ?,
            departamento_id = ?, provincia_id = ?, distrito_id = ?,
-           nombreconyugue = ?, dniconyugue = ?, nombre_comercial = ?
+           nombreconyugue = ?, dniconyugue = ?, nombre_comercial = ?,
+           created_by = COALESCE(?, created_by)
        WHERE id = ?`,
       [
         payload.idLead,
@@ -58,6 +60,7 @@ export async function PUT(request, { params }) {
         payload.nombreConyugue,
         payload.dniConyugue,
         payload.nombreComercial,
+        payload.createdBy,
         id,
       ]
     );

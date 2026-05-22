@@ -9,6 +9,7 @@ function mapClient(row) {
     id: row.id,
     idLead: row.id_lead || "",
     createdBy: row.created_by,
+    createdByName: row.created_by_name || "",
     nombre: row.nombre || "",
     apellido: row.apellido || "",
     email: row.email || "",
@@ -68,6 +69,12 @@ async function loadOptions() {
   const [modelosRows] = await pool.query(
     `SELECT id, marca_id, clase_id, name, anios FROM administracion_modelos ORDER BY name ASC`
   );
+  const [usersRows] = await pool.query(
+    `SELECT id, fullname, username
+     FROM administracion_usuarios
+     WHERE is_active=1
+     ORDER BY fullname ASC, username ASC`
+  );
 
   return {
     departamentos: departamentosRows.map((row) => ({
@@ -103,6 +110,10 @@ async function loadOptions() {
       claseId: row.clase_id,
       name: row.name,
       anios: row.anios ? JSON.parse(row.anios) : [],
+    })),
+    users: usersRows.map((row) => ({
+      id: row.id,
+      name: row.fullname || row.username || `Usuario ${row.id}`,
     })),
   };
 }
@@ -145,8 +156,10 @@ export async function GET() {
       `SELECT c.id, c.id_lead, c.nombre, c.apellido, c.email, c.celular, c.tipo_identificacion,
               identificacion_fiscal, fecha_nacimiento, ocupacion, domicilio,
               departamento_id, provincia_id, distrito_id, nombreconyugue,
-              dniconyugue, nombre_comercial, created_at, created_by
+              dniconyugue, nombre_comercial, c.created_at, c.created_by,
+              COALESCE(u.fullname, u.username) AS created_by_name
        FROM administracion_clientes c
+       LEFT JOIN administracion_usuarios u ON u.id = c.created_by
        ${ownershipWhere}
        ORDER BY c.id DESC`,
       ownershipParams

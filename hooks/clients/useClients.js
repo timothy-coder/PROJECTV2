@@ -13,6 +13,7 @@ export function useClients() {
     marcas: [],
     clases: [],
     modelos: [],
+    users: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,6 +32,7 @@ export function useClients() {
         marcas: [],
         clases: [],
         modelos: [],
+        users: [],
       });
     } catch (err) {
       setError(err.message || "No se pudieron cargar los clientes.");
@@ -55,6 +57,7 @@ export function useClients() {
           marcas: [],
           clases: [],
           modelos: [],
+          users: [],
         });
       })
       .catch((err) => {

@@ -1104,33 +1104,50 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   await drawTemplateWatermark();
   rect(left, top, right - left, bottom - top);
 
-  // Header
+  // Header: usa el encabezado configurado en el formato activo de RESERVA.
   const headerH = 20;
+  const metaH = 7;
   rect(left, currentY, right - left, headerH);
-  rect(left, currentY, 90, headerH);
 
-  const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 2, currentY + 2, 86, headerH - 4);
+  const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 2, currentY + 2, right - left - 4, headerH - 4);
   if (!headerTemplateApplied) {
     setFont("bold", 24);
     text("Wankamotors", left + 4, currentY + 14);
   }
 
-  rect(left + 90, currentY, (right - left) - 90, headerH);
-
-  setFont("bold", 10);
-  text(clip(asesor, 30), left + 94, currentY + 6);
-
-  setFont("bold", 8);
-  text("FECHA", left + 94, currentY + 14);
-  setFont("normal", 8);
-  text(fechaDoc, left + 110, currentY + 14);
-
-  setFont("bold", 8);
-  text("ORIGEN:", left + 150, currentY + 14);
-  setFont("normal", 8);
-  text(clip(origenVenta, 14), left + 165, currentY + 14);
-
   currentY += headerH;
+
+  rect(left, currentY, right - left, metaH);
+  const metaLabelW = 22;
+  const asesorW = 68;
+  const fechaW = 44;
+  const origenW = (right - left) - metaLabelW * 3 - asesorW - fechaW;
+  let metaX = left;
+
+  rect(metaX, currentY, metaLabelW, metaH, labelFill);
+  rect(metaX + metaLabelW, currentY, asesorW, metaH);
+  setFont("bold", 7);
+  text("ASESOR", metaX + 2, currentY + 4.8);
+  setFont("normal", 7.4);
+  text(clip(asesor, 32), metaX + metaLabelW + 2, currentY + 4.8);
+  metaX += metaLabelW + asesorW;
+
+  rect(metaX, currentY, metaLabelW, metaH, labelFill);
+  rect(metaX + metaLabelW, currentY, fechaW, metaH);
+  setFont("bold", 7);
+  text("FECHA", metaX + 2, currentY + 4.8);
+  setFont("normal", 7.4);
+  text(fechaDoc, metaX + metaLabelW + 2, currentY + 4.8);
+  metaX += metaLabelW + fechaW;
+
+  rect(metaX, currentY, metaLabelW, metaH, labelFill);
+  rect(metaX + metaLabelW, currentY, origenW, metaH);
+  setFont("bold", 7);
+  text("ORIGEN", metaX + 2, currentY + 4.8);
+  setFont("normal", 7.4);
+  text(clip(origenVenta, 24), metaX + metaLabelW + 2, currentY + 4.8);
+
+  currentY += metaH;
 
   // ID / Campaña
   const idH2 = 9;
