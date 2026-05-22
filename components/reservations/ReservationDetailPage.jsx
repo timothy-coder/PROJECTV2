@@ -1311,9 +1311,9 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const depRows = Math.max(3, depositos.length);
   const depLabelW = 56;
   const montoW = 34;
-  const fechaW = 30;
+  const depFechaW = 30;
   const bancoW = 44;
-  const opW = (right - left) - depLabelW - montoW - fechaW - bancoW;
+  const opW = (right - left) - depLabelW - montoW - depFechaW - bancoW;
 
   for (let i = 0; i < depRows; i++) {
     const dep = depositos[i];
@@ -1325,15 +1325,15 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     text("MONTO DEPOSITO", left + 2, currentY + 4.2);
 
     rect(left + depLabelW, currentY, montoW, rowH);
-    rect(left + depLabelW + montoW, currentY, fechaW, rowH);
-    rect(left + depLabelW + montoW + fechaW, currentY, bancoW, rowH);
-    rect(left + depLabelW + montoW + fechaW + bancoW, currentY, opW, rowH);
+    rect(left + depLabelW + montoW, currentY, depFechaW, rowH);
+    rect(left + depLabelW + montoW + depFechaW, currentY, bancoW, rowH);
+    rect(left + depLabelW + montoW + depFechaW + bancoW, currentY, opW, rowH);
 
     setFont("normal", 7.8);
     text(dep ? money(dep.monto) : "-", left + depLabelW + 2, currentY + 4.2);
     text(dep ? formatDate(dep.fechaDeposito) : "-", left + depLabelW + montoW + 2, currentY + 4.2);
-    text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + fechaW + 2, currentY + 4.2);
-    text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + fechaW + bancoW + 2, currentY + 4.2);
+    text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + depFechaW + 2, currentY + 4.2);
+    text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + depFechaW + bancoW + 2, currentY + 4.2);
 
     currentY += rowH;
   }
