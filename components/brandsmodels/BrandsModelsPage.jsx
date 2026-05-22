@@ -88,7 +88,7 @@ export default function BrandsModelsPage({ userPermissions }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       <PageHeader />
 
       <div className="mb-3 grid shrink-0 gap-2 lg:grid-cols-3">

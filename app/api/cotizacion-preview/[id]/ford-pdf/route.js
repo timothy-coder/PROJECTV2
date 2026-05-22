@@ -371,6 +371,7 @@ function drawQuotePageV2(doc, data) {
     drawQrPlaceholder(doc, doc._publicQuoteUrl, x, conditionsY + 116, 70);
   }
   drawSignature(doc, advisorName, 398, y + 94, advisorContact);
+  drawQuoteItemsBox(doc, { accessories, gifts }, x + 332, y + 222, 205, { color: "#000000" });
 
   if (!doc._fullQuote) {
     doc.font("Helvetica-Bold").fontSize(6.8).fillColor("#000000").text("TERMINOS Y CONDICIONES:", x, 742);
@@ -446,13 +447,14 @@ function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   });
 
   drawSignature(doc, quote.creado || quote.asignado || "Asesor", x + w - 188, 620, getAdvisorContact(quote));
+  drawQuoteItemsBox(doc, data, x + 22, 616, 300, { color: "#000000" });
 
-  doc.font("Helvetica-Bold").fontSize(8).text("NOTA:", x + 22, 674);
+  doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000").text("NOTA:", x + 22, 686);
   doc.font("Helvetica-Bold").fontSize(8).text(
     "Nuestros precios son pactados en dolares americanos de conformidad con el articulo 1237 del codigo civil debiendo ser pagados en dicha moneda. El importe en nuevos soles en esta cotizacion se consigna solo como referencia en cumplimiento de la ley 28300 y considera el tipo de cambio de venta vigente a la fecha de la presente cotizacion.",
     x + 22,
-    692,
-    { width: w - 238, lineGap: 1, height: Math.max(32, contentBottom - 692) }
+    700,
+    { width: w - 238, lineGap: 1, height: Math.max(20, contentBottom - 700) }
   );
 
   doc.restore();
@@ -551,6 +553,55 @@ function drawBankTable(doc, x, y) {
   doc.moveTo(x + 75, y).lineTo(x + 75, y + 56).stroke();
   doc.moveTo(x + 175, y).lineTo(x + 175, y + 56).stroke();
   doc.moveTo(x, y + 28).lineTo(x + 300, y + 28).stroke();
+}
+
+function drawQuoteItemsBox(doc, data, x, y, w, { color = "#000000" } = {}) {
+  const rows = [
+    ...(data.accessories || []).map((item) => ({
+      type: "ACCESORIO",
+      qty: Number(item.cantidad || 1),
+      description: item.detalle || item.numero_parte || "Accesorio",
+      price: item.total,
+    })),
+    ...(data.gifts || []).map((item) => ({
+      type: "REGALO",
+      qty: Number(item.cantidad || 1),
+      description: item.detalle || item.lote || "Regalo",
+      price: item.total,
+    })),
+  ];
+  if (!rows.length) return;
+
+  const rowH = 13;
+  const maxRows = Math.min(rows.length, 4);
+  const h = 18 + maxRows * rowH;
+  const qtyW = 35;
+  const priceW = 60;
+  const descW = w - qtyW - priceW;
+
+  doc.save();
+  doc.lineWidth(0.55).strokeColor(color).fillColor(color);
+  doc.rect(x, y, w, h).stroke();
+  doc.font("Helvetica-Bold").fontSize(6.6).text("ACCESORIOS / REGALOS", x + 4, y + 4, { width: w - 8 });
+  const headerY = y + 17;
+  doc.moveTo(x, headerY - 2).lineTo(x + w, headerY - 2).stroke();
+  doc.font("Helvetica-Bold").fontSize(6.2);
+  doc.text("CANT.", x + 3, headerY + 1, { width: qtyW - 6, align: "center" });
+  doc.text("DESCRIPCION", x + qtyW + 3, headerY + 1, { width: descW - 6 });
+  doc.text("PRECIO", x + qtyW + descW + 3, headerY + 1, { width: priceW - 6, align: "right" });
+
+  rows.slice(0, maxRows).forEach((item, index) => {
+    const rowY = headerY + 13 + index * rowH;
+    doc.moveTo(x, rowY - 2).lineTo(x + w, rowY - 2).stroke();
+    doc.font("Helvetica-Bold").fontSize(6.1).fillColor(color);
+    doc.text(String(item.qty || 1), x + 3, rowY + 1, { width: qtyW - 6, align: "center" });
+    doc.text(`${item.type}: ${String(item.description || "-").toUpperCase()}`, x + qtyW + 3, rowY + 1, { width: descW - 6, ellipsis: true });
+    doc.text(`$${money(item.price)}`, x + qtyW + descW + 3, rowY + 1, { width: priceW - 6, align: "right" });
+  });
+
+  doc.moveTo(x + qtyW, headerY - 2).lineTo(x + qtyW, y + h).stroke();
+  doc.moveTo(x + qtyW + descW, headerY - 2).lineTo(x + qtyW + descW, y + h).stroke();
+  doc.restore();
 }
 
 function getAdvisorContact(quote = {}) {
@@ -937,18 +988,6 @@ function resolvePublicFile(source) {
 }
 
 function registerPdfFonts(doc) {
-  const regular = path.join(process.cwd(), "public", "fonts", "Montserrat-VariableFont_wght.ttf");
-  const italic = path.join(process.cwd(), "public", "fonts", "Montserrat-Italic-VariableFont_wght.ttf");
-  if (fs.existsSync(regular)) {
-    const regularBuffer = fs.readFileSync(regular);
-    doc.registerFont("Helvetica", regularBuffer);
-    doc.registerFont("Helvetica-Bold", regularBuffer);
-  }
-  if (fs.existsSync(italic)) {
-    const italicBuffer = fs.readFileSync(italic);
-    doc.registerFont("Helvetica-Oblique", italicBuffer);
-    doc.registerFont("Helvetica-BoldOblique", italicBuffer);
-  }
   const fontPath = path.join(process.cwd(), "public", "fonts", "Autography.ttf");
   if (fs.existsSync(fontPath)) {
     doc.registerFont("Autography", fs.readFileSync(fontPath));

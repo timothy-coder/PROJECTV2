@@ -201,7 +201,7 @@ export default function ClientsPage({ userPermissions }) {
 
   return (
     // ✅ página full-height; la tabla será la que scrollea
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       {/* ✅ Header + botones import/export siempre arriba */}
       <div className="mb-3 flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fordLeadsConfigStatus, fordLeadsFetch, fordTokenDiagnostics } from "@/lib/fordLeads";
+import { fordLeadsConfigStatus, fordLeadsFetch, fordTokenDiagnostics, normalizeFordLeadCreate } from "@/lib/fordLeads";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -129,7 +129,7 @@ export async function POST(request) {
     const allowed = await requireFordPermission("create");
     if (allowed.error) return allowed.error;
 
-    const body = await request.json();
+    const body = normalizeFordLeadCreate(await request.json());
     const data = await fordLeadsFetch("/leads", { request, method: "POST", body });
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

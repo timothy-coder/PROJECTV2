@@ -987,9 +987,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   ].filter((item) => item.name);
   const obsH = 28;     // alto observaciones (para que entre el texto legal)
   const signH = 26;    // alto firmas
+  const serviceRowH = 5.2;
+  const serviceH = serviceRowH * 4;
   const extrasH = quoteItemRows.length ? quoteItemRows.length * itemRowH : 0;
   const footerGap = 2;
-  const contentBottom = bottom - (obsH + signH + extrasH + footerGap);
+  const contentBottom = bottom - (obsH + signH + serviceH + extrasH + footerGap);
 
   const ensurePage = (heightNeeded = 0) => {
     if (currentY + heightNeeded <= contentBottom) return;
@@ -1180,6 +1182,29 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     currentY += rowH;
   };
 
+  const doubleFieldRow = (label1, value1, label2, value2) => {
+    ensurePage(rowH);
+    const label1W = 34;
+    const value1W = 58;
+    const label2W = 34;
+    const value2W = (right - left) - label1W - value1W - label2W;
+
+    rect(left, currentY, label1W, rowH, labelFill);
+    rect(left + label1W, currentY, value1W, rowH);
+    rect(left + label1W + value1W, currentY, label2W, rowH, labelFill);
+    rect(left + label1W + value1W + label2W, currentY, value2W, rowH);
+
+    setFont("bold", 7.0);
+    text(label1, left + 2, currentY + 4.2);
+    text(label2, left + label1W + value1W + 2, currentY + 4.2);
+
+    setFont("normal", 7.8);
+    text(clip(value1, 28), left + label1W + 2, currentY + 4.2);
+    text(clip(value2, 28), left + label1W + value1W + label2W + 2, currentY + 4.2);
+
+    currentY += rowH;
+  };
+
   // ===== Datos Cliente =====
   row("COMPROBANTE", tipoComprobante);
   if (tipoPersona === "JURIDICA") {
@@ -1239,13 +1264,10 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   text("DATOS DEL VEHICULO", left + 2, currentY + 4.9);
   currentY += 6.8;
 
-  row("MARCA", marca);
-  row("MODELO", modelo, "VERSION");
-  row("CLASE", clase, version);
-  row("COLOR", color);
-  row("AÑO", anio);
-  row("CHASIS/VIN", vin);
-  row("MOTOR", motor);
+  doubleFieldRow("MARCA", marca, "MODELO", modelo);
+  doubleFieldRow("VERSION", version, "CLASE", clase);
+  doubleFieldRow("COLOR", color, "ANIO", anio);
+  doubleFieldRow("CHASIS/VIN", vin, "MOTOR", motor);
   row("CODIGO", codigoUnidad);
 
   // ===== Precios =====
@@ -1299,9 +1321,41 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // =========================================================
   // ✅ Bloque de firmas EXACTO como tu original (Autography)
   // =========================================================
-  const signAreaTop = bottom - (obsH + signH + extrasH); // inicia bloque firmas+extras+obs
-  const labelsY = signAreaTop;
-  const lineY = signAreaTop + 18;
+  const signAreaTop = bottom - (obsH + signH + serviceH + extrasH); // inicia bloque extras de venta+firmas+extras+obs
+  const serviceLabelW = 46;
+  const serviceFlagW = 24;
+  const servicePriceLabelW = 34;
+  const serviceValueW = (right - left) - serviceLabelW - serviceFlagW - servicePriceLabelW;
+  const serviceItems = [
+    { label: "CONSIDERA GLP", value: d.glp ?? r.glp },
+    { label: "FLETE", value: d.flete ?? r.flete },
+    { label: "PLACAS Y TARJETAS", value: d.tarjetaPlaca ?? d.tarjeta_placa ?? r.tarjetaPlaca ?? r.tarjeta_placa },
+  ];
+
+  serviceItems.forEach((item, index) => {
+    const rowY = signAreaTop + index * serviceRowH;
+    const value = Number(item.value || 0);
+    rect(left, rowY, serviceLabelW, serviceRowH, labelFill);
+    rect(left + serviceLabelW, rowY, serviceFlagW, serviceRowH);
+    rect(left + serviceLabelW + serviceFlagW, rowY, servicePriceLabelW, serviceRowH, labelFill);
+    rect(left + serviceLabelW + serviceFlagW + servicePriceLabelW, rowY, serviceValueW, serviceRowH);
+    setFont("bold", 6.8);
+    text(item.label, left + 2, rowY + 3.8);
+    text("PRECIO", left + serviceLabelW + serviceFlagW + 2, rowY + 3.8);
+    setFont("normal", 7.2);
+    text(value > 0 ? "SI" : "NO", left + serviceLabelW + 2, rowY + 3.8);
+    text(money(value), left + serviceLabelW + serviceFlagW + servicePriceLabelW + 2, rowY + 3.8);
+  });
+
+  const finalSaleY = signAreaTop + serviceRowH * 3;
+  rect(left, finalSaleY, right - left, serviceRowH);
+  rect(left, finalSaleY, 62, serviceRowH, labelFill);
+  setFont("bold", 7.4);
+  text("PRECIO FINAL DE VENTA", left + 2, finalSaleY + 3.8);
+  text(money(totalFinal), left + 66, finalSaleY + 3.8);
+
+  const labelsY = signAreaTop + serviceH;
+  const lineY = labelsY + 18;
 
   // Labels
   pdf.setFont("helvetica", "bold");
@@ -1330,7 +1384,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // =========================================================
   // ✅ Observaciones: texto fijo + (opcional) extra obs
   // =========================================================
-  const extrasY = signAreaTop + signH;
+  const extrasY = signAreaTop + serviceH + signH;
   if (quoteItemRows.length) {
     const typeW = 34;
     const nameW = (right - left) - typeW;
@@ -1345,7 +1399,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     });
   }
 
-  const obsY = signAreaTop + signH + extrasH;
+  const obsY = signAreaTop + serviceH + signH + extrasH;
   rect(left, obsY, right - left, obsH);
   rect(left, obsY, 40, obsH, labelFill);
 

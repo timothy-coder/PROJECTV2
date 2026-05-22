@@ -56,7 +56,7 @@ export default function PricesPage({ userPermissions }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-2 text-slate-950 sm:p-3">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-2 text-slate-950 md:h-svh sm:p-3">
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="flex size-9 items-center justify-center rounded-md bg-violet-700 text-white">
           <Wrench className="size-5" />

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fordLeadsFetch } from "@/lib/fordLeads";
+import { fordLeadsFetch, normalizeFordLeadPatch } from "@/lib/fordLeads";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -50,7 +50,7 @@ export async function PATCH(request, { params }) {
     const leadId = cleanId(id);
     if (!leadId) return jsonError("Falta el id del lead.");
 
-    const body = await request.json();
+    const body = normalizeFordLeadPatch(await request.json());
     const data = await fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body });
     return NextResponse.json(data);
   } catch (error) {

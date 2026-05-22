@@ -25,6 +25,18 @@ const LEAD_ORIGIN_OPTIONS = ["Manual", "Web", "Ford Credit", "Event", "Oportunid
 const LEAD_SUB_ORIGIN_OPTIONS = ["Website", "Hotsite", "Facebook", "Phone", "Showroom", "Ford Credit", "Linkedin", "Instagram", "Direct Sales Fleet", "Edge Leads Especiais", "Ford Sempre", "Agrishow", "BOT", "Test Drive Delivery", "Prospecção", "Quote Peru", "Form at Site Ford Peru", "Form at Forum Peru", "Website Peru", "Phone Peru", "Facebook Peru", "Showroom Peru", "Landing Page Peru", "Event Peru", "SMS Peru", "Website Ford Chile", "Website Chile", "Phone Chile", "Facebook Chile", "Showroom Chile", "Landing Page", "Event Chile", "Media Chile", "Form at Site Ford.cl Chile", "Form at Forum.cl Chile", "Website Colombia", "Web Page Colombia", "Phone Colombia", "Showroom Colombia", "Landing Page Colombia", "SMS Colombia", "Event + Sales Beach Colombia", "Database Colombia", "Clients Workshop Colombia", "Social Media Colombia", "Ford Call Center Telephone Event Colombia", "Form at SUFI.com.co Colombia", "Form at Ford.com.co Colombia", "Praia da grama", "VIPs Ford", "Fazenda Boa Vista", "Shopping Cidade Jardim", "Resgate", "Social Networks", "Recommended", "Expointer", "Geral", "Genérica", "Agrotins", "Bahia Farm Show", "Norte Show", "Expoingá", "Agrobrasilia", "Rondonia Rural Show", "Expoama", "Ranger Day Campo Grande", "Ranger Day Goiânia", "Ranger Day Salvador", "Ranger Day Bauru", "Event", "Transposul", "Fordi", "Bike Series", "FIPAN", "Ranger Day São José do Rio Preto", "Superminas", "Fleet", "SMS Chile", "SMS", "Chatbot", "Website Oval Plan", "Landing Page"];
 const LEAD_SUB_ORIGIN2_OPTIONS = ["Organic", "Email Campaign", "Facebook Campaign", "Instagram Campaign", "Xaxis Campaign", "YouTube Campaign", "Adwords Campaign", "Red Display Campaign", "Facebook Lead Ads", "Whatsapp/SMS Campaign", "Display Campaign", "Chatbot / Chat online", "Chatbot", "Specialized Portal Campaigns", "Quote", "Test Drive", "Remote Purchase", "Facebook", "Instagram", "Twitter", "e-Agro"];
 const PLAN_CODE_OPTIONS = ["EMP10", "MAFI1", "MAFI3", "PRFT2", "PRFT4", "PRXL3", "PRXL5", "RAFI1", "RAFI2", "RAFI5", "RAFI6", "TEFI2", "TEFI4"];
+const FORD_CREATE_STATUS_OPTIONS = ["New"];
+const FORD_PATCH_STATUS_OPTIONS = ["New", "Contacted", "Closed Won", "Closed Lost"];
+const FORD_DOCUMENT_TYPE_OPTIONS = ["RUT", "Cédula de identidad", "Pasaporte", "RUC"];
+const FORD_MOBILE_PHONE_TYPE_OPTIONS = ["Personal", "Casa", "Otro", "Trabajo"];
+const FORD_COUNTRY_OPTIONS = ["PER"];
+const FORD_VEHICLE_MODEL_OPTIONS = ["Mustang Peru", "Territory Peru", "Escape Peru", "Edge Peru", "Explorer Peru", "Expedition Peru", "Ranger Peru", "F150 Peru", "Bronco Sport Peru", "Maverick Peru", "Maverick Hibrida"];
+const FORD_LEAD_SOURCE_OPTIONS = {
+  "Digital Dealer": ["Sitio Web", "Facebook", "Landing Page"],
+  Manual: ["Telefónico", "Piso", "Evento"],
+};
+const FORD_ORIGIN_OPTIONS = Object.keys(FORD_LEAD_SOURCE_OPTIONS);
+const FORD_SUB_ORIGIN_OPTIONS = Object.values(FORD_LEAD_SOURCE_OPTIONS).flat();
 
 const DEFAULT_CREATE_LEAD = {
   status: "New",
@@ -193,32 +205,25 @@ const FIELD_INFO = {
 };
 
 const SECTIONS = [
-  { title: "Lead", fields: ["id", "status", "mediaOption", "lastModifiedDate", "campaignName", "classification", "preferredContactTime", "financingFlag", "vehicleAsPartPayment", "currentVehicleExchange", "description", "lostReason", "directSales", "traditionalSales", "modelColor", "colorCode", "ackDate", "createdDate"] },
-  { title: "Contacto", fields: ["contact.name", "contact.firstName", "contact.lastName", "contact.phone", "contact.phoneAreaCode", "contact.mobilePhone", "contact.mobilePhoneType", "contact.documentType", "contact.documentNumber", "contact.email", "contact.contactPreference", "contact.agreeReceiveContact", "contact.company"] },
+  { title: "Lead", fields: ["id", "status", "mediaOption", "campaignName", "financingFlag", "currentVehicleExchange", "ackDate", "createdDate", "lastModifiedDate"] },
+  { title: "Contacto", fields: ["contact.name", "contact.phone", "contact.mobilePhoneType", "contact.mobilePhone", "contact.documentType", "contact.documentNumber", "contact.email", "contact.contactPreference", "contact.company", "contact.agreeReceiveContact", "contact.country"] },
   { title: "Direccion contacto", fields: ["contact.address.city", "contact.address.countryCode", "contact.address.street", "contact.address.postalCode", "contact.address.state"] },
-  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.version", "vehicle.tma", "vehicle.seq", "vehicle.accessories", "vehicle.accessoriesDetails"] },
+  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.version", "vehicle.accessories", "vehicle.accessoriesDetails"] },
   { title: "Dealer preferido", fields: ["preferenceDealer.code", "preferenceDealer.uniqueCode", "preferenceDealer.name"] },
   { title: "Origen", fields: ["leadSource.origin", "leadSource.subOrigin", "leadSource.subOrigin2"] },
-  { title: "Flota y plan", fields: ["fleet.form", "fleet.numberUnits", "plan.planCode", "plan.ovaloPlan"] },
-  { title: "eAgro / auditoria", fields: ["eagro.id", "eagro.createdDate", "recordType.id", "recordType.name", "createdBy.id", "createdBy.name", "owner.id", "owner.name"] },
+  { title: "Auditoria", fields: ["recordType.id", "recordType.name", "createdBy.id", "createdBy.name", "owner.id", "owner.name"] },
 ];
 
 const CREATE_SECTIONS = [
-  { title: "Lead", fields: ["status", "previousContactAttempts", "catalog", "purchaseDate", "deliveryDate", "buyingUnderSomeoneElseName", "vehicleAsPartPayment"] },
-  { title: "Contacto", fields: ["contact.name", "contact.documentType", "contact.documentNumber", "contact.country", "contact.email", "contact.rg", "contact.phone", "contact.mobilePhone", "contact.businessPhone", "contact.fax", "contact.contactPreference", "contact.description", "contact.maritalStatus", "contact.personBirthdate", "contact.gender"] },
+  { title: "Lead", fields: ["status", "lastModifiedDate"] },
+  { title: "Contacto", fields: ["contact.name", "contact.documentType", "contact.documentNumber", "contact.country", "contact.email", "contact.phone", "contact.mobilePhoneType", "contact.mobilePhone", "contact.contactPreference", "contact.company"] },
   { title: "Direccion contacto", fields: ["contact.address.city", "contact.address.countryCode", "contact.address.street", "contact.address.postalCode", "contact.address.state"] },
-  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.tma", "vehicle.accessories", "vehicle.vin"] },
-  { title: "Dealer y origen", fields: ["preferenceDealer.code", "leadSource.origin", "leadSource.subOrigin", "leadSource.subOrigin2"] },
-  { title: "Test Drive", fields: ["testDrive.product.tma", "testDrive.product.catalog", "testDrive.conducted", "testDrive.date", "testDrive.periodOfDay", "testDrive.reasonNo", "testDrive.otherReasonNo", "testDrive.status"] },
-  { title: "Comprador", fields: ["buyer.firstName", "buyer.lastName", "buyer.documentType", "buyer.documentNumber", "buyer.email", "buyer.address", "buyer.zip", "buyer.city", "buyer.state", "buyer.postalCode", "buyer.street"] },
-  { title: "Vehiculo usado", fields: ["vehicleUsed.brand", "vehicleUsed.model", "vehicleUsed.year", "vehicleUsed.price", "vehicleUsed.plate"] },
-  { title: "Direccion de facturacion", fields: ["billingAddress.street", "billingAddress.number", "billingAddress.complement", "billingAddress.neighborhood", "billingAddress.city", "billingAddress.country", "billingAddress.zip", "billingAddress.state"] },
-  { title: "Oportunidad", fields: ["opportunity.name", "opportunity.stage", "opportunity.closeDate", "opportunity.quotation.name", "opportunity.quotation.expirationDate", "opportunity.quotation.deliveryDateNegotiated", "opportunity.quotation.paymentMethods", "opportunity.quotation.signalValue", "opportunity.quotation.financingType", "opportunity.quotation.numberOfInstallments", "opportunity.quotation.valueOfInstallments", "opportunity.quotation.financingTax"] },
-  { title: "Vendedor / eAgro / Facebook", fields: ["seller.email", "eagro.id", "eagro.createdDate", "facebook.id", "facebook.formId", "facebook.plaform", "facebook.subPlaform", "facebook.createdTime"] },
+  { title: "Vehiculo", fields: ["vehicle.model", "vehicle.version", "vehicle.accessories", "vehicle.accessoriesDetails"] },
+  { title: "Dealer y origen", fields: ["preferenceDealer.code", "preferenceDealer.uniqueCode", "preferenceDealer.name", "leadSource.origin", "leadSource.subOrigin"] },
 ];
 
 const EDIT_SECTIONS = [
-  { title: "Lead", fields: ["id", "status", "previousContactAttempts", "catalog", "purchaseDate", "deliveryDate", "buyingUnderSomeoneElseName", "vehicleAsPartPayment", "createdDate", "lastModifiedDate", "ackDate"] },
+  { title: "Lead", fields: ["id", "status", "lastModifiedDate", "lossReason"] },
   ...CREATE_SECTIONS.slice(1),
   { title: "Datos Ford bloqueados", fields: ["recordType.id", "recordType.name", "createdBy.id", "createdBy.name", "owner.id", "owner.name"] },
 ];
@@ -355,10 +360,12 @@ const FIELD_LABELS = {
 
 const SELECT_OPTIONS = {
   status: STATUS_OPTIONS,
-  "contact.documentType": DOCUMENT_TYPE_OPTIONS,
-  "contact.country": COUNTRY_OPTIONS,
+  "contact.documentType": FORD_DOCUMENT_TYPE_OPTIONS,
+  "contact.country": FORD_COUNTRY_OPTIONS,
+  "contact.mobilePhoneType": FORD_MOBILE_PHONE_TYPE_OPTIONS,
   "contact.contactPreference": CONTACT_PREFERENCE_OPTIONS,
-  "contact.address.countryCode": COUNTRY_OPTIONS,
+  "contact.address.countryCode": FORD_COUNTRY_OPTIONS,
+  "vehicle.model": FORD_VEHICLE_MODEL_OPTIONS,
   "buyer.documentType": DOCUMENT_TYPE_OPTIONS,
   buyingUnderSomeoneElseName: YES_NO_OPTIONS,
   vehicleAsPartPayment: BOOLEAN_OPTIONS,
@@ -369,11 +376,20 @@ const SELECT_OPTIONS = {
   "facebook.platform": FACEBOOK_PLATFORM_OPTIONS,
   "facebook.subPlaform": FACEBOOK_SUB_PLATFORM_OPTIONS,
   "facebook.subPlatform": FACEBOOK_SUB_PLATFORM_OPTIONS,
-  "leadSource.origin": LEAD_ORIGIN_OPTIONS,
-  "leadSource.subOrigin": LEAD_SUB_ORIGIN_OPTIONS,
+  "leadSource.origin": FORD_ORIGIN_OPTIONS,
+  "leadSource.subOrigin": FORD_SUB_ORIGIN_OPTIONS,
   "leadSource.subOrigin2": LEAD_SUB_ORIGIN2_OPTIONS,
   "plan.planCode": PLAN_CODE_OPTIONS,
 };
+
+function fieldOptions(lead, field, { isCreate = false } = {}) {
+  if (field === "status") return isCreate ? FORD_CREATE_STATUS_OPTIONS : FORD_PATCH_STATUS_OPTIONS;
+  if (field === "leadSource.subOrigin") {
+    const origin = readPath(lead, "leadSource.origin");
+    return FORD_LEAD_SOURCE_OPTIONS[origin] || FORD_SUB_ORIGIN_OPTIONS;
+  }
+  return SELECT_OPTIONS[field];
+}
 
 function readPath(data, path) {
   return path.split(".").reduce((acc, part) => acc?.[part], data);
@@ -415,13 +431,59 @@ function payloadFromSections(source, sections) {
   }, {});
 }
 
+function buildCreatePayload(lead) {
+  return cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
+}
+
+function hasChanged(current, original, path) {
+  return JSON.stringify(readPath(current, path) ?? null) !== JSON.stringify(readPath(original, path) ?? null);
+}
+
+function buildPatchPayload(lead, originalLead) {
+  let payload = {
+    status: lead.status || "New",
+    preferenceDealer: lead.preferenceDealer || {},
+    lastModifiedDate: lead.lastModifiedDate || new Date().toISOString(),
+  };
+  if (lead.status === "Closed Lost") payload.lossReason = lead.lossReason || "";
+  if (!originalLead || hasChanged(lead, originalLead, "contact")) payload.contact = lead.contact || {};
+  if (!originalLead || hasChanged(lead, originalLead, "vehicle")) payload.vehicle = lead.vehicle || {};
+  return cleanPayload(payload);
+}
+
 function blankLeadFromSections() {
-  return CREATE_SECTIONS.reduce((payload, section) => {
+  const lead = CREATE_SECTIONS.reduce((payload, section) => {
     section.fields.forEach((field) => {
       payload = writePath(payload, field, "");
     });
     return payload;
   }, {});
+  return {
+    ...lead,
+    status: "New",
+    lastModifiedDate: new Date().toISOString(),
+    contact: {
+      ...(lead.contact || {}),
+      country: "PER",
+      mobilePhoneType: "Personal",
+      contactPreference: "WhatsApp",
+      address: {
+        ...(lead.contact?.address || {}),
+        countryCode: "PER",
+      },
+    },
+    preferenceDealer: {
+      ...(lead.preferenceDealer || {}),
+      code: "00024",
+      uniqueCode: "00024Peru",
+      name: "WANKAMOTORS",
+    },
+    leadSource: {
+      ...(lead.leadSource || {}),
+      origin: "Manual",
+      subOrigin: "Piso",
+    },
+  };
 }
 
 function parseFieldValue(field, value) {
@@ -486,7 +548,7 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
     setError("");
     setMessage("");
     try {
-      const payload = cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
+      const payload = buildCreatePayload(lead);
       const response = await fetch("/api/ford-leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -506,7 +568,7 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
     setError("");
     setMessage("");
     try {
-      const payload = cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
+      const payload = buildPatchPayload(lead, originalLead);
       const response = await fetch(`/api/ford-leads/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -576,7 +638,14 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
                 <section key={section.title} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <h2 className="mb-3 text-base font-bold text-black">{section.title}</h2>
                   <div className="grid gap-3 md:grid-cols-2">
-                    {section.fields.map((field) => <DetailField key={field} lead={lead} field={field} editable={isCreate || (editing && EDITABLE_FIELDS.has(field))} locked={editing && !EDITABLE_FIELDS.has(field)} onChange={(nextValue) => setLead((current) => writePath(current, field, parseFieldValue(field, nextValue)))} />)}
+                    {section.fields.map((field) => <DetailField key={field} lead={lead} field={field} isCreate={isCreate} editable={isCreate || (editing && EDITABLE_FIELDS.has(field))} locked={editing && !EDITABLE_FIELDS.has(field)} onChange={(nextValue) => setLead((current) => {
+                      let next = writePath(current, field, parseFieldValue(field, nextValue));
+                      if (field === "leadSource.origin") {
+                        const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
+                        if (!allowed.includes(readPath(next, "leadSource.subOrigin"))) next = writePath(next, "leadSource.subOrigin", allowed[0] || "");
+                      }
+                      return next;
+                    })} />)}
                   </div>
                 </section>
               ))}
@@ -593,10 +662,10 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
   );
 }
 
-function DetailField({ lead, field, editable = false, locked = false, onChange }) {
+function DetailField({ lead, field, isCreate = false, editable = false, locked = false, onChange }) {
   const value = readPath(lead, field);
   const info = FIELD_INFO[field];
-  const options = SELECT_OPTIONS[field];
+  const options = fieldOptions(lead, field, { isCreate });
 
   return (
     <div className="min-w-0 space-y-1">

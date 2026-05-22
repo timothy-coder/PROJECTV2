@@ -159,7 +159,8 @@ export async function GET(request) {
         const agendaTime = timePart(lastDetail?.hora_agenda);
         const agendaAt = agendaDate && agendaTime ? new Date(`${agendaDate}T${agendaTime}`) : null;
         const minutesUntilAgenda = agendaAt ? Math.round((agendaAt.getTime() - now.getTime()) / 60000) : null;
-        const stageUsesTimeState = ["nuevo", "asignado", "en atencion"].includes(normalizeStageName(row.etapa_nombre));
+        const normalizedStage = normalizeStageName(row.etapa_nombre);
+        const stageUsesTimeState = !["cerrada", "cerrado", "venta facturada"].includes(normalizedStage);
         const timeState = stageUsesTimeState && minutesUntilAgenda !== null
           ? timeStates.find((state) => minutesUntilAgenda >= Number(state.minutos_desde) && minutesUntilAgenda <= Number(state.minutos_hasta))
           : null;

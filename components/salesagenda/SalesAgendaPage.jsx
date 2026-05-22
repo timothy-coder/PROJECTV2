@@ -73,8 +73,8 @@ export default function SalesAgendaPage({ userPermissions }) {
           <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
             <div className="border-b border-r bg-slate-50" />
             {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}
-            {slots.map((slot) => (
-              <SlotRow key={slot} slot={slot} days={days} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: slot })} />
+            {slots.map((slot, index) => (
+              <SlotRow key={slot} slot={slot} nextSlot={slots[index + 1]} slotMinutes={schedule.slotMinutes || 30} days={days} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: slot })} />
             ))}
           </div>
         </div>
@@ -84,13 +84,13 @@ export default function SalesAgendaPage({ userPermissions }) {
   );
 }
 
-function SlotRow({ slot, days, items, canCreate, nowTime, onCell }) {
+function SlotRow({ slot, nextSlot, slotMinutes, days, items, canCreate, nowTime, onCell }) {
   return (
     <>
       <div className="border-b border-r bg-slate-50 px-2 py-3 text-xs">{slot}</div>
       {days.map((day) => {
         const past = new Date(`${day.date}T${slot}`).getTime() < nowTime;
-        const cellItems = items.filter((item) => item.agendaDate === day.date && String(item.agendaTime || "").slice(0, 5) === slot);
+        const cellItems = items.filter((item) => item.agendaDate === day.date && isInsideSlot(item.agendaTime, slot, nextSlot, slotMinutes));
         return (
           <div key={`${day.date}-${slot}`} className={`group relative min-h-16 border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!past && !cellItems.length && canCreate ? "cursor-pointer" : ""}`} onClick={() => !past && !cellItems.length && canCreate && onCell(day)}>
             <div className="relative z-10 space-y-1">
@@ -102,6 +102,20 @@ function SlotRow({ slot, days, items, canCreate, nowTime, onCell }) {
       })}
     </>
   );
+}
+
+function isInsideSlot(value, slot, nextSlot, slotMinutes) {
+  const itemMinutes = timeToMinutes(value);
+  const startMinutes = timeToMinutes(slot);
+  if (itemMinutes === null || startMinutes === null) return false;
+  const endMinutes = timeToMinutes(nextSlot) ?? startMinutes + Number(slotMinutes || 30);
+  return itemMinutes >= startMinutes && itemMinutes < endMinutes;
+}
+
+function timeToMinutes(value) {
+  const [hours, minutes] = String(value || "").slice(0, 5).split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
 }
 
 function AgendaCard({ item }) {
