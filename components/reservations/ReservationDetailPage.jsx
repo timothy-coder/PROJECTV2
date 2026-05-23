@@ -977,19 +977,10 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   let currentY = top;
 
   // Reservamos el bloque de firmas + observaciones al final
-  const itemRowH = 4.1;
-  const joinItemNames = (items, fallback) => (items || [])
-    .map((item) => item.detalle || item.nombre || item.numeroParte || item.numero_parte || item.lote || fallback)
-    .filter(Boolean)
-    .join(" + ");
-  const quoteItemRows = [
-    { type: "ACCESORIOS", name: joinItemNames(accessories, "Accesorio") },
-    { type: "REGALOS", name: joinItemNames(gifts, "Regalo") },
-  ].filter((item) => item.name);
   const obsH = 22;     // alto observaciones (para que entre el texto legal)
   const signH = 24;    // alto firmas
   const serviceRowH = 4.1;
-  const serviceH = serviceRowH * 9;
+  const serviceH = serviceRowH * 10;
   const extrasH = 0;
   const footerGap = 2;
   const contentBottom = bottom - (obsH + signH + serviceH + extrasH + footerGap);
@@ -1160,9 +1151,9 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   text(clip(idTexto, 28), left + 21, currentY + 3.8);
 
   setFont("bold", 8);
-  text("CAMPAÑA:", left + 120, currentY + 6.2);
+  text("CAMPAÑA:", left + 120, currentY + 3.8);
   setFont("normal", 8);
-  text(clip(campania, 24), left + 145, currentY + 6.2);
+  text(clip(campania, 24), left + 145, currentY + 3.8);
 
   currentY += idH2;
 
@@ -1243,8 +1234,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   rect(left, currentY, right - left, rowH);
   rect(left, currentY, labelW, rowH, labelFill);
 
-  setFont("bold", 7.0);
-  text("DISTRITO", left + 2, currentY + 4.2);
+  setFont("bold", 5.8);
+  text("DISTRITO", left + 1.1, currentY + 2.95);
 
   const aW = 42;
   const bLblW = 18;
@@ -1253,24 +1244,24 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const cW = (right - left) - labelW - aW - bLblW - bW - cLblW;
 
   rect(left + labelW, currentY, aW, rowH);
-  setFont("normal", 7.8);
-  text(clip(distrito, 14), left + labelW + 2, currentY + 4.2);
+  setFont("normal", 6.1);
+  text(clip(distrito, 14), left + labelW + 1.1, currentY + 2.95);
 
   rect(left + labelW + aW, currentY, bLblW, rowH, labelFill);
-  setFont("bold", 7.0);
-  text("PROV.", left + labelW + aW + 2, currentY + 4.2);
+  setFont("bold", 5.8);
+  text("PROV.", left + labelW + aW + 1.1, currentY + 2.95);
 
   rect(left + labelW + aW + bLblW, currentY, bW, rowH);
-  setFont("normal", 7.8);
-  text(clip(provincia, 12), left + labelW + aW + bLblW + 2, currentY + 4.2);
+  setFont("normal", 6.1);
+  text(clip(provincia, 12), left + labelW + aW + bLblW + 1.1, currentY + 2.95);
 
   rect(left + labelW + aW + bLblW + bW, currentY, cLblW, rowH, labelFill);
-  setFont("bold", 7.0);
-  text("REG.", left + labelW + aW + bLblW + bW + 2, currentY + 4.2);
+  setFont("bold", 5.8);
+  text("REG.", left + labelW + aW + bLblW + bW + 1.1, currentY + 2.95);
 
   rect(left + labelW + aW + bLblW + bW + cLblW, currentY, cW, rowH);
-  setFont("normal", 7.8);
-  text(clip(region, 10), left + labelW + aW + bLblW + bW + cLblW + 2, currentY + 4.2);
+  setFont("normal", 6.1);
+  text(clip(region, 10), left + labelW + aW + bLblW + bW + cLblW + 1.1, currentY + 2.95);
 
   currentY += rowH;
 
@@ -1301,7 +1292,16 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   currentY += 4.2;
 
   if (showPriceList) row("PRECIO LISTA", money(precioLista));
-  discountRows.forEach((item) => row(item.label, money(item.value)));
+  const visibleDiscountRows = discountRows.length > 6
+    ? [
+        ...discountRows.slice(0, 5),
+        {
+          label: "OTROS DESCUENTOS",
+          value: discountRows.slice(5).reduce((sum, item) => sum + Number(item.value || 0), 0),
+        },
+      ]
+    : discountRows;
+  visibleDiscountRows.forEach((item) => row(item.label, money(item.value)));
   row("PRECIO FINAL", money(totalFinal));
   row("TIPO DE CAMBIO", tcReferencial || "-");
 
@@ -1356,9 +1356,13 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     { label: "PLACAS Y TARJETAS", value: d.tarjetaPlaca ?? d.tarjeta_placa ?? r.tarjetaPlaca ?? r.tarjeta_placa },
   ];
 
+  rect(left, signAreaTop, right - left, serviceRowH, headerFill);
+  setFont("bold", 6.3);
+  text("OTROS", left + 1.1, signAreaTop + 3);
+
   let summaryRowIndex = 0;
   const drawSummaryRow = (label, value, { flag = "", priceLabel = "", fillLabel = true, boldValue = false } = {}) => {
-    const rowY = signAreaTop + summaryRowIndex * serviceRowH;
+    const rowY = signAreaTop + serviceRowH + summaryRowIndex * serviceRowH;
     rect(left, rowY, serviceLabelW, serviceRowH, fillLabel ? labelFill : null);
     rect(left + serviceLabelW, rowY, serviceFlagW, serviceRowH);
     rect(left + serviceLabelW + serviceFlagW, rowY, servicePriceLabelW, serviceRowH, priceLabel ? labelFill : null);
@@ -1372,33 +1376,43 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     summaryRowIndex += 1;
   };
 
-  drawSummaryRow("TIPO DE CAMBIO", tcReferencial || "-", { fillLabel: true });
-
-  const discountSlots = Math.max(0, 7 - 1 - serviceItems.length);
-  const fixedDiscountRows = discountRows.length > discountSlots
-    ? discountRows.slice(0, Math.max(0, discountSlots - 1))
-    : discountRows.slice(0, discountSlots);
-  fixedDiscountRows.forEach((item) => {
-    drawSummaryRow(item.label, `-${money(item.value)}`);
-  });
-  if (discountSlots > 0 && discountRows.length > fixedDiscountRows.length) {
-    const remainingDiscount = discountRows
-      .slice(fixedDiscountRows.length)
-      .reduce((sum, item) => sum + Number(item.value || 0), 0);
-    drawSummaryRow("OTROS DESCUENTOS", `-${money(remainingDiscount)}`);
-  }
-
   serviceItems.forEach((item) => {
     const value = Number(item.value || 0);
     drawSummaryRow(item.label, money(value), { flag: value > 0 ? "SI" : "NO", priceLabel: "PRECIO" });
   });
 
-  const finalSaleY = signAreaTop + summaryRowIndex * serviceRowH;
-  rect(left, finalSaleY, right - left, serviceRowH);
-  rect(left, finalSaleY, 62, serviceRowH, labelFill);
-  setFont("bold", 7.4);
-  text("PRECIO FINAL DE VENTA", left + 2, finalSaleY + 3.8);
-  text(money(totalFinal), left + 66, finalSaleY + 3.8);
+  const drawQuoteMiniTable = (title, items) => {
+    const titleY = signAreaTop + serviceRowH + summaryRowIndex * serviceRowH;
+    rect(left, titleY, right - left, serviceRowH);
+    rect(left, titleY, 24, serviceRowH, labelFill);
+    setFont("bold", 5.8);
+    text(title, left + 1.1, titleY + 2.95);
+    summaryRowIndex += 1;
+
+    const headY = signAreaTop + serviceRowH + summaryRowIndex * serviceRowH;
+    rect(left, headY, 28, serviceRowH, labelFill);
+    rect(left + 28, headY, right - left - 58, serviceRowH, labelFill);
+    rect(right - 30, headY, 30, serviceRowH, labelFill);
+    setFont("bold", 5.6);
+    text("Cantidad", left + 6, headY + 2.95);
+    text("Descripcion", left + 72, headY + 2.95);
+    text("Precio", right - 24, headY + 2.95);
+    summaryRowIndex += 1;
+
+    const rowY = signAreaTop + serviceRowH + summaryRowIndex * serviceRowH;
+    rect(left, rowY, right - left, serviceRowH);
+    const item = (items || [])[0];
+    if (item) {
+      setFont("normal", 5.7);
+      text(String(item.cantidad || 1), left + 8, rowY + 2.95);
+      text(clip(item.detalle || item.nombre || item.numeroParte || item.lote || "-", 78), left + 30, rowY + 2.95);
+      text(money(item.total || item.precioUnitario || item.precio || 0), right - 28, rowY + 2.95);
+    }
+    summaryRowIndex += 1;
+  };
+
+  drawQuoteMiniTable("Accesorios", accessories);
+  drawQuoteMiniTable("Obsequios", gifts);
 
   const labelsY = signAreaTop + serviceH;
   const lineY = labelsY + 18;
@@ -1430,24 +1444,9 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // =========================================================
   // ✅ Observaciones: texto fijo + (opcional) extra obs
   // =========================================================
-  const extrasY = signAreaTop + serviceH + signH;
-  if (quoteItemRows.length) {
-    const typeW = 34;
-    const nameW = (right - left) - typeW;
-    quoteItemRows.forEach((item, index) => {
-      const rowY = extrasY + index * itemRowH;
-      rect(left, rowY, typeW, itemRowH, labelFill);
-      rect(left + typeW, rowY, nameW, itemRowH);
-      setFont("bold", 6.5);
-      text(item.type, left + 1.5, rowY + 3.8);
-      setFont("bold", 7.1);
-      text(clip(item.name, 100), left + typeW + 2, rowY + 3.8);
-    });
-  }
-
   const obsY = signAreaTop + serviceH + signH + extrasH;
   rect(left, obsY, right - left, obsH);
-  rect(left, obsY, 40, obsH, labelFill);
+  rect(left, obsY, right - left, 4, labelFill);
 
   const LEGAL_TEXT =
     "Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos " +
@@ -1461,19 +1460,19 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const extraObs = String(r.observaciones || "").trim();
   const obsText = extraObs ? `${LEGAL_TEXT}\n\nOBS: ${extraObs}` : LEGAL_TEXT;
 
-  setFont("bold", 8);
-  text("OBSERVACIONES", left + 2, obsY + 6);
+  setFont("bold", 5.8);
+  text("OBSERVACIONES", left + 1.1, obsY + 2.9);
 
   // título centrado
   
   
   // texto legal
   const obsPad = 2;
-  const obsTextX = left + 40 + obsPad;
-  const obsTextY = obsY + 4.2;
-  const obsTextW = (right - left) - 40 - obsPad * 2;
-  const obsLineHeight = 1.08;
-  const obsFontSize = 6.2;
+  const obsTextX = left + obsPad;
+  const obsTextY = obsY + 7;
+  const obsTextW = (right - left) - obsPad * 2;
+  const obsLineHeight = 1.0;
+  const obsFontSize = 4.7;
   setFont("bold", obsFontSize);
   const wrapped = pdf.splitTextToSize(obsText.toUpperCase(), obsTextW);
   const lineHeightMm = obsFontSize * 0.3528 * obsLineHeight;
