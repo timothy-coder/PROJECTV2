@@ -977,7 +977,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   let currentY = top;
 
   // Reservamos el bloque de firmas + observaciones al final
-  const itemRowH = 4.8;
+  const itemRowH = 4.1;
   const joinItemNames = (items, fallback) => (items || [])
     .map((item) => item.detalle || item.nombre || item.numeroParte || item.numero_parte || item.lote || fallback)
     .filter(Boolean)
@@ -986,11 +986,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     { type: "ACCESORIOS", name: joinItemNames(accessories, "Accesorio") },
     { type: "REGALOS", name: joinItemNames(gifts, "Regalo") },
   ].filter((item) => item.name);
-  const obsH = 28;     // alto observaciones (para que entre el texto legal)
-  const signH = 26;    // alto firmas
-  const serviceRowH = 4.8;
-  const serviceH = serviceRowH * 8;
-  const extrasH = quoteItemRows.length ? quoteItemRows.length * itemRowH : 0;
+  const obsH = 22;     // alto observaciones (para que entre el texto legal)
+  const signH = 24;    // alto firmas
+  const serviceRowH = 4.1;
+  const serviceH = serviceRowH * 9;
+  const extrasH = 0;
   const footerGap = 2;
   const contentBottom = bottom - (obsH + signH + serviceH + extrasH + footerGap);
 
@@ -1105,14 +1105,14 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   rect(left, top, right - left, bottom - top);
 
   // Header: usa el encabezado configurado en el formato activo de RESERVA.
-  const headerH = 20;
-  const metaH = 7;
+  const headerH = 17;
+  const metaH = 5.2;
   rect(left, currentY, right - left, headerH);
 
-  const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 2, currentY + 2, right - left - 4, headerH - 4);
+  const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 2, currentY + 1.2, right - left - 4, headerH - 2.4);
   if (!headerTemplateApplied) {
-    setFont("bold", 24);
-    text("Wankamotors", left + 4, currentY + 14);
+    setFont("bold", 20);
+    text("Wankamotors", left + 4, currentY + 12);
   }
 
   currentY += headerH;
@@ -1126,38 +1126,38 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   rect(metaX, currentY, metaLabelW, metaH, labelFill);
   rect(metaX + metaLabelW, currentY, asesorW, metaH);
-  setFont("bold", 7);
-  text("ASESOR", metaX + 2, currentY + 4.8);
-  setFont("normal", 7.4);
-  text(clip(asesor, 32), metaX + metaLabelW + 2, currentY + 4.8);
+  setFont("bold", 6);
+  text("ASESOR", metaX + 1.2, currentY + 3.8);
+  setFont("normal", 6.3);
+  text(clip(asesor, 32), metaX + metaLabelW + 1.2, currentY + 3.8);
   metaX += metaLabelW + asesorW;
 
   rect(metaX, currentY, metaLabelW, metaH, labelFill);
   rect(metaX + metaLabelW, currentY, fechaW, metaH);
-  setFont("bold", 7);
-  text("FECHA", metaX + 2, currentY + 4.8);
-  setFont("normal", 7.4);
-  text(fechaDoc, metaX + metaLabelW + 2, currentY + 4.8);
+  setFont("bold", 6);
+  text("FECHA", metaX + 1.2, currentY + 3.8);
+  setFont("normal", 6.3);
+  text(fechaDoc, metaX + metaLabelW + 1.2, currentY + 3.8);
   metaX += metaLabelW + fechaW;
 
   rect(metaX, currentY, metaLabelW, metaH, labelFill);
   rect(metaX + metaLabelW, currentY, origenW, metaH);
-  setFont("bold", 7);
-  text("ORIGEN", metaX + 2, currentY + 4.8);
-  setFont("normal", 7.4);
-  text(clip(origenVenta, 24), metaX + metaLabelW + 2, currentY + 4.8);
+  setFont("bold", 6);
+  text("ORIGEN", metaX + 1.2, currentY + 3.8);
+  setFont("normal", 6.3);
+  text(clip(origenVenta, 24), metaX + metaLabelW + 1.2, currentY + 3.8);
 
   currentY += metaH;
 
   // ID / Campaña
-  const idH2 = 9;
+  const idH2 = 5.2;
   rect(left, currentY, right - left, idH2);
   rect(left, currentY, 18, idH2, headerFill);
 
   setFont("bold", 8);
-  text("ID:", left + 2, currentY + 6.2);
+  text("ID:", left + 1.2, currentY + 3.8);
   setFont("normal", 8);
-  text(clip(idTexto, 28), left + 21, currentY + 6.2);
+  text(clip(idTexto, 28), left + 21, currentY + 3.8);
 
   setFont("bold", 8);
   text("CAMPAÑA:", left + 120, currentY + 6.2);
@@ -1167,14 +1167,14 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   currentY += idH2;
 
   // Título
-  const titleH = 7;
+  const titleH = 4.8;
   rect(left, currentY, right - left, titleH, headerFill);
   setFont("bold", 9.5);
-  text(personTitle, (left + right) / 2, currentY + 5.2, { align: "center" });
+  text(personTitle, (left + right) / 2, currentY + 3.45, { align: "center" });
   currentY += titleH;
 
   // Helper filas
-  const rowH = 5.3;
+  const rowH = 4.05;
   const labelW = 56;
   const col1W = 82;
   const col2W = (right - left) - labelW - col1W;
@@ -1184,18 +1184,18 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     rect(left, currentY, right - left, rowH);
     rect(left, currentY, labelW, rowH, labelFill);
 
-    setFont("bold", 7.0);
-    text(label, left + 2, currentY + 4.2);
+    setFont("bold", 5.8);
+    text(label, left + 1.1, currentY + 2.95);
 
-    setFont("normal", 7.8);
+    setFont("normal", 6.1);
     if (v2 === "" || v2 === null || typeof v2 === "undefined") {
       rect(left + labelW, currentY, (right - left) - labelW, rowH);
-      text(clip(v1, 74), left + labelW + 2, currentY + 4.2);
+      text(clip(v1, 74), left + labelW + 1.1, currentY + 2.95);
     } else {
       rect(left + labelW, currentY, col1W, rowH);
       rect(left + labelW + col1W, currentY, col2W, rowH);
-      text(clip(v1, 44), left + labelW + 2, currentY + 4.2);
-      text(clip(v2, 34), left + labelW + col1W + 2, currentY + 4.2);
+      text(clip(v1, 44), left + labelW + 1.1, currentY + 2.95);
+      text(clip(v2, 34), left + labelW + col1W + 1.1, currentY + 2.95);
     }
 
     currentY += rowH;
@@ -1213,18 +1213,22 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     rect(left + label1W + value1W, currentY, label2W, rowH, labelFill);
     rect(left + label1W + value1W + label2W, currentY, value2W, rowH);
 
-    setFont("bold", 7.0);
-    text(label1, left + 2, currentY + 4.2);
-    text(label2, left + label1W + value1W + 2, currentY + 4.2);
+    setFont("bold", 5.8);
+    text(label1, left + 1.1, currentY + 2.95);
+    text(label2, left + label1W + value1W + 1.1, currentY + 2.95);
 
-    setFont("normal", 7.8);
-    text(clip(value1, 28), left + label1W + 2, currentY + 4.2);
-    text(clip(value2, 28), left + label1W + value1W + label2W + 2, currentY + 4.2);
+    setFont("normal", 6.1);
+    text(clip(value1, 28), left + label1W + 1.1, currentY + 2.95);
+    text(clip(value2, 28), left + label1W + value1W + label2W + 1.1, currentY + 2.95);
 
     currentY += rowH;
   };
 
   // ===== Datos Cliente =====
+  rect(left, currentY, right - left, 4.2, headerFill);
+  setFont("bold", 6.3);
+  text("DATOS DEL CLIENTE", left + 1.1, currentY + 3);
+  currentY += 4.2;
   row("COMPROBANTE", tipoComprobante);
   if (tipoPersona === "JURIDICA") {
     row("NOMBRE COMERCIAL", nombreComercial);
@@ -1277,11 +1281,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   row("ORIGEN FONDOS", r.origenFondos || r.origen_fondos || "-");
 
   // ===== Vehículo =====
-  ensurePage(7);
-  rect(left, currentY, right - left, 6.8, headerFill);
-  setFont("bold", 8.8);
-  text("DATOS DEL VEHICULO", left + 2, currentY + 4.9);
-  currentY += 6.8;
+  ensurePage(4.2);
+  rect(left, currentY, right - left, 4.2, headerFill);
+  setFont("bold", 6.3);
+  text("DATOS DEL VEHICULO", left + 1.1, currentY + 3);
+  currentY += 4.2;
 
   doubleFieldRow("MARCA", marca, "MODELO", modelo);
   doubleFieldRow("VERSION", version, "CLASE", clase);
@@ -1290,11 +1294,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   row("CODIGO", codigoUnidad);
 
   // ===== Precios =====
-  ensurePage(7);
-  rect(left, currentY, right - left, 6.8, headerFill);
-  setFont("bold", 8.8);
-  text("PRECIOS", left + 2, currentY + 4.9);
-  currentY += 6.8;
+  ensurePage(4.2);
+  rect(left, currentY, right - left, 4.2, headerFill);
+  setFont("bold", 6.3);
+  text("TRANSACCION", left + 1.1, currentY + 3);
+  currentY += 4.2;
 
   if (showPriceList) row("PRECIO LISTA", money(precioLista));
   discountRows.forEach((item) => row(item.label, money(item.value)));
@@ -1302,13 +1306,13 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   row("TIPO DE CAMBIO", tcReferencial || "-");
 
   // ===== Depósitos =====
-  ensurePage(7);
-  rect(left, currentY, right - left, 6.8, headerFill);
-  setFont("bold", 8.8);
-  text("DEPOSITOS (MONTO / FECHA / BANCO / OP)", left + 2, currentY + 4.9);
-  currentY += 6.8;
+  ensurePage(4.2);
+  rect(left, currentY, right - left, 4.2, headerFill);
+  setFont("bold", 6.3);
+  text("DEPOSITOS (MONTO / FECHA / BANCO / N OP)", left + 1.1, currentY + 3);
+  currentY += 4.2;
 
-  const depRows = Math.max(3, depositos.length);
+  const depRows = Math.max(5, Math.min(7, depositos.length || 0));
   const depLabelW = 56;
   const montoW = 34;
   const depFechaW = 30;
@@ -1321,19 +1325,19 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
     rect(left, currentY, right - left, rowH);
     rect(left, currentY, depLabelW, rowH, labelFill);
-    setFont("bold", 6.8);
-    text("MONTO DEPOSITO", left + 2, currentY + 4.2);
+    setFont("bold", 5.8);
+    text("MONTO DEPOSITO", left + 1.1, currentY + 2.95);
 
     rect(left + depLabelW, currentY, montoW, rowH);
     rect(left + depLabelW + montoW, currentY, depFechaW, rowH);
     rect(left + depLabelW + montoW + depFechaW, currentY, bancoW, rowH);
     rect(left + depLabelW + montoW + depFechaW + bancoW, currentY, opW, rowH);
 
-    setFont("normal", 7.8);
-    text(dep ? money(dep.monto) : "-", left + depLabelW + 2, currentY + 4.2);
-    text(dep ? formatDate(dep.fechaDeposito) : "-", left + depLabelW + montoW + 2, currentY + 4.2);
-    text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + depFechaW + 2, currentY + 4.2);
-    text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + depFechaW + bancoW + 2, currentY + 4.2);
+    setFont("normal", 6.1);
+    text(dep ? money(dep.monto) : "-", left + depLabelW + 1.1, currentY + 2.95);
+    text(dep ? formatDate(dep.fechaDeposito) : "-", left + depLabelW + montoW + 1.1, currentY + 2.95);
+    text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + depFechaW + 1.1, currentY + 2.95);
+    text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + depFechaW + bancoW + 1.1, currentY + 2.95);
 
     currentY += rowH;
   }
