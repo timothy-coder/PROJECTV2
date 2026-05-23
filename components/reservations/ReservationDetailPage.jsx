@@ -1089,6 +1089,199 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   const signed = r.estado === "firmado";
 
+  {
+    await drawTemplateWatermark();
+    rect(left, top, right - left, bottom - top);
+
+    const pageInnerW = right - left;
+    const sectionFill = [238, 238, 238];
+    const rowFill = [242, 242, 242];
+    const tightFont = 5.2;
+    const tightBold = 5.3;
+    const sectionFont = 5.6;
+    const lineH = 3.45;
+
+    const put = (value, x, y, opts = {}) => {
+      setFont(opts.bold ? "bold" : "normal", opts.size || tightFont);
+      text(clip(value, opts.max || 45), x, y, opts.align ? { align: opts.align } : {});
+    };
+    const putLabel = (label, x, y, max = 24) => put(label, x, y, { bold: true, size: tightBold, max });
+    const sectionBar = (title, y, w = pageInnerW, x = left) => {
+      rect(x, y, w, 3.2, sectionFill);
+      put(title, x + 1, y + 2.35, { bold: true, size: sectionFont, max: 45 });
+    };
+    const box = (x, y, w, h, title) => {
+      rect(x, y, w, h);
+      sectionBar(title, y, w, x);
+    };
+    const kv = (label, value, x, y, labelW = 31, valueMax = 34) => {
+      putLabel(label, x, y);
+      put(value, x + labelW, y, { max: valueMax });
+    };
+
+    // Encabezado con logos desde plantilla.
+    const headerY = top + 3;
+    const headerH2 = 19;
+    const headerTemplateApplied = await drawTemplateElements(getTemplateSection("ENCABEZADO"), left + 1, headerY, pageInnerW - 2, headerH2);
+    if (!headerTemplateApplied) {
+      setFont("bold", 19);
+      text("Wankamotors", left + 1, headerY + 9);
+    }
+    putLabel("Asesor", left + 1, top + 18, 14);
+    put(asesor, left + 23, top + 18, { bold: true, max: 34 });
+    putLabel("Origen de Venta", left + 1, top + 22, 22);
+    put(origenVenta, left + 23, top + 22, { max: 24 });
+    putLabel("ID", left + 66, top + 22, 8);
+    put(idTexto, left + 73, top + 22, { max: 22 });
+    putLabel("Fecha", right - 68, top + 18, 14);
+    put(fechaDoc, right - 46, top + 18, { max: 18 });
+    putLabel("Campaña", right - 68, top + 22, 18);
+    put(campania, right - 46, top + 22, { max: 18 });
+
+    const titleY = top + 25;
+    rect(left, titleY, pageInnerW, 4, sectionFill);
+    put(personTitle, left + pageInnerW / 2, titleY + 2.8, { bold: true, size: 5.5, max: 80, align: "center" });
+
+    // Datos del cliente.
+    const clientY = titleY + 4;
+    const clientH = 42;
+    box(left, clientY, pageInnerW, clientH, "DATOS DEL CLIENTE");
+    let y = clientY + 6.4;
+    const lX = left + 1;
+    const vX = left + 36;
+    const rX = left + 123;
+    const rvX = left + 158;
+    kv("Tipo de comprobante", tipoComprobante, lX, y, 35, 38); y += lineH;
+    kv("Razon social", tipoPersona === "JURIDICA" ? nombreComercial : cliente, lX, y, 35, 58); y += lineH;
+    kv("Cliente / Repr legal", cliente, lX, y, 35, 58);
+    kv("F. de nacimiento", fechaNacimiento, rX, y, 35, 18); y += lineH;
+    kv("DNI / RUC", documento, lX, y, 35, 26);
+    kv("Telefono 1", celular, rX, y, 35, 18); y += lineH;
+    kv("Correo", email, lX, y, 35, 58);
+    kv("Telefono 2", r.telefono2 || "-", rX, y, 35, 18); y += lineH;
+    kv("Ocupacion", ocupacion, lX, y, 35, 38); y += lineH;
+    kv("Domicilio", domicilio, lX, y, 35, 58); y += lineH;
+    kv("Distrito", distrito, lX, y, 35, 24);
+    kv("Provincia", provincia, left + 78, y, 24, 24);
+    kv("Departamento", region, rX, y, 35, 18); y += lineH;
+    kv("Conyuge/Copropiedad", conyugue, lX, y, 35, 38); y += lineH;
+    kv("DNI Conyuge", documentoConyugue, lX, y, 35, 26);
+
+    // Datos del vehiculo.
+    const vehicleY = clientY + clientH + 1.4;
+    const vehicleH = 20;
+    box(left, vehicleY, pageInnerW, vehicleH, "DATOS DEL VEHICULO");
+    y = vehicleY + 6.4;
+    kv("Modelo", modelo, lX, y, 24, 28);
+    kv("Version", version, left + 66, y, 24, 32); y += lineH;
+    kv("Chasis / VIN", vin, lX, y, 24, 28);
+    kv("Color", color, left + 66, y, 24, 24); y += lineH;
+    kv("Motor", motor, lX, y, 24, 28);
+    kv("Año Modelo", anio, left + 66, y, 24, 14); y += lineH;
+    kv("Uso del vehiculo / Placa", d.usoVehiculo || d.usovehiculo || "-", lX, y, 35, 28);
+    kv("Codigo", codigoUnidad, left + 66, y, 24, 24);
+
+    // Transaccion.
+    const txY = vehicleY + vehicleH + 1.4;
+    const txH = 54;
+    box(left, txY, pageInnerW, txH, "TRANSACCION");
+    y = txY + 6.4;
+    kv("Precio de Lista (Valor incluye IGV)", showPriceList ? money(precioLista) : "-", lX, y, 62, 18); y += lineH;
+    const discountCells = [
+      [discountRows[0]?.label || "Descuento A", discountRows[0] ? money(discountRows[0].value) : "-"],
+      [discountRows[2]?.label || "Descuento C", discountRows[2] ? money(discountRows[2].value) : "-"],
+      [discountRows[4]?.label || "Descuento E", discountRows[4] ? money(discountRows[4].value) : "-"],
+      [discountRows[1]?.label || "Descuento B", discountRows[1] ? money(discountRows[1].value) : "-"],
+      [discountRows[3]?.label || "Descuento D", discountRows[3] ? money(discountRows[3].value) : "-"],
+      [discountRows[5]?.label || "Descuento F", discountRows[5] ? money(discountRows[5].value) : "-"],
+    ];
+    const dXs = [lX, left + 66, left + 140];
+    for (let rowIndex = 0; rowIndex < 2; rowIndex += 1) {
+      dXs.forEach((x0, index) => {
+        const item = discountCells[rowIndex * 3 + index];
+        rect(x0 - 0.8, y - 2.6, 28, 3.3, rowFill);
+        putLabel(item[0], x0, y, 24);
+        put(item[1], x0 + 31, y, { max: 14 });
+      });
+      y += lineH;
+    }
+    kv("Precio Final (Valor incluye IGV)", money(totalFinal), lX, y, 62, 18); y += lineH;
+    kv("T.C. Referencial", tcReferencial ? `S/. ${tcReferencial}` : "-", lX, y, 32, 14); y += lineH;
+    kv("Forma de Pago", r.formaPago || d.formaPago || "-", lX, y, 32, 20);
+    kv("Tipo de credito", r.tipoCredito || d.tipoCredito || "-", left + 66, y, 34, 20); y += lineH;
+    kv("Banco", depositos[0]?.entidadFinanciera || "-", lX, y, 32, 24);
+    kv("Origen de Fondos", r.origenFondos || r.origen_fondos || "-", left + 66, y, 34, 24); y += lineH + 1;
+
+    rect(lX - 0.8, y - 2.6, 62, 3.3, rowFill);
+    putLabel("Depositos (Monto / Fecha / Banco / N OP)", lX, y, 58); y += lineH;
+    const depRows = Math.max(5, Math.min(6, depositos.length || 0));
+    for (let index = 0; index < depRows; index += 1) {
+      const dep = depositos[index];
+      putLabel("Monto de deposito", lX, y, 28);
+      put(dep ? money(dep.monto) : "-", left + 43, y, { max: 18 });
+      put(dep ? formatDate(dep.fechaDeposito) : "-", left + 78, y, { max: 18 });
+      put(dep ? dep.entidadFinanciera : "-", left + 116, y, { max: 24 });
+      put(dep ? dep.numeroOperacion : "-", right - 33, y, { max: 18 });
+      y += lineH;
+    }
+
+    // Otros, accesorios y obsequios.
+    const otherY = txY + txH + 1.4;
+    const otherH = 66;
+    box(left, otherY, pageInnerW, otherH, "OTROS");
+    y = otherY + 6.4;
+    kv("Considera GLP", Number(d.glp || r.glp || 0) > 0 ? "SI" : "NO", lX, y, 32, 8);
+    kv("Precio", money(d.glp ?? r.glp), left + 50, y, 18, 14);
+    kv("Flete", Number(d.flete || r.flete || 0) > 0 ? "SI" : "NO", left + 108, y, 20, 8);
+    kv("Precio", money(d.flete ?? r.flete), left + 146, y, 18, 14); y += lineH;
+    kv("Tarjeta y Placa", Number(d.tarjetaPlaca || d.tarjeta_placa || r.tarjetaPlaca || r.tarjeta_placa || 0) > 0 ? "SI" : "NO", lX, y, 32, 8);
+    kv("Precio", money(d.tarjetaPlaca ?? d.tarjeta_placa ?? r.tarjetaPlaca ?? r.tarjeta_placa), left + 50, y, 18, 14);
+
+    const miniTable = (title, items, startY) => {
+      putLabel(title, lX, startY, 18);
+      rect(lX + 22, startY - 2.6, pageInnerW - 24, 3.3, rowFill);
+      putLabel("Cantidad", lX + 7, startY + 4, 16);
+      putLabel("Descripcion", left + 72, startY + 4, 24);
+      putLabel("Precio", right - 25, startY + 4, 14);
+      const item = (items || [])[0];
+      if (item) {
+        put(String(item.cantidad || 1), lX + 9, startY + 8, { max: 8 });
+        put(item.detalle || item.nombre || item.numeroParte || item.lote || "-", left + 45, startY + 8, { max: 82 });
+        put(money(item.total || item.precioUnitario || item.precio || 0), right - 29, startY + 8, { max: 18 });
+      }
+    };
+    miniTable("Accesorios", accessories, otherY + 18);
+    miniTable("Obsequios", gifts, otherY + 40);
+
+    // Firmas.
+    const signY = otherY + otherH + 20;
+    pdf.setDrawColor(...lineColor);
+    pdf.line(left + 6, signY, left + 58, signY);
+    pdf.line(left + 72, signY, left + 124, signY);
+    pdf.line(left + 138, signY, right - 6, signY);
+    put("Cliente", left + 32, signY + 3, { bold: true, size: 4.8, align: "center", max: 20 });
+    put("Asesor de Ventas", left + 98, signY + 3, { bold: true, size: 4.8, align: "center", max: 28 });
+    put("Jefe de Ventas", left + 164, signY + 3, { bold: true, size: 4.8, align: "center", max: 28 });
+    if (signed) {
+      pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
+      pdf.setFontSize(13);
+      pdf.text(asesor || "Asesor", left + 73, signY - 2);
+      pdf.text(salesBossName || "Jefe de Ventas", left + 139, signY - 2);
+    }
+
+    // Observaciones.
+    const obsY2 = bottom - 20;
+    rect(left, obsY2, pageInnerW, 18);
+    rect(left, obsY2, pageInnerW, 3.2, sectionFill);
+    put("OBSERVACIONES", left + 1, obsY2 + 2.35, { bold: true, size: 5.2, max: 35 });
+    const legalText =
+      "Se deja constancia que si desiste de la compra y desea la devolucion, estara afecta a un % de retencion por concepto de gastos administrativos y que el monto en materia de devolucion esta afecta a 20 dias habiles, cualquier cambio adicional que no conste en la presente no sera responsabilidad de la empresa. La entrega esta sujeta a stock, los plazos de entrega pueden sufrir variacion por posibles demoras en la entrega del vehiculo por parte de la marca, por tal caso no sera imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variacion por factores externos ajenos a Wankamotors y estipulados por la marca. Una vez emitido el mismo no se aceptara su cambio ni canje.";
+    setFont("normal", 3.7);
+    pdf.text(pdf.splitTextToSize(legalText, pageInnerW - 4).slice(0, 5), left + 2, obsY2 + 6, { maxWidth: pageInnerW - 4, lineHeightFactor: 0.92 });
+    await drawTemplateElements(getTemplateSection("PIE"), left + 2, bottom - 7, right - left - 4, 5);
+    return;
+  }
+
   // =========================================================
   // Layout tipo hoja (1 sola hoja)
   // =========================================================
