@@ -118,7 +118,7 @@ async function quoteItemsTotal(connection, cotizacionId) {
 async function recalcReservationTotal(connection, reservationId, override = {}) {
   const [[detail]] = await connection.query(
     `SELECT d.id, d.cotizacion_id, d.precio_unitario, d.cantidad, d.dsctotienda, d.dsctobonoretoma,
-            d.dsctonper, d.glp, d.tarjetaplaca, d.flete, d.cuota_inicial
+            d.dsctonper, d.glp, d.tarjetaplaca, d.flete, d.glp_sn, d.tarjeta_sn, d.flete_sn, d.cuota_inicial
      FROM ventas_reserva_detalles d
      WHERE d.reserva_id=?
      LIMIT 1`,
@@ -141,9 +141,9 @@ async function recalcReservationTotal(connection, reservationId, override = {}) 
     - Number(merged.dsctobonoretoma || 0)
     - Number(merged.dsctonper || 0)
     - extraDiscountTotal
-    + Number(merged.glp || 0)
-    + Number(merged.tarjetaplaca || 0)
-    + Number(merged.flete || 0)
+    + (String(merged.glp_sn || "").toUpperCase() === "SI" ? Number(merged.glp || 0) : 0)
+    + (String(merged.tarjeta_sn || "").toUpperCase() === "SI" ? Number(merged.tarjetaplaca || 0) : 0)
+    + (String(merged.flete_sn || "").toUpperCase() === "SI" ? Number(merged.flete || 0) : 0)
     - Number(merged.cuota_inicial || 0)
     + itemsTotal;
   await connection.query(`UPDATE ventas_reserva_detalles SET total=? WHERE id=?`, [total, detail.id]);
@@ -350,9 +350,15 @@ export async function GET(_request, { params }) {
         bonoRetoma: Number(detail.dsctobonoretoma || 0),
         descuentoNper: Number(detail.dsctonper || 0),
         glp: Number(detail.glp || 0),
+        glpSn: detail.glp_sn || "NO",
         tarjetaPlaca: Number(detail.tarjetaplaca || 0),
+        tarjetaSn: detail.tarjeta_sn || "NO",
         flete: Number(detail.flete || 0),
+        fleteSn: detail.flete_sn || "NO",
         cuotaInicial: detail.cuota_inicial || "",
+        formaPago: detail.forma_pago || "",
+        banco: detail.banco || "",
+        tipoCredito: detail.tipo_credito || "",
         cantidad: Number(detail.cantidad || 1),
         precioUnitario: Number(detail.precio_unitario || 0),
         descripcion: detail.descripcion || "",
@@ -696,28 +702,33 @@ export async function PUT(request, { params }) {
       const tipoPersona = normalizePersonType(d.tipoComprobante, d.tipoPersona);
       const extraDiscountTotal = extraDiscounts.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
       const itemsTotal = await quoteItemsTotal(connection, d.cotizacionId);
+      const glpSn = String(d.glpSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
+      const tarjetaSn = String(d.tarjetaSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
+      const fleteSn = String(d.fleteSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
       const total = base
         - Number(d.descuentoTienda || 0)
         - Number(d.bonoRetoma || 0)
         - Number(d.descuentoNper || 0)
         - extraDiscountTotal
-        + Number(d.glp || 0)
-        + Number(d.tarjetaPlaca || 0)
-        + Number(d.flete || 0)
+        + (glpSn === "SI" ? Number(d.glp || 0) : 0)
+        + (tarjetaSn === "SI" ? Number(d.tarjetaPlaca || 0) : 0)
+        + (fleteSn === "SI" ? Number(d.flete || 0) : 0)
         - Number(d.cuotaInicial || 0)
         + itemsTotal;
       const [detailUpdate] = await connection.query(
         `UPDATE ventas_reserva_detalles
          SET tipo_comprobante=?, tipo_persona=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,
              dsctotienda=?, dsctotiendaporcentaje=?, dsctobonoretoma=?, dsctonper=?, glp=?, tarjetaplaca=?, flete=?,
-             cuota_inicial=?, cantidad=?, precio_unitario=?, descripcion=?, origen_fondos=?, codigo=?
+             glp_sn=?, tarjeta_sn=?, flete_sn=?, cuota_inicial=?, cantidad=?, precio_unitario=?, descripcion=?,
+             origen_fondos=?, codigo=?, forma_pago=?, banco=?, tipo_credito=?
          WHERE reserva_id=?`,
         [
           d.tipoComprobante || null, tipoPersona, d.numeroMotor || null, d.tcReferencial || null, total,
           d.vinExiste ? d.vin || null : null, d.vinExiste ? 1 : 0, d.usoVehiculo || null, d.placa || null,
           d.descuentoTienda || 0, d.descuentoTiendaPorcentaje || null, d.bonoRetoma || 0, d.descuentoNper || 0,
-          d.glp || 0, d.tarjetaPlaca || 0, d.flete || 0, d.cuotaInicial || null, d.cantidad || 1,
-          d.precioUnitario || 0, d.descripcion || null, d.origenFondos || null, d.codigo || null, id,
+          d.glp || 0, d.tarjetaPlaca || 0, d.flete || 0, glpSn, tarjetaSn, fleteSn, d.cuotaInicial || null, d.cantidad || 1,
+          d.precioUnitario || 0, d.descripcion || null, d.origenFondos || null, d.codigo || null,
+          d.formaPago || null, d.banco || null, d.tipoCredito || null, id,
         ]
       );
       await connection.query(`DELETE FROM ventas_reservas_copropietarios WHERE reserva_id=?`, [id]);

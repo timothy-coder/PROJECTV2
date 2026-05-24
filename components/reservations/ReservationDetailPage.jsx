@@ -35,16 +35,17 @@ function toDateTimeLocal(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+const isYes = (value) => String(value || "").toUpperCase() === "SI";
+
 export default function ReservationDetailPage({ id }) {
   const { data, loading, update } = useReservationDetail(id);
   const [carDataOpen, setCarDataOpen] = useState(false);
-  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   if (loading || !data) return <div className="p-4">Cargando reserva...</div>;
   const { reservation, detail, currentUser, vins, accessories, gifts, options, salesBossName, vinReleaseRequest } = data;
   const isSigned = reservation.estado === "firmado";
-  const downloadReservationPdf = async ({ showPriceList = true } = {}) => {
+  const downloadReservationPdf = async () => {
     const { default: jsPDF } = await import("jspdf");
-    const pdf = new jsPDF("p", "mm", "a4");
+    const pdf = new jsPDF("p", "pt", "letter");
     const hasAutography = await loadAutographyFont(pdf);
     const template = await loadReservationTemplate();
     await buildReservationPdf(pdf, {
@@ -56,13 +57,8 @@ export default function ReservationDetailPage({ id }) {
       createdByName: reservation.creadoPor || "",
       hasAutography,
       template,
-      showPriceList,
     });
     pdf.save(`reserva-${reservation.id}.pdf`);
-  };
-  const confirmPdfDownload = async (showPriceList) => {
-    setPdfDialogOpen(false);
-    await downloadReservationPdf({ showPriceList });
   };
   const resolveVinRelease = async (vinReleaseAction, extra = {}) => {
     try {
@@ -94,7 +90,7 @@ export default function ReservationDetailPage({ id }) {
         </div>
         <div className="mb-5 flex flex-wrap gap-2">
           {reservation.oportunidadId ? <Link className="inline-flex h-7 items-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-4" />Ver Oportunidad</Link> : null}
-          <Button variant="outline" onClick={() => setPdfDialogOpen(true)}><Download className="size-4" />Descargar PDF</Button>
+          <Button variant="outline" onClick={downloadReservationPdf}><Download className="size-4" />Descargar PDF</Button>
           {isSigned && detail?.vin ? (
             <VinReleaseControls
               currentUser={currentUser}
@@ -119,18 +115,18 @@ export default function ReservationDetailPage({ id }) {
             update={update}
           />
         ) : null}
-        <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+        {false ? <Dialog open={false} onOpenChange={() => {}}>
           <DialogContent className="max-w-sm bg-white text-slate-950">
             <DialogHeader>
               <DialogTitle>Descargar PDF de reserva</DialogTitle>
               <p className="text-sm text-slate-500">¿Mostrar precio lista en el formato?</p>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => confirmPdfDownload(false)}>No</Button>
-              <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={() => confirmPdfDownload(true)}>Si</Button>
+              <Button variant="outline">No</Button>
+              <Button className="bg-slate-950 text-white hover:bg-slate-800">Si</Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
+        </Dialog> : null}
       </div>
     </div>
   );
@@ -287,7 +283,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   const depositsTotal = useMemo(() => (form.depositos || []).reduce((sum, item) => sum + Number(item.monto || 0), 0), [form.depositos]);
   const accessoriesTotal = useMemo(() => accessories.reduce((sum, item) => sum + Number(item.total || 0), 0), [accessories]);
   const giftsTotal = useMemo(() => gifts.reduce((sum, item) => sum + Number(item.total || 0), 0), [gifts]);
-  const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal + Number(form.glp || 0) + Number(form.tarjetaPlaca || 0) + Number(form.flete || 0) - Number(form.cuotaInicial || 0) + accessoriesTotal + giftsTotal, [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.glp, form.tarjetaPlaca, form.flete, form.cuotaInicial, extraDiscountTotal, accessoriesTotal, giftsTotal]);
+  const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal + (isYes(form.glpSn) ? Number(form.glp || 0) : 0) + (isYes(form.tarjetaSn) ? Number(form.tarjetaPlaca || 0) : 0) + (isYes(form.fleteSn) ? Number(form.flete || 0) : 0) - Number(form.cuotaInicial || 0) + accessoriesTotal + giftsTotal, [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.glp, form.glpSn, form.tarjetaPlaca, form.tarjetaSn, form.flete, form.fleteSn, form.cuotaInicial, extraDiscountTotal, accessoriesTotal, giftsTotal]);
   const vinMessage = form.vinExiste ? "" : (form.cuotaInicial ? "Anticipo sin data" : "Reserva total sin data");
   const isFactura = String(form.tipoComprobante || "").toUpperCase().includes("FACTURA");
   const isBoleta = String(form.tipoComprobante || "").toUpperCase().includes("BOLETA");
@@ -477,9 +473,12 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <Field label="Cantidad"><Input disabled={readOnly} type="number" value={form.cantidad} onChange={(e) => setForm((f) => ({ ...f, cantidad: e.target.value }))} /></Field>
           <Field label="Precio Unitario"><Input disabled={readOnly} type="number" value={form.precioUnitario} onChange={(e) => setForm((f) => ({ ...f, precioUnitario: e.target.value }))} /></Field>
           <Field label="TC Referencial"><Input disabled={readOnly} type="number" step="0.0001" value={form.tcReferencial || ""} onChange={(e) => setForm((f) => ({ ...f, tcReferencial: e.target.value }))} /></Field>
-          <Field label="Flete"><Input disabled={readOnly} type="number" value={form.flete} onChange={(e) => setForm((f) => ({ ...f, flete: e.target.value }))} /></Field>
-          <Field label="Tarjeta Placa"><Input disabled={readOnly} type="number" value={form.tarjetaPlaca} onChange={(e) => setForm((f) => ({ ...f, tarjetaPlaca: e.target.value }))} /></Field>
-          <Field label="GLP"><Input disabled={readOnly} type="number" value={form.glp} onChange={(e) => setForm((f) => ({ ...f, glp: e.target.value }))} /></Field>
+          <Field label="Forma de pago"><Input disabled={readOnly} value={form.formaPago || ""} onChange={(e) => setForm((f) => ({ ...f, formaPago: e.target.value }))} /></Field>
+          <Field label="Banco"><Input disabled={readOnly} value={form.banco || ""} onChange={(e) => setForm((f) => ({ ...f, banco: e.target.value }))} /></Field>
+          <Field label="Tipo de credito"><Input disabled={readOnly} value={form.tipoCredito || ""} onChange={(e) => setForm((f) => ({ ...f, tipoCredito: e.target.value }))} /></Field>
+          <Field label="GLP"><div className="grid grid-cols-[96px_1fr] gap-2"><SearchableSelect disabled={readOnly} value={form.glpSn || "NO"} options={[{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }]} onChange={(value) => setForm((f) => ({ ...f, glpSn: value }))} /><Input disabled={readOnly || !isYes(form.glpSn)} type="number" value={isYes(form.glpSn) ? form.glp : ""} onChange={(e) => setForm((f) => ({ ...f, glp: e.target.value }))} /></div></Field>
+          <Field label="Flete"><div className="grid grid-cols-[96px_1fr] gap-2"><SearchableSelect disabled={readOnly} value={form.fleteSn || "NO"} options={[{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }]} onChange={(value) => setForm((f) => ({ ...f, fleteSn: value }))} /><Input disabled={readOnly || !isYes(form.fleteSn)} type="number" value={isYes(form.fleteSn) ? form.flete : ""} onChange={(e) => setForm((f) => ({ ...f, flete: e.target.value }))} /></div></Field>
+          <Field label="Tarjeta Placa"><div className="grid grid-cols-[96px_1fr] gap-2"><SearchableSelect disabled={readOnly} value={form.tarjetaSn || "NO"} options={[{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }]} onChange={(value) => setForm((f) => ({ ...f, tarjetaSn: value }))} /><Input disabled={readOnly || !isYes(form.tarjetaSn)} type="number" value={isYes(form.tarjetaSn) ? form.tarjetaPlaca : ""} onChange={(e) => setForm((f) => ({ ...f, tarjetaPlaca: e.target.value }))} /></div></Field>
           <Field label="Cuota Inicial"><Input disabled={readOnly} type="number" value={form.cuotaInicial} onChange={(e) => setForm((f) => ({ ...f, cuotaInicial: e.target.value }))} /></Field>
           <Field label="Origen fondos"><Input disabled={readOnly} value={form.origenFondos || ""} onChange={(e) => setForm((f) => ({ ...f, origenFondos: e.target.value }))} /></Field>
           <Field label="Codigo"><Input disabled={readOnly} value={form.codigo || ""} onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))} /></Field>
@@ -914,7 +913,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     pdf.rect(x, y, w, h);
   };
 
-  const text = (t, x, y, opts = {}) => pdf.text(String(t ?? "-"), x, y, opts);
+  const text = (t, x, y, opts = {}) => pdf.text(String(t ?? ""), x, y, opts);
   const getTemplateSection = (type) => (template?.secciones || [])
     .filter((section) => section.tipo === type && section.isActive)
     .flatMap((section) => section.elementos || [])
@@ -1003,7 +1002,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const r = reservation || {};
   const d = detail || {};
 
-  const cliente = r.cliente || [r.nombre, r.apellido].filter(Boolean).join(" ") || "-";
+  const cliente = r.cliente || [r.nombre, r.apellido].filter(Boolean).join(" ") || "";
   const copropietarios = Array.isArray(r.copropietarios) ? r.copropietarios : [];
   const isPresent = (value) => {
     const textValue = String(value ?? "").trim();
@@ -1017,29 +1016,29 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const copropietariosDocumentos = copropietarios
     .map((item) => item.numeroDocumento || item.documento || item.identificacionFiscal || "")
     .filter(isPresent);
-  const conyugue = [nombreConyugue, ...copropietariosNombres].filter(isPresent).join(" / ") || "-";
-  const documento = r.documento || r.identificacion_fiscal || "-";
-  const documentoConyugue = [dniConyugue, ...copropietariosDocumentos].filter(isPresent).join(" / ") || "-";
+  const conyugue = [nombreConyugue, ...copropietariosNombres].filter(isPresent).join(" / ") || "";
+  const documento = r.documento || r.identificacion_fiscal || "";
+  const documentoConyugue = [dniConyugue, ...copropietariosDocumentos].filter(isPresent).join(" / ") || "";
 
-  const email = r.email || "-";
-  const celular = r.celular || "-";
+  const email = r.email || "";
+  const celular = r.celular || "";
   const fechaNacimiento = formatDate(r.fechaNacimiento || r.fecha_nacimiento);
-  const ocupacion = r.ocupacion || "-";
-  const domicilio = r.domicilio || "-";
+  const ocupacion = r.ocupacion || "";
+  const domicilio = r.domicilio || "";
 
-  const distrito = r.distrito || "-";
-  const provincia = r.provincia || "-";
-  const region = r.departamento || r.region || "-";
+  const distrito = r.distrito || "";
+  const provincia = r.provincia || "";
+  const region = r.departamento || r.region || "";
 
-  const asesor = createdByName || r.creadoPor || r.creado_por || "-";
+  const asesor = createdByName || r.creadoPor || r.creado_por || "";
   const fechaDoc = formatDate(r.createdAt || r.created_at || r.fecha || new Date());
-  const origenVenta = r.origenVenta || r.origen_venta || "-";
-  const campania = r.campania || "-";
-  const idTexto = r.idLead || r.id_lead || r.leadId || "-";
+  const origenVenta = r.origenVenta || r.origen_venta || "";
+  const campania = r.campania || "";
+  const idTexto = r.idLead || r.id_lead || r.leadId || "";
 
-  const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "-";
+  const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "";
   const tipoPersona = r.tipoPersona || r.tipo_persona || d.tipoPersona || "NATURAL";
-  const nombreComercial = r.nombreComercial || r.nombre_comercial || d.nombreComercial || d.nombre_comercial || "-";
+  const nombreComercial = r.nombreComercial || r.nombre_comercial || d.nombreComercial || d.nombre_comercial || "";
   const personTitle = tipoPersona === "JURIDICA"
     ? "NOTA DE PEDIDO - PERSONA JURIDICA"
     : tipoPersona === "NATURAL_RUC"
@@ -1047,24 +1046,25 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       : "NOTA DE PEDIDO - PERSONA NATURAL";
 
   // Vehículo (reservation con fallback a detail/form)
-  const marca = r.marca || d.marca || "-";
-  const modelo = r.modelo || d.modelo || "-";
-  const clase = r.clase || d.clase || "-";
-  const version = r.version || d.version || "-";
-  const anio = r.anio || d.anio || "-";
-  const vin = r.vin || d.vin || "-";
-  const color = r.color || r.colorExterno || d.colorExterno || "-";
-  const motor = r.numeroMotor || r.motor || d.numeroMotor || "-";
-  const codigoUnidad = r.codigoUnidad || r.codigo_unidad || r.codigo || "-";
+  const marca = r.marca || d.marca || "";
+  const modelo = r.modelo || d.modelo || "";
+  const clase = r.clase || d.clase || "";
+  const version = r.version || d.version || "";
+  const anio = r.anio || d.anio || "";
+  const vin = r.vin || d.vin || "";
+  const color = r.color || r.colorExterno || d.colorExterno || "";
+  const motor = r.numeroMotor || r.motor || d.numeroMotor || "";
+  const codigoUnidad = r.codigoUnidad || r.codigo_unidad || r.codigo || d.codigo || "";
 
   // Montos (reservation con fallback a detail)
   const precioLista =
+    d.precioUnitario ??
+    d.precio_unitario ??
     r.precioLista ??
     r.precio_lista ??
     r.precioBase ??
     r.precio_base ??
     d.precioBase ??
-    d.precioUnitario ??
     0;
 
   const totalFinal =
@@ -1077,17 +1077,509 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   // Depósitos (reservation.depositos con fallback a detail.depositos)
   const depositos = Array.isArray(r.depositos) ? r.depositos : (Array.isArray(d.depositos) ? d.depositos : []);
   const discountBase = Number(d.precioUnitario || d.precio_unitario || precioLista || 0) * Number(d.cantidad || 1);
+  const dealerPercent = Number(d.descuentoTiendaPorcentaje || d.dsctotiendaporcentaje || 0);
+  const dealerAmount = dealerPercent > 0
+    ? (discountBase * dealerPercent) / 100
+    : Number(d.descuentoTienda || d.dsctotienda || 0);
   const discountRows = [
-    { label: "BONO RETOMA", value: d.bonoRetoma || d.dsctobonoretoma },
-    { label: "BONO DEALER", value: d.descuentoTienda || d.dsctotienda },
+    { label: "DESCUENTO DEALER", value: dealerAmount },
+    { label: "BONO FLOTA", value: d.bonoRetoma || d.dsctobonoretoma },
     { label: "DESCUENTO RETAIL", value: d.descuentoNper || d.dsctonper },
     ...(Array.isArray(d.descuentos) ? d.descuentos.map((item) => ({
-      label: item.nombre || "DESCUENTO",
+      label: item.nombre || "DESCUENTO ADICIONAL",
       value: discountAmount(item, discountBase),
     })) : []),
-  ].filter((item) => Number(item.value || 0) > 0);
+  ];
 
   const signed = r.estado === "firmado";
+
+  {
+    await drawTemplateWatermark();
+
+    const x = 42;
+    const w = 528;
+    const gray = [238, 238, 238];
+    const firstValue = (...values) => values.find((value) => isPresent(value)) || "";
+    const amountText = (value) => (Number(value || 0) ? money(value) : "");
+    const razonSocial = tipoPersona === "JURIDICA"
+      ? nombreComercial
+      : firstValue(r.razonSocial, r.razon_social, nombreComercial);
+    const usoPlaca = [firstValue(d.usoVehiculo, d.usovehiculo, r.usoVehiculo, r.usovehiculo), firstValue(d.placa, r.placa)]
+      .filter(isPresent)
+      .join(" / ") || "";
+    const origenFondos = firstValue(r.origenFondos, r.origen_fondos, d.origenFondos, d.origen_fondos);
+    const banco = firstValue(d.banco, r.banco, depositos[0]?.entidadFinanciera, depositos[0]?.banco);
+    const showGlp = isYes(d.glpSn || d.glp_sn);
+    const showFlete = isYes(d.fleteSn || d.flete_sn);
+    const showTarjeta = isYes(d.tarjetaSn || d.tarjeta_sn);
+
+    const put = (value, tx, ty, opts = {}) => {
+      setFont(opts.bold ? "bold" : "normal", opts.size || 7);
+      text(clip(value, opts.max || 50), tx, ty, opts.align ? { align: opts.align } : {});
+    };
+    const label = (value, tx, ty, tw = 74) => {
+      pdf.setFillColor(...gray);
+      pdf.rect(tx - 1, ty - 7.2, tw, 9, "F");
+      put(value, tx, ty, { bold: true, size: 7, max: Math.max(12, Math.floor(tw / 3.2)) });
+    };
+    const box = (ty, th) => rect(x, ty, w, th);
+    const outlineBox = (ty, th) => {
+      pdf.setDrawColor(...lineColor);
+      pdf.rect(x, ty, w, th);
+    };
+    const hLine = (ty) => pdf.line(x, ty, x + w, ty);
+    const section = (value, ty) => {
+      pdf.setFillColor(...gray);
+      pdf.rect(x, ty, w, 10, "F");
+      pdf.setDrawColor(...lineColor);
+      pdf.rect(x, ty, w, 10);
+      put(value, x + 2, ty + 7.4, { bold: true, size: 7, max: 45 });
+    };
+
+    pdf.setDrawColor(...lineColor);
+    pdf.setLineWidth(0.55);
+    const drawDirectLogo = async (path, lx, ly, lw, lh) => {
+      const dataUrl = await imageToDataUrl(path);
+      if (dataUrl) pdf.addImage(dataUrl, undefined, lx, ly, lw, lh);
+    };
+    await drawDirectLogo(
+      "/uploads/ventas-plantillas/1778903861360-27945a90-a2e4-4c59-8e71-dbb8da209848.jpg",
+      x + 1,
+      28,
+      122,
+      35,
+    );
+    await drawDirectLogo(
+      "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png",
+      x + w - 72,
+      20,
+      69,
+      52,
+    );
+
+    const headerCol = w / 4;
+    put("Asesor", x + 2, 76, { bold: true, size: 7, max: 10 });
+    put(asesor, x + headerCol, 76, { bold: true, size: 7, max: 34 });
+    put("Fecha", x + (headerCol * 2), 76, { bold: true, size: 7, max: 10 });
+    put(fechaDoc, x + (headerCol * 3), 76, { size: 7, max: 14 });
+    put("Origen de Venta", x + 2, 86, { bold: true, size: 7, max: 24 });
+    put(origenVenta, x + headerCol, 86, { size: 7, max: 24 });
+    put("ID", x + (headerCol * 1.5), 86, { bold: true, size: 7, max: 6 });
+    put(idTexto, x + (headerCol * 1.7), 86, { size: 7, max: 16 });
+    put("Campaña", x + (headerCol * 2), 86, { bold: true, size: 7, max: 16 });
+    put(campania, x + (headerCol * 3), 86, { size: 7, max: 24 });
+
+    pdf.setFillColor(...gray);
+    pdf.rect(x, 89, w, 10, "F");
+    pdf.setDrawColor(...lineColor);
+    pdf.rect(x, 89, w, 10);
+    put(personTitle, x + w / 2, 96.5, { bold: true, size: 7.2, align: "center", max: 80 });
+
+    box(101, 102);
+    section("DATOS DEL CLIENTE", 101);
+    let y = 116;
+    label("Tipo de comprobante", x + 2, y, 104); put(tipoComprobante, x + 111, y, { size: 7, max: 35 });
+    y += 9;
+    label("Razón social", x + 2, y, 104); put(razonSocial, x + 111, y, { size: 7, max: 58 });
+    y += 9;
+    label("Cliente /Repr legal", x + 2, y, 104); put(cliente, x + 111, y, { size: 7, max: 58 });
+    y += 9;
+    label("DNI / RUC", x + 2, y, 104); put(documento, x + 111, y, { size: 7, max: 22 });
+    label("F. de nacimiento", x + 338, y, 96); put(fechaNacimiento, x + 438, y, { size: 7, max: 14 });
+    y += 9;
+    label("Correo", x + 2, y, 104); put(email, x + 111, y, { size: 7, max: 58 });
+    label("Teléfono 1", x + 338, y, 96); put(celular, x + 438, y, { size: 7, max: 14 });
+    y += 9;
+    label("Ocupación", x + 2, y, 104); put(ocupacion, x + 111, y, { size: 7, max: 35 });
+    label("Teléfono 2", x + 338, y, 96); put(r.telefono2 || "", x + 438, y, { size: 7, max: 14 });
+    y += 9;
+    label("Domicilio", x + 2, y, 104); put(domicilio, x + 111, y, { size: 7, max: 70 });
+    y += 9;
+    label("Distrito", x + 2, y, 104); put(distrito, x + 111, y, { size: 7, max: 24 });
+    label("Provincia", x + 224, y, 72); put(provincia, x + 300, y, { size: 7, max: 24 });
+    label("Departamento", x + 373, y, 86); put(region, x + 463, y, { size: 7, max: 16 });
+    y += 12;
+    label("Cónyuge/Copropiedad", x + 2, y, 104); put(conyugue, x + 111, y, { size: 7, max: 42 });
+    y += 9;
+    label("DNI Cónyuge", x + 2, y, 104); put(documentoConyugue, x + 111, y, { size: 7, max: 24 });
+
+    outlineBox(101, 102);
+
+    box(205, 44.5);
+    section("DATOS DEL VEHICULO", 205);
+    y = 220;
+    label("Modelo", x + 2, y, 74); put(modelo, x + 78, y, { size: 7, max: 28 });
+    label("Versión", x + 196, y, 78); put(version, x + 282, y, { size: 7, max: 36 });
+    y += 9;
+    label("Chasis / VIN", x + 2, y, 74); put(vin, x + 78, y, { size: 7, max: 28 });
+    label("Color", x + 196, y, 78); put(color, x + 282, y, { size: 7, max: 22 });
+    y += 9;
+    label("Motor", x + 2, y, 74); put(motor, x + 78, y, { size: 7, max: 28 });
+    label("Año Modelo", x + 196, y, 78); put(anio, x + 282, y, { size: 7, max: 12 });
+    y += 9;
+    label("Uso del vehículo / Placa", x + 2, y, 104); put(usoPlaca, x + 111, y, { size: 7, max: 28 });
+    label("Código", x + 196, y, 78); put(codigoUnidad, x + 282, y, { size: 7, max: 22 });
+
+    outlineBox(205, 44.5);
+
+    box(252, 150);
+    section("TRANSACCION", 252);
+    const col6 = w / 6;
+    const col5 = w / 5;
+    const col4 = w / 4;
+    const col8 = w / 8;
+    const putCentered = (value, tx, ty, tw, opts = {}) => {
+      put(value, tx + (tw / 2), ty, { ...opts, align: "center" });
+    };
+    const discountLabel = (index) => discountRows[index]?.label || "";
+    y = 267;
+    label("Precio de Lista (Valor incluye IGV)", x + 2, y, 214); put(money(d.precioUnitario || d.precio_unitario || precioLista), x + 373, y, { bold: true, size: 7.2, max: 18 });
+    y += 9;
+    label(discountLabel(0), x + 2, y, col6 - 2); putCentered(amountText(discountRows[0]?.value), x + col6, y, col6, { size: 7, max: 14 });
+    label(discountLabel(2), x + (col6 * 2) + 1, y, col6 - 2); putCentered(amountText(discountRows[2]?.value), x + (col6 * 3), y, col6, { size: 7, max: 14 });
+    label(discountLabel(4), x + (col6 * 4) + 1, y, col6 - 2); putCentered(amountText(discountRows[4]?.value), x + (col6 * 5), y, col6, { size: 7, max: 14 });
+    y += 9;
+    label(discountLabel(1), x + 2, y, col6 - 2); putCentered(amountText(discountRows[1]?.value), x + col6, y, col6, { size: 7, max: 14 });
+    label(discountLabel(3), x + (col6 * 2) + 1, y, col6 - 2); putCentered(amountText(discountRows[3]?.value), x + (col6 * 3), y, col6, { size: 7, max: 14 });
+    label(discountLabel(5), x + (col6 * 4) + 1, y, col6 - 2); putCentered(amountText(discountRows[5]?.value), x + (col6 * 5), y, col6, { size: 7, max: 14 });
+    y += 9;
+    label("Precio Final (Valor incluye IGV)", x + 2, y, 196); put(money(totalFinal), x + 373, y, { bold: true, size: 7.2, max: 18 });
+    y += 9;
+    label("T.C. Referencial", x + 2, y, 86); put(tcReferencial ? `S/. ${tcReferencial}` : "", x + 111, y, { size: 7, max: 14 });
+    y += 12;
+    label("Forma de Pago", x + 2, y, col4 - 2); putCentered(d.formaPago || d.forma_pago || r.formaPago || "", x + col4, y, col4, { size: 7, max: 24 });
+    label("Tipo de crédito", x + (col4 * 2) + 1, y, col4 - 2); putCentered(d.tipoCredito || d.tipo_credito || r.tipoCredito || "", x + (col4 * 3), y, col4, { size: 7, max: 24 });
+    y += 9;
+    label("Banco", x + 2, y, col4 - 2); putCentered(banco, x + col4, y, col4, { size: 7, max: 24 });
+    label("Origen de Fondos", x + (col4 * 2) + 1, y, col4 - 2); putCentered(origenFondos || "", x + (col4 * 3), y, col4, { size: 7, max: 24 });
+    y += 12;
+    label("Depósitos (Monto / Fecha / Banco / N° OP)", x + 2, y, 218);
+    y += 9;
+    [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
+      const dep = depositos[index];
+      label("Monto de depósito", x + 2, y, col5 - 2);
+      putCentered(dep ? money(dep.monto || dep.importe || 0) : "", x + col5, y, col5, { size: 7, max: 16 });
+      putCentered(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
+      putCentered(firstValue(dep?.entidadFinanciera, dep?.banco), x + (col5 * 3), y, col5, { size: 7, max: 22 });
+      putCentered(firstValue(dep?.numeroOperacion, dep?.operacion, dep?.op), x + (col5 * 4), y, col5, { size: 7, max: 18 });
+      y += 9;
+    });
+
+    outlineBox(252, 150);
+
+    box(405, 184);
+    section("OTROS", 405);
+    y = 424;
+    label("Considera GLP", x + 2, y, col8 - 2); putCentered(showGlp ? "SI" : "NO", x + col8, y, col8, { size: 7, max: 4 });
+    label("Precio", x + (col8 * 2) + 1, y, col8 - 2); putCentered(showGlp ? amountText(d.glp) : "", x + (col8 * 3), y, col8, { size: 7, max: 14 });
+    label("Flete", x + (col8 * 4) + 1, y, col8 - 2); putCentered(showFlete ? "SI" : "NO", x + (col8 * 5), y, col8, { size: 7, max: 4 });
+    label("Precio", x + (col8 * 6) + 1, y, col8 - 2); putCentered(showFlete ? amountText(d.flete) : "", x + (col8 * 7), y, col8, { size: 7, max: 14 });
+    y += 9;
+    label("Tarjeta y Placa", x + 2, y, col8 - 2); putCentered(showTarjeta ? "SI" : "NO", x + col8, y, col8, { size: 7, max: 4 });
+    label("Precio", x + (col8 * 2) + 1, y, col8 - 2); putCentered(showTarjeta ? amountText(d.tarjetaPlaca || d.tarjetaplaca) : "", x + (col8 * 3), y, col8, { size: 7, max: 14 });
+
+    y = 443;
+    label("Accesorios", x + 2, y, 74);
+    pdf.setFillColor(...gray);
+    pdf.rect(x, y + 4, w, 12, "F");
+    put("Cantidad", x + 26, y + 13, { bold: true, size: 6.6, max: 16 });
+    put("Descripción", x + 260, y + 13, { bold: true, size: 6.6, max: 22 });
+    put("Precio", x + w - 62, y + 13, { bold: true, size: 6.6, max: 14 });
+    (accessories || []).slice(0, 4).forEach((item, index) => {
+      const rowY = y + 26 + (index * 9);
+      put(item.cantidad || "1", x + 32, rowY, { size: 7, max: 8 });
+      put(firstValue(item.descripcion, item.detalle, item.detalleAccesorio, item.nombreAccesorio, item.nombre, item.numeroParte, item.numero_parte, item.notas), x + 155, rowY, { size: 7, max: 44 });
+      put(money(item.precio || item.monto || item.total || item.precioUnitario || item.precio_unitario || 0), x + w - 72, rowY, { size: 7, max: 16 });
+    });
+    hLine(509);
+    y = 519;
+    label("Obsequios", x + 2, y, 74);
+    pdf.setFillColor(...gray);
+    pdf.rect(x, y + 4, w, 12, "F");
+    put("Cantidad", x + 26, y + 13, { bold: true, size: 6.6, max: 16 });
+    put("Descripción", x + 260, y + 13, { bold: true, size: 6.6, max: 22 });
+    put("Precio", x + w - 62, y + 13, { bold: true, size: 6.6, max: 14 });
+    (gifts || []).slice(0, 4).forEach((item, index) => {
+      const rowY = y + 26 + (index * 9);
+      put(item.cantidad || "1", x + 32, rowY, { size: 7, max: 8 });
+      put(firstValue(item.descripcion, item.detalle, item.detalleRegalo, item.nombreRegalo, item.nombre, item.lote, item.notas), x + 155, rowY, { size: 7, max: 44 });
+      put(amountText(item.precio || item.monto || item.total || item.precioUnitario || item.precio_unitario), x + w - 72, rowY, { size: 7, max: 16 });
+    });
+    outlineBox(405, 184);
+
+    const signatureY = 650;
+    [["Cliente", x + 92], ["Asesor de Ventas", x + w / 2], ["Jefe de Ventas", x + w - 92]].forEach(([value, center]) => {
+      setFont("normal", 8);
+      text("____________________________", center - 68, signatureY);
+      put(value, center, signatureY + 12, { size: 7, align: "center", max: 24 });
+    });
+
+    const obsY = 674;
+    box(obsY, 36);
+    pdf.setFillColor(...gray);
+    pdf.rect(x + 1, obsY + 2, w - 2, 9, "F");
+    put("OBSERVACIONES", x + w / 2, obsY + 9, { bold: true, size: 6.4, align: "center", max: 26 });
+    setFont("normal", 5.2);
+    const observationText = "Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos administrativos y que el motivo en materia de devolución está afecta a 20 días hábiles, cualquier cambio adicional que no conste en la presente no será responsabilidad de la empresa. La emtrega está sujeta a stock, los plazos de entrega pueden sufrir variación por posibles demoras en la entrega del vehículo por parte de la marca, por tal caso no será imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variación por factores externos ajenos a Wankamotors y estipulados por la marca. Una vez emitido el mismo no se aceptará su cambio ni canje. Por tal motivo agradecemos verificar la información registrada, en señal de conformidad el cliente deja como constancia su firma.";
+    const observationLines = pdf.splitTextToSize(observationText, w - 16);
+    pdf.text(observationLines.slice(0, 6), x + 8, obsY + 17, { align: "justify", lineHeightFactor: 1.08, maxWidth: w - 16 });
+    outlineBox(obsY, 36);
+    return;
+  }
+
+  {
+    await drawTemplateWatermark();
+
+    const formX = 43.46;
+    const formW = 510.43;
+    const rowH = 9.96;
+    const yTop = (bottomPx, h = rowH) => pageH - bottomPx - h;
+    const yText = (bottomPx) => pageH - bottomPx - 2.2;
+    const rowFill = [242, 242, 242];
+    const sectionFill = [228, 228, 228];
+    const firstTruthy = (...values) => values.find((value) => isPresent(value)) || "";
+    const amountOrBlank = (value) => (Number(value || 0) ? money(value) : "");
+    const usoPlaca = [d.usoVehiculo || d.usovehiculo || r.usoVehiculo || r.usovehiculo, d.placa || r.placa]
+      .filter(isPresent)
+      .join(" / ") || "-";
+    const origenFondos = firstTruthy(r.origenFondos, r.origen_fondos, d.origenFondos, d.origen_fondos);
+    const banco = depositos[0]?.entidadFinanciera || depositos[0]?.banco || "";
+
+    const put = (value, x, y, opts = {}) => {
+      setFont(opts.bold ? "bold" : "normal", opts.size || 8.1);
+      text(clip(value, opts.max || 55), x, y, opts.align ? { align: opts.align } : {});
+    };
+    const putLabel = (value, x, y, max = 34) => put(value, x, y, { bold: true, size: 8, max });
+    const rowBox = (bottomPx, fill = null) => rect(formX, yTop(bottomPx), formW, rowH, fill);
+    const section = (value, bottomPx) => {
+      rowBox(bottomPx, sectionFill);
+      put(value, formX + formW / 2, yText(bottomPx), { bold: true, size: 8.6, align: "center", max: 80 });
+    };
+
+    pdf.setDrawColor(...lineColor);
+    pdf.setLineWidth(0.45);
+    pdf.rect(0, 0, pageW, pageH);
+    await drawTemplateElements(getTemplateSection("ENCABEZADO"), formX, 18, formW, 54);
+
+    rowBox(695.5);
+    putLabel("Asesor", formX + 2, yText(695.5), 12);
+    put(asesor, formX + 54, yText(695.5), { bold: true, size: 9, max: 38 });
+    putLabel("Fecha", formX + 360, yText(695.5), 12);
+    put(fechaDoc, formX + 403, yText(695.5), { bold: true, size: 8.7, max: 14 });
+
+    rowBox(685.54);
+    putLabel("Origen de Venta", formX + 2, yText(685.54), 26);
+    put(origenVenta, formX + 116, yText(685.54), { bold: true, max: 24 });
+    putLabel("ID", formX + 200, yText(685.54), 6);
+    put(idTexto, formX + 230, yText(685.54), { bold: true, max: 24 });
+    putLabel("Campaña", formX + 360, yText(685.54), 18);
+    put(campania, formX + 420, yText(685.54), { max: 20 });
+
+    section(personTitle, 672.1);
+    section("DATOS DEL CLIENTE", 659.14);
+
+    rowBox(649.66);
+    putLabel("Tipo de comprobante", formX + 2, yText(649.66), 30);
+    put(tipoComprobante, formX + 177, yText(649.66), { bold: true, max: 35 });
+
+    rowBox(639.7);
+    putLabel("Razón social", formX + 2, yText(639.7), 22);
+    put(tipoPersona === "JURIDICA" ? nombreComercial : r.razonSocial || r.razon_social || nombreComercial, formX + 113, yText(639.7), { bold: true, max: 55 });
+
+    rowBox(629.74);
+    putLabel("Cliente /Repr legal", formX + 2, yText(629.74), 30);
+    put(cliente, formX + 51, yText(629.74), { bold: true, max: 55 });
+
+    rowBox(619.78);
+    putLabel("DNI / RUC", formX + 2, yText(619.78), 16);
+    put(documento, formX + 113, yText(619.78), { bold: true, max: 18 });
+    putLabel("F. de nacimiento", formX + 272, yText(619.78), 26);
+    put(fechaNacimiento, formX + 396, yText(619.78), { bold: true, max: 14 });
+
+    rowBox(609.82);
+    putLabel("Correo", formX + 2, yText(609.82), 14);
+    put(email, formX + 113, yText(609.82), { bold: true, max: 45 });
+    putLabel("Teléfono 1", formX + 396, yText(609.82), 18);
+    put(celular, formX + 463, yText(609.82), { bold: true, max: 14 });
+
+    rowBox(599.86);
+    putLabel("Ocupación", formX + 2, yText(599.86), 18);
+    put(ocupacion, formX + 113, yText(599.86), { bold: true, max: 35 });
+    putLabel("Teléfono 2", formX + 396, yText(599.86), 18);
+    put(r.telefono2 || "-", formX + 463, yText(599.86), { bold: true, max: 14 });
+
+    rowBox(589.87);
+    putLabel("Domicilio", formX + 2, yText(589.87), 16);
+    put(domicilio, formX + 113, yText(589.87), { bold: true, max: 75 });
+
+    rowBox(579.91);
+    putLabel("Distrito", formX + 2, yText(579.91), 14);
+    put(distrito, formX + 113, yText(579.91), { bold: true, max: 24 });
+    putLabel("Provincia", formX + 272, yText(579.91), 18);
+    put(provincia, formX + 336, yText(579.91), { bold: true, max: 20 });
+    putLabel("Departamento", formX + 396, yText(579.91), 25);
+    put(region, formX + 470, yText(579.91), { bold: true, max: 14 });
+
+    rowBox(566.95);
+    putLabel("Cónyuge/Copropiedad", formX + 2, yText(566.95), 34);
+    put(conyugue, formX + 177, yText(566.95), { bold: true, max: 48 });
+
+    rowBox(556.99);
+    putLabel("DNI Cónyuge", formX + 2, yText(556.99), 22);
+    put(documentoConyugue, formX + 113, yText(556.99), { bold: true, max: 28 });
+
+    section("DATOS DEL VEHÍCULO", 543.55);
+
+    rowBox(534.07);
+    putLabel("Modelo", formX + 2, yText(534.07), 14);
+    put(modelo, formX + 113, yText(534.07), { bold: true, max: 24 });
+    putLabel("Versión", formX + 272, yText(534.07), 14);
+    put(version, formX + 336, yText(534.07), { bold: true, max: 28 });
+
+    rowBox(524.11);
+    putLabel("Chasis / VIN", formX + 2, yText(524.11), 22);
+    put(vin, formX + 113, yText(524.11), { bold: true, max: 28 });
+    putLabel("Color", formX + 272, yText(524.11), 12);
+    put(color, formX + 396, yText(524.11), { bold: true, max: 20 });
+
+    rowBox(514.15);
+    putLabel("Motor", formX + 2, yText(514.15), 12);
+    put(motor, formX + 113, yText(514.15), { bold: true, max: 24 });
+    putLabel("Año Modelo", formX + 396, yText(514.15), 22);
+    put(anio, formX + 470, yText(514.15), { bold: true, max: 8 });
+
+    rowBox(504.19);
+    putLabel("Uso del vehículo / Placa", formX + 2, yText(504.19), 38);
+    put(usoPlaca, formX + 177, yText(504.19), { bold: true, max: 30 });
+    putLabel("Código", formX + 396, yText(504.19), 14);
+    put(codigoUnidad, formX + 470, yText(504.19), { bold: true, max: 16 });
+
+    section("TRANSACCIÓN", 490.75);
+
+    rowBox(481.27);
+    putLabel("Precio de Lista (Valor incluye IGV)", formX + 2, yText(481.27), 52);
+    put(showPriceList ? money(precioLista) : "-", formX + 360, yText(481.27), { bold: true, max: 18 });
+
+    rowBox(471.31);
+    putLabel("Descuento A", formX + 2, yText(471.31), 20);
+    put(amountOrBlank(discountRows[0]?.value), formX + 113, yText(471.31), { bold: true, max: 14 });
+    putLabel("Descuento C", formX + 177, yText(471.31), 20);
+    put(amountOrBlank(discountRows[2]?.value), formX + 272, yText(471.31), { bold: true, max: 14 });
+    putLabel("Descuento E", formX + 336, yText(471.31), 20);
+    put(amountOrBlank(discountRows[4]?.value), formX + 430, yText(471.31), { bold: true, max: 14 });
+
+    rowBox(461.35);
+    putLabel("Descuento B", formX + 2, yText(461.35), 20);
+    put(amountOrBlank(discountRows[1]?.value), formX + 113, yText(461.35), { bold: true, max: 14 });
+    putLabel("Descuento D", formX + 177, yText(461.35), 20);
+    put(amountOrBlank(discountRows[3]?.value), formX + 272, yText(461.35), { bold: true, max: 14 });
+    putLabel("Descuento F", formX + 336, yText(461.35), 20);
+    put(amountOrBlank(discountRows[5]?.value), formX + 430, yText(461.35), { bold: true, max: 14 });
+
+    rowBox(451.39);
+    putLabel("Precio Final (Valor incluye IGV)", formX + 2, yText(451.39), 52);
+    put(money(totalFinal), formX + 360, yText(451.39), { bold: true, max: 18 });
+
+    rowBox(441.43);
+    putLabel("T.C. Referencial", formX + 2, yText(441.43), 28);
+    put(tcReferencial ? `S/. ${tcReferencial}` : "-", formX + 113, yText(441.43), { bold: true, max: 14 });
+
+    rowBox(428.45);
+    putLabel("Forma de Pago", formX + 2, yText(428.45), 25);
+    put(r.formaPago || d.formaPago || "-", formX + 113, yText(428.45), { bold: true, max: 24 });
+    putLabel("Tipo de crédito", formX + 272, yText(428.45), 25);
+    put(r.tipoCredito || d.tipoCredito || "-", formX + 396, yText(428.45), { bold: true, max: 20 });
+
+    rowBox(418.49);
+    putLabel("Banco", formX + 2, yText(418.49), 12);
+    put(banco, formX + 113, yText(418.49), { bold: true, max: 24 });
+    putLabel("Origen de Fondos", formX + 272, yText(418.49), 30);
+    put(origenFondos || "-", formX + 396, yText(418.49), { bold: true, max: 22 });
+
+    rowBox(405.53, rowFill);
+    putLabel("Depósitos (Monto / Fecha /  Banco / N° OP)", formX + 2, yText(405.53), 70);
+
+    [395.57, 385.61, 375.65, 365.69, 355.73].forEach((bottomPx, index) => {
+      const dep = depositos[index];
+      rowBox(bottomPx);
+      putLabel("Monto de depósito", formX + 2, yText(bottomPx), 28);
+      put(dep ? money(dep.monto || dep.importe || 0) : "", formX + 92, yText(bottomPx), { bold: true, max: 18 });
+      put(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
+      put(dep?.entidadFinanciera || dep?.banco || "", formX + 245, yText(bottomPx), { bold: true, max: 22 });
+      put(dep?.numeroOperacion || dep?.operacion || dep?.op || "", formX + 360, yText(bottomPx), { bold: true, max: 22 });
+    });
+
+    section("OTROS", 342.29);
+
+    rowBox(332.81);
+    putLabel("Considera GLP", formX + 2, yText(332.81), 24);
+    put(amountOrBlank(d.glp), formX + 113, yText(332.81), { bold: true, max: 14 });
+    putLabel("Flete", formX + 272, yText(332.81), 12);
+    put(amountOrBlank(d.flete), formX + 336, yText(332.81), { bold: true, max: 14 });
+
+    rowBox(322.85);
+    putLabel("Tarjeta y Placa", formX + 2, yText(322.85), 26);
+    put(amountOrBlank(d.tarjetaPlaca || d.tarjetaplaca), formX + 113, yText(322.85), { bold: true, max: 14 });
+
+    rowBox(302.93, rowFill);
+    putLabel("Accesorios", formX + 2, yText(302.93), 18);
+    putLabel("Cantidad", formX + 17, yText(302.93), 16);
+    putLabel("Descripción", formX + 151, yText(302.93), 22);
+    putLabel("Precio", formX + 440, yText(302.93), 14);
+
+    rowBox(292.49);
+    (accessories || []).slice(0, 1).forEach((item) => {
+      put(item.cantidad || "1", formX + 24, yText(292.49), { bold: true, max: 8 });
+      put(item.descripcion || item.nombre || "", formX + 151, yText(292.49), { bold: true, max: 42 });
+      put(money(item.precio || item.monto || 0), formX + 440, yText(292.49), { bold: true, max: 16 });
+    });
+
+    rowBox(240.14, rowFill);
+    putLabel("Obsequios", formX + 2, yText(240.14), 18);
+    putLabel("Cantidad", formX + 17, yText(240.14), 16);
+    putLabel("Descripción", formX + 151, yText(240.14), 22);
+    putLabel("Precio", formX + 440, yText(240.14), 14);
+
+    rowBox(229.7);
+    (gifts || []).slice(0, 1).forEach((item) => {
+      put(item.cantidad || "1", formX + 24, yText(229.7), { bold: true, max: 8 });
+      put(item.descripcion || item.nombre || "", formX + 151, yText(229.7), { bold: true, max: 42 });
+      put(amountOrBlank(item.precio || item.monto), formX + 440, yText(229.7), { bold: true, max: 16 });
+    });
+
+    rowBox(104.64);
+    putLabel("OBSERVACIONES", formX + 2, yText(104.64), 24);
+
+    setFont("normal", 5.6);
+    pdf.text(
+      [
+        "Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos administrativos y que el motivo en materia de devolución está afecta a 20 días",
+        "hábiles, cualquier cambio adicional que no conste en la presente no será responsabilidad de la empresa. La emtrega está sujeta a stock, los plazos de entrega pueden sufrir variación por posibles demoras en la",
+        "entrega del vehículo por parte de la marca, por tal caso no será imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variación por factores externos ajenos a Wankamotors y",
+        "estipulados por la marca. Una vez emitido el mismo no se aceptará su cambio ni canje. Por tal motivo agradecemos verificar la información registrada, en señal de conformidad el cliente deja como constancia",
+        "su firma.",
+      ],
+      formX + 6,
+      yTop(64.32) + 7,
+      { maxWidth: formW - 12, lineHeightFactor: 1.18 },
+    );
+
+    const signBottom = 117.12;
+    const signY = yTop(signBottom);
+    const signatureLabels = [
+      ["Cliente", formX + 36],
+      ["Asesor de Ventas", formX + 201],
+      ["Jefe de Ventas", formX + 375],
+    ];
+    signatureLabels.forEach(([label, x]) => {
+      setFont("normal", 8);
+      text("___________________________________", x - 36, signY - 2);
+      put(label, x, signY + 7, { bold: true, max: 24 });
+    });
+
+    await drawTemplateElements(getTemplateSection("PIE"), formX, 760, formW, 20);
+    return;
+  }
 
   {
     await drawTemplateWatermark();
@@ -1158,7 +1650,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     kv("DNI / RUC", documento, lX, y, 35, 26);
     kv("Telefono 1", celular, rX, y, 35, 18); y += lineH;
     kv("Correo", email, lX, y, 35, 58);
-    kv("Telefono 2", r.telefono2 || "-", rX, y, 35, 18); y += lineH;
+    kv("Telefono 2", r.telefono2 || "", rX, y, 35, 18); y += lineH;
     kv("Ocupacion", ocupacion, lX, y, 35, 38); y += lineH;
     kv("Domicilio", domicilio, lX, y, 35, 58); y += lineH;
     kv("Distrito", distrito, lX, y, 35, 24);
