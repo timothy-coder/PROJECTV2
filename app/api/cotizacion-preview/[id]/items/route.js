@@ -39,6 +39,25 @@ export async function POST(request, { params }) {
       return NextResponse.json({ ok: true });
     }
 
+    if (body.type === "vehicle-pricing") {
+      const precioBase = body.precioBase !== undefined && body.precioBase !== "" ? Number(body.precioBase) : null;
+      const tcReferencial = body.tcReferencial !== undefined && body.tcReferencial !== "" ? Number(body.tcReferencial) : null;
+      const diasValidez = body.diasValidez !== undefined && body.diasValidez !== "" ? String(body.diasValidez).trim() : null;
+      const observaciones = String(body.observaciones || "").trim() || null;
+      const otrosProductos = String(body.otrosProductos || "").trim() || null;
+      if (precioBase === null || Number.isNaN(precioBase) || precioBase < 0) {
+        return NextResponse.json({ message: "Precio base invalido." }, { status: 400 });
+      }
+      if (tcReferencial !== null && (Number.isNaN(tcReferencial) || tcReferencial < 0)) {
+        return NextResponse.json({ message: "Tipo de cambio invalido." }, { status: 400 });
+      }
+      await connection.query(
+        `UPDATE ventas_cotizaciones SET precio_base=?, tc_referencial=?, sku=?, observaciones=?, otros_productos=? WHERE id=?`,
+        [precioBase, tcReferencial, diasValidez, observaciones, otrosProductos, cotizacionId]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     if (body.type === "vehicle-colors") {
       await connection.query(
         `UPDATE ventas_cotizaciones SET color_externo=?, color_interno=? WHERE id=?`,

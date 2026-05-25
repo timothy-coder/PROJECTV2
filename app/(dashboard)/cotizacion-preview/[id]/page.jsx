@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 import { hasPerm } from "@/lib/permissions";
 import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
-import { QuotePreviewItems, QuoteVehicleColorEditor, QuoteVehicleDiscountEditor } from "@/components/quotes/QuotePreviewItems";
+import { QuotePreviewItems, QuoteVehicleColorEditor, QuoteVehicleDiscountEditor, QuoteVehiclePricingEditor } from "@/components/quotes/QuotePreviewItems";
 import { QuotePreviewActions } from "@/components/quotes/QuotePreviewActions";
 
 function money(value) {
@@ -25,7 +25,7 @@ export default async function Page({ params }) {
       `SELECT q.*, o.oportunidad_id, o.id AS oportunidad_pk, CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
               c.email, au.fullname AS asignado, cu.fullname AS creado, oc.name AS origen,
               d.fecha_agenda,
-              p.version, p.precio_base, p.en_stock, p.tiempo_entrega_dias, ma.name AS marca, mo.name AS modelo
+              p.version, p.precio_base AS catalogo_precio_base, p.en_stock, p.tiempo_entrega_dias, ma.name AS marca, mo.name AS modelo
        FROM ventas_cotizaciones q
        INNER JOIN ventas_oportunidades o ON o.id=q.oportunidad_id
        INNER JOIN administracion_clientes c ON c.id=o.cliente_id
@@ -64,8 +64,9 @@ export default async function Page({ params }) {
       [quote.precio_id]
     );
     const specGroups = buildSpecGroups(specRows);
-    const vehicleDiscount = Number(quote["descuento_veh\u00edculo"] || 0) + (Number(quote.precio_base || 0) * Number(quote["descuento_veh\u00edculo_porcentaje"] || 0) / 100);
-    const vehicleFinal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+    const quoteBasePrice = Number(quote.precio_base ?? quote.catalogo_precio_base ?? 0);
+    const vehicleDiscount = Number(quote["descuento_veh\u00edculo"] || 0) + (quoteBasePrice * Number(quote["descuento_veh\u00edculo_porcentaje"] || 0) / 100);
+    const vehicleFinal = Math.max(quoteBasePrice - vehicleDiscount, 0);
     const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
     const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
     const accessoriesGross = accessories.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
@@ -107,7 +108,7 @@ export default async function Page({ params }) {
             <h2 className="mb-10 font-bold">Información General - Vehí­culo</h2>
             <div className="grid gap-8 md:grid-cols-4">
               <Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Versión" value={quote.version} /><Info label="Año" value={quote.anio || "-"} />
-              <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="SKU" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
+              <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="Dias de validez de la cotizacion" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
             </div>
             <QuoteVehicleColorEditor quoteId={id} colorExterno={quote.color_externo || ""} colorInterno={quote.color_interno || ""} />
           </section>
@@ -137,10 +138,19 @@ export default async function Page({ params }) {
               <InfoBox label="Modelo/Versión" value={`${quote.modelo} ${quote.version}`} />
               <InfoBox label="Stock" value={quote.en_stock ? "Disponible" : "Bajo pedido"} green={quote.en_stock} />
               <InfoBox label="Entrega (dí­as)" value={quote.tiempo_entrega_dias || 0} />
-              <InfoBox label="$ Precio" value={money(quote.precio_base)} orange />
+              <InfoBox label="$ Precio editable" value={money(quoteBasePrice)} orange />
+              <InfoBox label="T.C. Referencial" value={quote.tc_referencial ? Number(quote.tc_referencial).toFixed(4) : "-"} />
             </div>
             {vehicleDiscount ? <div className="mt-5 rounded-lg border border-orange-300 bg-orange-100 p-3 text-sm font-bold text-orange-900">Descuento aplicado: -{money(vehicleDiscount)} ({Number(quote["descuento_veh\u00edculo_porcentaje"] || 0).toFixed(2)}%)</div> : null}
             <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehí­culo:</p><p className="text-xl font-bold text-blue-800">{money(vehicleFinal)}</p></div>
+            <QuoteVehiclePricingEditor
+              quoteId={id}
+              precioBase={quoteBasePrice}
+              tcReferencial={quote.tc_referencial || ""}
+              diasValidez={quote.sku || ""}
+              observaciones={quote.observaciones || ""}
+              otrosProductos={quote.otros_productos || ""}
+            />
             <QuoteVehicleDiscountEditor quoteId={id} discountAmount={Number(quote["descuento_veh\u00edculo"] || 0)} discountPercentage={Number(quote["descuento_veh\u00edculo_porcentaje"] || 0)} />
           </section>
           <QuotePreviewItems
@@ -161,7 +171,7 @@ export default async function Page({ params }) {
           <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5">
             <h2 className="mb-6 font-bold text-emerald-900">Resumen General</h2>
             <div className="grid gap-4 md:grid-cols-3">
-              <SummaryBox label="Precio Vehiculo" sub={`S/IGV: ${money(Number(quote.precio_base || 0) / 1.18)}`} value={money(quote.precio_base)} />
+              <SummaryBox label="Precio Vehiculo" sub={`S/IGV: ${money(quoteBasePrice / 1.18)}`} value={money(quoteBasePrice)} />
               
               <SummaryBox label="Accesorios (c/IGV)" sub={`c/desc: ${money(accessoriesTotal)}`} value={money(accessoriesGross)} />
               <SummaryBox label="Regalos (c/IGV)" sub={`c/desc: ${money(giftsTotal)}`} value={money(giftsGross)} />

@@ -78,7 +78,7 @@ async function loadQuoteData(id) {
             c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal,
             au.fullname AS asignado, au.email AS asignado_email, au.phone AS asignado_phone,
             cu.fullname AS creado, cu.email AS asesor_email, cu.phone AS asesor_phone,
-            p.id AS precio_id, p.version, p.precio_base, p.en_stock, p.tiempo_entrega_dias,
+            p.id AS precio_id, p.version, p.precio_base AS catalogo_precio_base, p.en_stock, p.tiempo_entrega_dias,
             ma.name AS marca, mo.name AS modelo
      FROM ventas_cotizaciones q
      INNER JOIN ventas_oportunidades o ON o.id=q.oportunidad_id
@@ -193,7 +193,7 @@ async function buildFordQuotePdf(data, { full, origin, format = "ford", tc = "3.
   const mediaHrefs = data.specGroups.flatMap((group) => group.items.map((item) => getQuoteItemHref(item, origin))).filter(Boolean);
   const templateImageSources = [...getTemplateImageSources(data.template), ...getTemplateImageSources(data.fichaTemplate)];
   doc._qrImages = await buildQrImages([publicUrl, catalogUrl, ...mediaHrefs]);
-  doc._pdfImages = await buildPdfImages([...rawMediaHrefs.filter(isImageHref), ...mediaHrefs.filter(isImageHref), ...templateImageSources]);
+  doc._pdfImages = await buildPdfImages([...rawMediaHrefs.filter(isImageHref), ...mediaHrefs.filter(isImageHref), ...templateImageSources, ...getStaticQuoteImageSources()]);
   doc._publicQuoteUrl = publicUrl;
   doc._catalogUrl = catalogUrl;
   doc._fullQuote = full;
@@ -255,15 +255,16 @@ function drawQuotePage(doc, data) {
 
   const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || 0);
   const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || 0);
-  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
-  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+  const basePrice = quoteBasePrice(quote);
+  const vehicleDiscount = discountAmount + basePrice * discountPercent / 100;
+  const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
   const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const total = vehicleTotal + accessoriesTotal + giftsTotal;
 
   let y = 370;
   y = priceRow(doc, y, "DESCRIPCION", `${quote.modelo} ${quote.version}`, "");
-  y = priceRow(doc, y, "PRECIO DE LISTA", "", money(quote.precio_base));
+  y = priceRow(doc, y, "PRECIO DE LISTA", "", money(basePrice));
   y = priceRow(doc, y, "DSCTO.", "", money(vehicleDiscount));
   y = priceRow(doc, y, "ACCESORIOS", "", money(accessoriesTotal));
   y = priceRow(doc, y, "REGALOS", "", money(giftsTotal));
@@ -281,6 +282,12 @@ function drawQuotePage(doc, data) {
 }
 
 function drawQuotePageV2(doc, data) {
+  drawCommercialQuotePageOne(doc, data);
+  doc.addPage();
+  drawCommercialQuotePageTwo(doc, data);
+}
+
+function drawQuotePageV2Legacy(doc, data) {
   const brand = String(data.quote?.marca || "").trim().toLowerCase();
   if (brand && brand !== "ford") {
     drawGenericQuotePage(doc, data);
@@ -291,6 +298,7 @@ function drawQuotePageV2(doc, data) {
   const x = 18;
   const w = PAGE_W - 36;
   const advisorName = quote.creado || quote.asignado || "-";
+  const clientName = quote.cliente || "-";
   const advisorContact = getAdvisorContact(quote);
   const advisorPhone = advisorContact.phone || "-";
 
@@ -342,8 +350,9 @@ function drawQuotePageV2(doc, data) {
 
   const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || quote["descuento_vehÃƒÂ­culo"] || 0);
   const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || quote["descuento_vehÃƒÂ­culo_porcentaje"] || 0);
-  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
-  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+  const basePrice = quoteBasePrice(quote);
+  const vehicleDiscount = discountAmount + basePrice * discountPercent / 100;
+  const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
   const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const tramites = Number(quote.tramites || quote.tramite || 100);
@@ -351,7 +360,7 @@ function drawQuotePageV2(doc, data) {
 
   let y = 348;
   y = priceRow(doc, y, `DESCRIPCION ${quote.modelo || ""} ${quote.version || ""}`, "MONTO US$", "", true, true);
-  y = priceRow(doc, y, "PRECIO DE LISTA (1)", "", money(quote.precio_base));
+  y = priceRow(doc, y, "PRECIO DE LISTA (1)", "", money(basePrice));
   for (const item of accessories) y = priceRow(doc, y, String(item.detalle || item.numero_parte || "ACCESORIO").toUpperCase(), "", money(item.total));
   for (const item of gifts) y = priceRow(doc, y, String(item.detalle || item.lote || "REGALO").toUpperCase(), "", money(item.total));
   y = priceRow(doc, y, "TOTAL EN DOLARES", "PRECIO FLOTA", money(vehicleTotal + accessoriesTotal + giftsTotal), true);
@@ -381,6 +390,101 @@ function drawQuotePageV2(doc, data) {
   doc.restore();
 }
 
+function drawCommercialQuotePageOne(doc, data) {
+  const { quote, accessories, gifts } = data;
+  const x = 24;
+  const w = PAGE_W - 48;
+  const advisorName = quote.creado || quote.asignado || "-";
+  const clientName = quote.cliente || "-";
+  const totals = getQuoteTotals(quote, accessories, gifts);
+  const technicalItems = getMainTechnicalItems(data.specGroups);
+  const sections = getCommercialSpecSections(data.specGroups);
+  const hero = findFirstMedia(data.specGroups);
+  const origin = doc._catalogUrl ? new URL(doc._catalogUrl).origin : "";
+
+  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
+  doc.fillColor("#000000");
+
+  drawImageOrLink(doc, getBrandLogoPath(quote.marca), x + 28, 50, 118, 64, "center", 118);
+  doc.font("Helvetica-Bold").fontSize(7).text("Wankamotors SAC", 205, 58, { width: 140 });
+  doc.fontSize(6.2).text("Señor (es)", 205, 68, { width: 140 });
+  doc.fontSize(8).text(clientName.toUpperCase(), 205, 78, { width: 185 });
+  doc.fontSize(6.2).text("Presente.-", 205, 90, { width: 140 });
+  doc.fontSize(5.8).text("Estimado(s) señor(es): Por medio de la presente nos es grato saludarlo y hacerle llegar nuestra mejor", 205, 101, { width: 330 });
+  doc.text("oferta del siguiente vehículo:", 205, 110, { width: 220 });
+  doc.fontSize(7).text("N° Cotización", 392, 58, { width: 86 });
+  doc.text(String(quote.id).padStart(7, "0"), 504, 58, { width: 52, align: "right" });
+  doc.text("Fecha", 392, 72, { width: 86 });
+  doc.text(dateText(quote.created_at), 504, 72, { width: 52, align: "right" });
+
+  doc.fontSize(8.6).text(String(quote.modelo || "-").toUpperCase(), x + 2, 132, { width: 120 });
+  doc.text(`${quote.marca || ""} ${quote.version || ""}`.trim().toUpperCase() || "-", x + 94, 132, { width: 210 });
+  doc.text(String(quote.anio || ""), x + 250, 132, { width: 70, align: "center" });
+  quoteBand(doc, x, 146, w, "Condiciones");
+
+  if (hero?.href) drawImageOrLink(doc, getQuoteItemHref(hero, origin), x + 40, 188, 205, 105, "center", 205);
+  doc.fontSize(4.8).text("Imagen referencial*", x + 2, 296, { width: 120 });
+
+  drawCommercialPriceBox(doc, x + 288, 158, 230, totals);
+  doc.rect(x + 288, 218, 268, 82).fill("#f2f2f2");
+  doc.fontSize(6.1).fillColor("#000000").text(
+    `Los precios están expresados en dólares americanos e incluye el IGV y puede estar sujeto a variación por modificaciones en la estructura arancelaria y/o tributaria. Precio sujeto a variación sin previo aviso. El tipo de cambio referencial por hoy es S/. ${normalizeExchangeRate(quote.tc_referencial)} por USD. Promoción válida de acuerdo a stock. El precio del servicio de inmatriculación incluye servicios del tramitador y trámites de inscripción vehicular.`,
+    x + 296,
+    228,
+    { width: 252, align: "center", lineGap: 1 }
+  );
+
+  quoteBand(doc, x, 304, w, "Especificaciones Técnicas");
+  drawTechnicalMiniGrid(doc, technicalItems, x, 319, w);
+
+  let y = 396;
+  sections.forEach((section) => {
+    quoteBand(doc, x, y, w, section.name);
+    y += 16;
+    if (section.items.length) {
+      drawEquipmentColumns(doc, section.items, x, y, w);
+      y += 72;
+    } else {
+      y += 72;
+    }
+  });
+}
+
+function drawCommercialQuotePageTwo(doc, data) {
+  const { quote } = data;
+  const x = 24;
+  const w = PAGE_W - 48;
+  const advisorName = quote.creado || quote.asignado || "Asesor";
+  const advisorContact = getAdvisorContact(quote);
+
+  doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
+  doc.fillColor("#000000");
+  doc.font("Helvetica-Bold").fontSize(7).text("N° Cotización", 392, 47, { width: 88 });
+  doc.text(String(quote.id).padStart(7, "0"), 505, 47, { width: 54, align: "right" });
+
+  quoteBand(doc, x, 72, w, "Cuentas de Wankamotors SAC con RUC 20536196901 en dólares");
+  drawCommercialBankAccounts(doc, x, 86, w);
+
+  quoteBand(doc, x, 190, w, "Proceso de entrega");
+  drawDeliveryProcess(doc, x, 206, w);
+
+  let y = 284;
+  y = drawSmallInfoSection(doc, x, y, w, "Mantenimiento", "Es según el plan de mantenimiento de la cartilla del fabricante descrito en el manual de garantía.");
+  y = drawSmallInfoSection(doc, x, y, w, "Garantía", getQuoteWarrantyText(quote));
+  y = drawSmallInfoSection(doc, x, y, w, "Observaciones", quote.observaciones || "Precio incluye tarjeta y placa más láminas de seguridad y kit de protección");
+  y = drawSmallInfoSection(doc, x, y, w, "Validez de la cotización", getQuoteValidityText(quote));
+  y = drawSmallInfoSection(doc, x, y, w, "Otros productos y servicios", quote.otros_productos || "Seguro vehicular");
+  y = drawSmallInfoSection(doc, x, y, w, "Servicio Postventa", "Contamos con un variado stock de repuestos y una eficiente infraestructura de servicio nuestro moderno Centro de Servicio.");
+
+  doc.fontSize(13).text("¡¡¡ SOLICITE SU PRUEBA DE MANEJO !!!", x, 566, { width: w, align: "center" });
+  doc.fontSize(7).text("Sin otro en particular, quedamos de Usted.", x + 48, 612, { width: 230 });
+  doc.text("Atentamente", x + 48, 624, { width: 230 });
+  drawImageOrLink(doc, "/whatsapp.png", x + 250, 682, 58, 24, "center", 58);
+  doc.fontSize(8.5).text(advisorName, x + 320, 668, { width: 160 });
+  doc.text(`Celular: ${advisorContact.phone || ""}`, x + 320, 680, { width: 160 });
+  doc.text(`Correo: ${advisorContact.email || ""}`, x + 320, 692, { width: 190 });
+}
+
 function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   const { quote, template } = data;
   const x = 18;
@@ -390,8 +494,9 @@ function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   const modelTitle = `${quote.modelo || ""} ${quote.version || ""}`.trim().toUpperCase();
   const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || quote["descuento_vehÃƒÂ­culo"] || 0);
   const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || quote["descuento_vehÃƒÂ­culo_porcentaje"] || 0);
-  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
-  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+  const basePrice = quoteBasePrice(quote);
+  const vehicleDiscount = discountAmount + basePrice * discountPercent / 100;
+  const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
 
   doc.rect(0, 0, PAGE_W, PAGE_H).fill("#ffffff");
   doc.save();
@@ -427,7 +532,7 @@ function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
   doc.rect(x, 495, w / 2, 15).strokeColor("#000000").stroke();
   doc.rect(x + w / 2, 495, w / 2, 15).strokeColor("#000000").stroke();
   doc.fontSize(7.5).text("PRECIO REGULAR", x, 499, { width: w / 2, align: "center" });
-  doc.text(`$${money(quote.precio_base)}`, x + w / 2, 499, { width: w / 2, align: "center" });
+  doc.text(`$${money(basePrice)}`, x + w / 2, 499, { width: w / 2, align: "center" });
   doc.rect(x, 510, w / 2, 20).strokeColor("#000000").stroke();
   doc.rect(x + w / 2, 510, w / 2, 20).strokeColor("#000000").stroke();
   doc.fontSize(13).text("PRECIO ESPECIAL", x, 515, { width: w / 2, align: "center" });
@@ -490,8 +595,9 @@ function drawGenericQuotePage(doc, data) {
 
   const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || 0);
   const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || 0);
-  const vehicleDiscount = discountAmount + Number(quote.precio_base || 0) * discountPercent / 100;
-  const vehicleTotal = Math.max(Number(quote.precio_base || 0) - vehicleDiscount, 0);
+  const basePrice = quoteBasePrice(quote);
+  const vehicleDiscount = discountAmount + basePrice * discountPercent / 100;
+  const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
 
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff").text("MODELO Y PRECIO", x, 560);
   doc.moveTo(x, 574).lineTo(x + w, 574).strokeColor("#ffffff").lineWidth(0.6).stroke();
@@ -503,7 +609,7 @@ function drawGenericQuotePage(doc, data) {
   doc.rect(x, 601, w / 2, 16).strokeColor("#ffffff").stroke();
   doc.rect(x + w / 2, 601, w / 2, 16).strokeColor("#ffffff").stroke();
   doc.font("Helvetica-Bold").fontSize(8).text("PRECIO REGULAR", x, 606, { width: w / 2, align: "center" });
-  doc.text(`$${money(quote.precio_base)}`, x + w / 2, 606, { width: w / 2, align: "center" });
+  doc.text(`$${money(basePrice)}`, x + w / 2, 606, { width: w / 2, align: "center" });
   doc.rect(x, 617, w / 2, 20).strokeColor("#ffffff").stroke();
   doc.rect(x + w / 2, 617, w / 2, 20).strokeColor("#ffffff").stroke();
   doc.font("Helvetica-Bold").fontSize(13).text("PRECIO ESPECIAL", x, 623, { width: w / 2, align: "center" });
@@ -638,6 +744,224 @@ function drawQuoteImages(doc, items, x, y, w, h) {
     doc.rect(x + index * (slotW + gap), y, slotW, h).fill("#ffffff");
     drawImageOrLink(doc, item.href, x + index * (slotW + gap) + 4, y + 4, slotW - 8, h - 8, "center", slotW - 8);
   });
+}
+
+function getQuoteTotals(quote, accessories = [], gifts = []) {
+  const discountAmount = Number(quote["descuento_vehículo"] || quote["descuento_vehÃ­culo"] || quote["descuento_vehÃƒÂ­culo"] || quote["descuento_vehÃƒÆ’Ã‚Â­culo"] || 0);
+  const discountPercent = Number(quote["descuento_vehículo_porcentaje"] || quote["descuento_vehÃ­culo_porcentaje"] || quote["descuento_vehÃƒÂ­culo_porcentaje"] || quote["descuento_vehÃƒÆ’Ã‚Â­culo_porcentaje"] || 0);
+  const price = quoteBasePrice(quote);
+  const discount = discountAmount + price * discountPercent / 100;
+  const finalPrice = Math.max(price - discount, 0);
+  const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const tramites = Number(quote.tramites || quote.tramite || 100);
+  return {
+    price,
+    discount,
+    finalPrice,
+    tramites,
+    total: finalPrice + accessoriesTotal + giftsTotal + tramites,
+  };
+}
+
+function quoteBasePrice(quote = {}) {
+  return Number(quote.precio_base ?? quote.catalogo_precio_base ?? 0);
+}
+
+function quoteBand(doc, x, y, w, label) {
+  doc.rect(x, y, w, 11).fill("#f0f0f0");
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.5).text(label, x + 2, y + 2.5, { width: w - 4 });
+}
+
+function drawCommercialPriceBox(doc, x, y, w, totals) {
+  const rows = [
+    ["PRECIO DE LISTA", totals.price],
+    ["DESCUENTO TOTAL", -Math.abs(totals.discount)],
+    ["PRECIO FINAL", totals.finalPrice],
+    ["TRÁMITES", totals.tramites],
+    ["TOTAL EN DOLARES", totals.total],
+  ];
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.4);
+  rows.forEach(([label, value], index) => {
+    const yy = y + index * 12;
+    doc.text(label, x, yy, { width: 115 });
+    doc.text(`$ ${money(value)}`, x + 122, yy, { width: 78, align: "right" });
+    if (index >= 2) doc.moveTo(x, yy - 2).lineTo(x + w, yy - 2).strokeColor("#000000").lineWidth(1).stroke();
+  });
+}
+
+function drawTechnicalMiniGrid(doc, items, x, y, w) {
+  const rows = 8;
+  const pairW = w / 2;
+  const labelW = 132;
+  const rowH = 9;
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.7);
+  items.slice(0, rows * 2).forEach((item, index) => {
+    const pair = Math.floor(index / rows);
+    const row = index % rows;
+    const xx = x + pair * pairW;
+    const yy = y + row * rowH;
+    doc.text(String(item.key || "").toUpperCase(), xx + 2, yy, { width: labelW, height: rowH, ellipsis: true });
+    doc.text(formatSpecDisplayValue(item), xx + labelW + 4, yy, { width: pairW - labelW - 8, height: rowH, ellipsis: true });
+  });
+}
+
+function drawEquipmentColumns(doc, items, x, y, w) {
+  const rows = 13;
+  const pairs = 3;
+  const pairW = w / pairs;
+  const labelW = pairW - 23;
+  const valueW = 18;
+  const rowH = 5.2;
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(4.2);
+  let cursor = 0;
+  items.slice(0, rows * pairs).forEach((item) => {
+    if (cursor >= rows * pairs) return;
+    const pair = Math.floor(cursor / rows);
+    const row = cursor % rows;
+    const value = formatSpecDisplayValue(item) || "√";
+    const label = String(item.key || "").toUpperCase();
+    const isLong = label.length > 28;
+    const xx = x + pair * pairW;
+    const yy = y + row * rowH;
+    doc.text(label, xx + 2, yy, { width: labelW, height: isLong ? rowH * 2 : rowH, ellipsis: true });
+    doc.text(value, xx + labelW + 4, yy, { width: valueW, height: rowH, align: "center", ellipsis: true });
+    cursor += isLong && row < rows - 1 ? 2 : 1;
+  });
+}
+
+function drawCommercialBankAccounts(doc, x, y, w) {
+  const rows = [
+    ["Interbank", "Dólares", "512-3001402018", "003-512-003001402018-11"],
+    ["Interbank", "Soles", "512-3001402000", "003-512-003001402000-19"],
+    ["BBVA", "Dólares", "0011-0967-0100003994", "011-967-000100003994-79"],
+    ["BBVA", "Soles", "0011-0967-0100003986", "011-967-000100003986-75"],
+    ["BCP", "Dólares", "355-2475827-1-19", "002-355-002475827119-61"],
+    ["BCP", "Soles", "355-2506034-0-32", "002-355-002506034032-67"],
+    ["SCOTIABANK (Ahorros)", "Dólares", "943-0151732", "009-943-219430151732-21"],
+    ["SCOTIABANK", "Soles", "000-0155685", "004-023-000000155685-51"],
+  ];
+  const widths = [120, 95, 150, w - 365];
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.2);
+  ["Entidad", "Moneda", "Cuenta Corriente", "CCI"].forEach((label, index) => {
+    const xx = x + widths.slice(0, index).reduce((a, b) => a + b, 0);
+    doc.text(label, xx, y, { width: widths[index], align: "center" });
+  });
+  doc.fontSize(6);
+  rows.forEach((row, r) => {
+    row.forEach((value, c) => {
+      const xx = x + widths.slice(0, c).reduce((a, b) => a + b, 0);
+      doc.text(value, xx, y + 12 + r * 10, { width: widths[c], align: "center" });
+    });
+  });
+}
+
+function drawDeliveryProcess(doc, x, y, w) {
+  const steps = [
+    "El plazo inicia con la fecha tentativa firma de cláusulas adicionales",
+    "Legalización de firmas",
+    "Inscripción en SUNARP y trámite de Tarjeta de Identificación vehicular",
+    "Inscripción en AAP y trámite de Placas de rodaje",
+    "Inspección final del vehículo",
+    "El gran día de la entrega",
+  ];
+  const colW = w / steps.length;
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.8);
+  steps.forEach((step, index) => doc.text(step, x + index * colW + 2, y, { width: colW - 4, align: "center" }));
+  doc.rect(x, y + 35, w, 18).fill("#f2f2f2");
+  doc.fillColor("#000000").text(
+    "Sujeto a disponibilidad de stock. Si existiera alguna observación de Registros Públicos durante el trámite de registro vehicular que ocasione demora en la entrega de la placa y tarjeta, este retraso no será imputable a Wankamotors.",
+    x + 8,
+    y + 39,
+    { width: w - 16, align: "center" }
+  );
+}
+
+function drawSmallInfoSection(doc, x, y, w, title, body) {
+  quoteBand(doc, x, y, w, title);
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(6.1).text(body, x + 2, y + 15, { width: w - 4 });
+  return y + 38;
+}
+
+function getQuoteWarrantyText(quote = {}) {
+  const brand = normalizeSpecName(quote.marca);
+  const model = normalizeSpecName(quote.modelo);
+  if (brand.includes("FORD") && model.includes("RANGER")) {
+    return "Garantía Ford de 5 años o 150,000 km /ranger";
+  }
+  if (brand.includes("FORD")) {
+    return "3 años o 100,000 kilómetros, lo que ocurra primero";
+  }
+  return "5 años o 100,000 kilómetros, lo que ocurra primero";
+}
+
+function getQuoteValidityText(quote = {}) {
+  const days = String(quote.sku || "").trim();
+  return days ? `${days} días calendario a partir de la fecha` : "5 días calendario a partir de la fecha";
+}
+
+function getMainTechnicalItems(groups) {
+  const all = getTextSpecItems(groups);
+  const preferred = ["TORQUE", "TRACCION", "TRANSMISION", "CILINDRADA", "COMBUSTIBLE", "DIRECCION", "FRENOS", "POTENCIA"];
+  const picked = preferred
+    .map((name) => all.find((item) => normalizeSpecName(item.key).includes(name)))
+    .filter(Boolean);
+  return [...picked, ...all.filter((item) => !picked.includes(item))].slice(0, 16);
+}
+
+function getCommercialSpecSections(groups) {
+  const textGroups = groups
+    .map((group) => ({
+      name: String(group.name || "").trim(),
+      items: (group.items || []).filter((item) => item.valorTipo !== "IMAGEN" && item.valorTipo !== "VIDEO" && !isImageHref(getQuoteItemHref(item)) && !isVideoHref(getQuoteItemHref(item))),
+    }))
+    .filter((group) => group.items.length);
+  const names = ["Dimensiones", "Interior", "Exterior", "Seguridad"];
+  const used = new Set();
+  return names.map((name) => {
+    const match = textGroups.find((group) => !used.has(group) && normalizeSpecName(group.name).includes(normalizeSpecName(name)));
+    if (match) {
+      used.add(match);
+      return { name, items: match.items };
+    }
+    const next = textGroups.find((group) => !used.has(group));
+    if (next) {
+      used.add(next);
+      return { name, items: next.items };
+    }
+    return { name, items: [] };
+  });
+}
+
+function getTextSpecItems(groups) {
+  return groups.flatMap((group) =>
+    (group.items || []).filter((item) => item.valorTipo !== "IMAGEN" && item.valorTipo !== "VIDEO" && !isImageHref(getQuoteItemHref(item)) && !isVideoHref(getQuoteItemHref(item)))
+  );
+}
+
+function normalizeSpecName(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
+function formatSpecDisplayValue(item) {
+  const text = String(technicalSpecValue(item) || "").trim();
+  if (!text) return "";
+  if (/^(si|sí|true|1)$/i.test(text)) return "√";
+  return text;
+}
+
+function getStaticQuoteImageSources() {
+  return [
+    "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png",
+    "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg",
+    "/whatsapp.png",
+  ];
+}
+
+function getBrandLogoPath(brand) {
+  const name = normalizeSpecName(brand);
+  if (name.includes("FORD")) return "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg";
+  return "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png";
 }
 
 function findQuoteMedia(groups) {

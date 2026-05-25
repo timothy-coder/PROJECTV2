@@ -16,6 +16,7 @@ export function SearchableSelect({
   emptyText = "Sin resultados",
   disabled,
   onChange,
+  className,
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
@@ -100,7 +101,7 @@ export function SearchableSelect({
           }
           setOpen((current) => !current);
         }}
-        className="h-9 w-full justify-between bg-white px-3 text-left text-sm font-medium text-slate-950"
+        className={cn("h-9 w-full justify-between bg-white px-3 text-left text-sm font-medium text-slate-950", className)}
       >
         <span className={cn("truncate", !selected && "text-slate-500")}>
           {selected?.label || placeholder}

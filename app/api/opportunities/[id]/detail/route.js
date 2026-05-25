@@ -63,7 +63,7 @@ export async function GET(request, { params }) {
     const [prices] = await connection.query(`SELECT p.id,p.marca_id,p.modelo_id,p.version,p.precio_base,ma.name AS marca,mo.name AS modelo FROM ventas_precios p INNER JOIN administracion_marcas ma ON ma.id=p.marca_id INNER JOIN administracion_modelos mo ON mo.id=p.modelo_id ORDER BY ma.name,mo.name,p.version`);
     const [interest] = await connection.query(`SELECT v.*, ma.name AS marca, mo.name AS modelo FROM ventas_oportunidad_client_interest_vehicles v LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id LEFT JOIN administracion_modelos mo ON mo.id=v.modelo_id WHERE v.client_id=? AND v.active=1 ORDER BY v.created_at DESC`, [opportunity.cliente_id]);
     const [quotes] = await connection.query(
-      `SELECT q.*, p.version, p.precio_base, p.marca_id, p.modelo_id, ma.name AS marca, mo.name AS modelo,
+      `SELECT q.*, p.version, p.precio_base AS catalogo_precio_base, p.marca_id, p.modelo_id, ma.name AS marca, mo.name AS modelo,
               ep.id AS enlace_id, ep.token, ep.vistas_totales,
               (SELECT COUNT(*) FROM ventas_cotizacion_vistas_historial vh WHERE vh.enlace_id = ep.id) AS vistas_historial
        FROM ventas_cotizaciones q
@@ -161,13 +161,16 @@ export async function POST(request, { params }) {
       else await connection.query(`INSERT INTO ventas_oportunidad_client_interest_vehicles (client_id, marca_id, modelo_id, anio_interes, source, active, created_at, updated_at) VALUES (?, ?, ?, ?, 'oportunidad', 1, NOW(), NOW())`, [Number(body.clientId), body.marcaId || null, body.modeloId || null, body.anioInteres || null]);
     }
     if (body.action === "quote") {
+      const [[catalogPrice]] = await connection.query(`SELECT precio_base FROM ventas_precios WHERE id=? LIMIT 1`, [Number(body.precioId)]);
+      const quotePrice = body.precioBase !== undefined && body.precioBase !== "" ? Number(body.precioBase) : Number(catalogPrice?.precio_base || 0);
+      const quoteTc = body.tcReferencial !== undefined && body.tcReferencial !== "" ? Number(body.tcReferencial) : null;
       if (body.id) {
         await connection.query(
-          `UPDATE ventas_cotizaciones SET precio_id=?, anio=?, sku=?, color_externo=?, color_interno=?, descuento_vehículo=?, descuento_vehículo_porcentaje=? WHERE id=? AND oportunidad_id=?`,
-          [Number(body.precioId), body.anio || null, body.sku || null, body.colorExterno || null, body.colorInterno || null, body.descuentoVehiculo || 0, body.descuentoVehiculoPorcentaje || 0, Number(body.id), id]
+          `UPDATE ventas_cotizaciones SET precio_id=?, precio_base=?, anio=?, sku=?, color_externo=?, color_interno=?, tc_referencial=?, descuento_vehículo=?, descuento_vehículo_porcentaje=? WHERE id=? AND oportunidad_id=?`,
+          [Number(body.precioId), quotePrice, body.anio || null, body.sku || null, body.colorExterno || null, body.colorInterno || null, quoteTc, body.descuentoVehiculo || 0, body.descuentoVehiculoPorcentaje || 0, Number(body.id), id]
         );
       } else {
-        await connection.query(`INSERT INTO ventas_cotizaciones (oportunidad_id, precio_id, anio, sku, color_externo, color_interno, descuento_vehículo, descuento_vehículo_porcentaje, estado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'borrador', ?)`, [id, Number(body.precioId), body.anio || null, body.sku || null, body.colorExterno || null, body.colorInterno || null, body.descuentoVehiculo || 0, body.descuentoVehiculoPorcentaje || 0, user.id]);
+        await connection.query(`INSERT INTO ventas_cotizaciones (oportunidad_id, precio_id, precio_base, anio, sku, color_externo, color_interno, tc_referencial, descuento_vehículo, descuento_vehículo_porcentaje, estado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'borrador', ?)`, [id, Number(body.precioId), quotePrice, body.anio || null, body.sku || null, body.colorExterno || null, body.colorInterno || null, quoteTc, body.descuentoVehiculo || 0, body.descuentoVehiculoPorcentaje || 0, user.id]);
       }
       const cotId = await stageId(connection, "Cotización");
       if (cotId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [cotId, id]);
@@ -183,9 +186,9 @@ export async function POST(request, { params }) {
       const [[quote]] = await connection.query(`SELECT * FROM ventas_cotizaciones WHERE id=?`, [Number(body.cotizacionId)]);
       if (quote) {
         const [duplicated] = await connection.query(
-          `INSERT INTO ventas_cotizaciones (oportunidad_id, precio_id, anio, sku, color_externo, color_interno, descuento_vehículo, descuento_vehículo_porcentaje, estado, descuento_total_accesorios, descuento_total_regalos, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'borrador', ?, ?, ?)`,
-          [quote.oportunidad_id, quote.precio_id, quote.anio, quote.sku, quote.color_externo, quote.color_interno, quote.descuento_vehículo, quote.descuento_vehículo_porcentaje, quote.descuento_total_accesorios, quote.descuento_total_regalos, user.id]
+          `INSERT INTO ventas_cotizaciones (oportunidad_id, precio_id, precio_base, anio, sku, color_externo, color_interno, tc_referencial, descuento_vehículo, descuento_vehículo_porcentaje, estado, descuento_total_accesorios, descuento_total_regalos, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'borrador', ?, ?, ?)`,
+          [quote.oportunidad_id, quote.precio_id, quote.precio_base, quote.anio, quote.sku, quote.color_externo, quote.color_interno, quote.tc_referencial, quote.descuento_vehículo, quote.descuento_vehículo_porcentaje, quote.descuento_total_accesorios, quote.descuento_total_regalos, user.id]
         );
         await connection.query(
           `INSERT INTO ventas_cotizaciones_accesorios (cotizacion_id, accesorio_id, cantidad, precio_unitario, moneda_id, subtotal, descuento_porcentaje, descuento_monto, total, notas)
@@ -239,7 +242,7 @@ export async function POST(request, { params }) {
     }
     if (body.action === "quote-reserve") {
       const [[quote]] = await connection.query(
-        `SELECT q.*, p.precio_base FROM ventas_cotizaciones q INNER JOIN ventas_precios p ON p.id=q.precio_id WHERE q.id=?`,
+        `SELECT q.*, p.precio_base AS catalogo_precio_base FROM ventas_cotizaciones q INNER JOIN ventas_precios p ON p.id=q.precio_id WHERE q.id=?`,
         [Number(body.cotizacionId)]
       );
       if (!quote) {
@@ -261,7 +264,7 @@ export async function POST(request, { params }) {
       await connection.query(
         `INSERT INTO ventas_reserva_detalles (reserva_id, cotizacion_id, oportunidad_id, precio_unitario, total, cantidad, descripcion)
          VALUES (?, ?, ?, ?, ?, 1, ?)`,
-        [res.insertId, quote.id, id, quote.precio_base, quote.precio_base, quote.sku || ""]
+        [res.insertId, quote.id, id, quote.precio_base ?? quote.catalogo_precio_base, quote.precio_base ?? quote.catalogo_precio_base, quote.sku || ""]
       );
       const reservaId = await stageId(connection, "Reserva");
       if (reservaId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [reservaId, id]);

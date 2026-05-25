@@ -359,6 +359,7 @@ export async function GET(_request, { params }) {
         formaPago: detail.forma_pago || "",
         banco: detail.banco || "",
         tipoCredito: detail.tipo_credito || "",
+        telefono2: detail.telefono2 || detail.telefono_2 || detail.telefono || detail.telefono_reserva || "",
         cantidad: Number(detail.cantidad || 1),
         precioUnitario: Number(detail.precio_unitario || 0),
         descripcion: detail.descripcion || "",
@@ -610,6 +611,15 @@ export async function PUT(request, { params }) {
       await connection.commit();
       return NextResponse.json({ ok: true });
     }
+    if (Object.prototype.hasOwnProperty.call(body, "reservationObservaciones")) {
+      if (reservationState.estado === "firmado") {
+        await connection.rollback();
+        return NextResponse.json({ message: "La reserva firmada no se puede modificar." }, { status: 409 });
+      }
+      await connection.query(`UPDATE ventas_reservas SET observaciones=? WHERE id=?`, [body.reservationObservaciones || null, id]);
+      await connection.commit();
+      return NextResponse.json({ ok: true });
+    }
     if (reservationState.estado === "firmado" && (body.detail || body.status || body.quoteItem)) {
       await connection.rollback();
       return NextResponse.json({ message: "La reserva firmada no se puede modificar." }, { status: 409 });
@@ -731,6 +741,26 @@ export async function PUT(request, { params }) {
           d.formaPago || null, d.banco || null, d.tipoCredito || null, id,
         ]
       );
+      if (d.clienteId) {
+        await connection.query(
+          `UPDATE administracion_clientes
+           SET email=?, celular=?, identificacion_fiscal=?, fecha_nacimiento=?, ocupacion=?, domicilio=?,
+               nombre_comercial=?, nombreconyugue=?, dniconyugue=?
+           WHERE id=?`,
+          [
+            d.clienteEmail || null,
+            d.clienteTelefono1 || null,
+            d.clienteDocumento || null,
+            d.clienteFechaNacimiento || null,
+            d.clienteOcupacion || null,
+            d.clienteDomicilio || null,
+            d.clienteRazonSocial || null,
+            d.clienteConyugue || null,
+            d.clienteDniConyugue || null,
+            d.clienteId,
+          ]
+        );
+      }
       await connection.query(`DELETE FROM ventas_reservas_copropietarios WHERE reserva_id=?`, [id]);
       if (coowners.length) {
         await connection.query(
@@ -790,8 +820,8 @@ export async function PUT(request, { params }) {
       }
       if (d.cotizacionId) {
         await connection.query(
-          `UPDATE ventas_cotizaciones SET color_externo=?, color_interno=? WHERE id=?`,
-          [d.colorExterno || null, d.colorInterno || null, d.cotizacionId]
+          `UPDATE ventas_cotizaciones SET color_externo=?, color_interno=?, anio=? WHERE id=?`,
+          [d.colorExterno || null, d.colorInterno || null, d.anioModelo || d.anio || null, d.cotizacionId]
         );
       }
     }

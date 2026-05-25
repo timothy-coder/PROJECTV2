@@ -103,7 +103,7 @@ export default async function PublicQuotePage({ params }) {
               <Info label="Año" value={quote.anio || "-"} />
               <Info label="Color Ext." value={quote.color_externo || "-"} />
               <Info label="Color Int." value={quote.color_interno || "-"} />
-              <Info label="SKU" value={quote.sku || "N/A"} />
+              <Info label="Dias de validez de la cotizacion" value={quote.sku || "N/A"} />
             </div>
           </section>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Download, Eye, FileText, Plus, Trash2, UserPlus } from "lucide-react";
@@ -35,14 +36,47 @@ function toDateTimeLocal(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function shortDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
 const isYes = (value) => String(value || "").toUpperCase() === "SI";
+const isPresentValue = (value) => value !== undefined && value !== null && String(value).trim() !== "";
+const firstPresentValue = (...values) => values.find((value) => isPresentValue(value)) || "";
+const RESERVATION_BRAND_LOGO_DEFAULT = "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png";
+const RESERVATION_BRAND_LOGO_FORD = "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg";
+const RESERVATION_OBSERVATION_TEXT =
+  "Se deja constancia que si desiste de la compra y desea la devolucion, estara afecta a un % de retencion por concepto de gastos administrativos y que el motivo en materia de devolucion esta afecta a 20 dias habiles, cualquier cambio adicional que no conste en la presente no sera responsabilidad de la empresa. La entrega esta sujeta a stock, los plazos de entrega pueden sufrir variacion por posibles demoras en la entrega del vehiculo por parte de la marca, por tal caso no sera imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variacion por factores externos ajenos a Wankamotors y estipulados por la marca. Una vez emitido el mismo no se aceptara su cambio ni canje. Por tal motivo agradecemos verificar la informacion registrada, en senal de conformidad el cliente deja como constancia su firma.";
+
+function normalizeBrandName(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
+function reservationBrandLogoPath(marca) {
+  return normalizeBrandName(marca).includes("FORD") ? RESERVATION_BRAND_LOGO_FORD : RESERVATION_BRAND_LOGO_DEFAULT;
+}
 
 export default function ReservationDetailPage({ id }) {
   const { data, loading, update } = useReservationDetail(id);
   const [carDataOpen, setCarDataOpen] = useState(false);
+  const [headerObservaciones, setHeaderObservaciones] = useState(null);
   if (loading || !data) return <div className="p-4">Cargando reserva...</div>;
   const { reservation, detail, currentUser, vins, accessories, gifts, options, salesBossName, vinReleaseRequest } = data;
   const isSigned = reservation.estado === "firmado";
+  const telefono2 = firstPresentValue(detail?.telefono2, detail?.telefono_2, detail?.telefono, detail?.telefonoReserva, detail?.telefono_reserva, reservation.telefono2, reservation.telefono_2);
+  const displayedHeaderObservaciones = headerObservaciones ?? reservation.observaciones ?? RESERVATION_OBSERVATION_TEXT;
+  const saveHeaderObservaciones = async () => {
+    try {
+      await update({ reservationObservaciones: displayedHeaderObservaciones });
+      toast.success("Observaciones guardadas");
+    } catch (error) {
+      toast.error(error?.message || "No se pudo guardar observaciones");
+    }
+  };
   const downloadReservationPdf = async () => {
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF("p", "pt", "letter");
@@ -70,43 +104,61 @@ export default function ReservationDetailPage({ id }) {
   };
 
   return (
-    <div className="min-h-full bg-slate-50 p-4 text-slate-950">
+    <div className="flex min-h-screen flex-col overflow-y-auto bg-slate-50 p-4 text-slate-950 lg:h-screen lg:overflow-hidden">
       <style jsx global>{`
         @font-face { font-family: Autography; src: url('/fonts/Autography.ttf') format('truetype'); }
       `}</style>
-      <div>
-        <header className="mb-5 border-b pb-4">
+      <div className="flex flex-1 flex-col lg:min-h-0">
+        <header className="shrink-0 border-b pb-3">
           <div className="flex flex-wrap items-center gap-3">
             <Link className="inline-flex size-8 items-center justify-center rounded-md border bg-white hover:bg-slate-50" href="/reservas"><ArrowLeft className="size-4" /></Link>
-            <div><h1 className="text-3xl font-bold">Reserva #{reservation.id} <StatusBadge estado={reservation.estado} /></h1><p className="text-sm text-slate-600">Oportunidad #{reservation.oportunidadCode} - Cliente: <b>{reservation.cliente}</b></p></div>
+            <div>
+              <h1 className="text-xl font-bold">Reserva #{reservation.id} <StatusBadge estado={reservation.estado} /></h1>
+              <p className="text-sm text-slate-600">Oportunidad #{reservation.oportunidadCode} - Cliente: <b>{reservation.cliente}</b> - Vehiculo: <b>{detail.marca} {detail.modelo} {detail.anio}</b></p>
+            </div>
           </div>
         </header>
-        {reservation.observaciones ? <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4"><p className="text-xs font-bold text-yellow-800">Observaciones</p><p>{reservation.observaciones}</p></div> : null}
-        <div className="mb-5 grid gap-3 md:grid-cols-4">
-          <InfoCard title="Cliente" lines={[reservation.cliente, reservation.email, reservation.celular]} />
-          <InfoCard title="Vehiculo" lines={[`${detail.marca} ${detail.modelo}`, `Año: ${detail.anio || "-"}`, `VIN: ${detail.vin || "-"}`]} />
-          <InfoCard title="Ubicacion" lines={[reservation.distrito || "-", reservation.provincia || "-", reservation.departamento || "-"]} />
-          <InfoCard title="Total" lines={[money(detail.total), `TC: ${detail.tcReferencial || "-"}`]} />
-        </div>
-        <div className="mb-5 flex flex-wrap gap-2">
-          {reservation.oportunidadId ? <Link className="inline-flex h-7 items-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-4" />Ver Oportunidad</Link> : null}
-          <Button variant="outline" onClick={downloadReservationPdf}><Download className="size-4" />Descargar PDF</Button>
-          {isSigned && detail?.vin ? (
-            <VinReleaseControls
-              currentUser={currentUser}
-              request={vinReleaseRequest}
-              vin={detail.vin}
-              onAction={resolveVinRelease}
-            />
+        <div className="mt-3 grid shrink-0 gap-2 lg:grid-cols-3">
+          {currentUser.reservationStatusActions?.observe ? (
+            <ActionCard title="Observaciones">
+              <Textarea
+                disabled={isSigned}
+                value={displayedHeaderObservaciones}
+                onChange={(event) => setHeaderObservaciones(event.target.value)}
+                className="min-h-16 resize-none rounded-md border-slate-300 bg-white p-2 text-justify text-xs leading-tight shadow-none"
+              />
+              {!isSigned ? (
+                <div className="mt-1 flex justify-end">
+                  <Button type="button" variant="outline" className="h-7 px-2 text-xs" onClick={saveHeaderObservaciones}>Guardar</Button>
+                </div>
+              ) : null}
+            </ActionCard>
           ) : null}
-          {isSigned && detail?.vin && currentUser.canCarData ? (
-            <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={() => setCarDataOpen(true)}>
-              Datos del carro
-            </Button>
-          ) : null}
-          <ReservationStatusButtons reservation={reservation} currentUser={currentUser} update={update} />
+          <ActionCard title="Acciones" className="lg:col-span-1">
+            <div className="flex flex-col gap-1.5">
+              {reservation.oportunidadId ? <Link className="inline-flex h-7 items-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-3.5" />Ver Oportunidad</Link> : null}
+              <Button variant="outline" className="h-7 px-2 text-xs" onClick={downloadReservationPdf}><Download className="size-3.5" />PDF</Button>
+              {isSigned && detail?.vin ? (
+                <VinReleaseControls
+                  currentUser={currentUser}
+                  request={vinReleaseRequest}
+                  vin={detail.vin}
+                  onAction={resolveVinRelease}
+                />
+              ) : null}
+              {isSigned && detail?.vin && currentUser.canCarData ? (
+                <Button className="h-7 bg-slate-950 px-2 text-xs text-white hover:bg-slate-800" onClick={() => setCarDataOpen(true)}>
+                  Datos del carro
+                </Button>
+              ) : null}
+              <ReservationStatusButtons reservation={reservation} currentUser={currentUser} update={update} />
+            </div>
+          </ActionCard>
         </div>
-        <ReservationForm reservation={reservation} detail={detail} vins={vins} accessories={accessories || []} gifts={gifts || []} options={options || { accessories: [], gifts: [] }} update={update} readOnly={isSigned} />
+        <div className="flex-1 pr-1 lg:min-h-0 lg:overflow-y-auto">
+          <div className="hidden"><ReservationPdfPreview reservation={reservation} detail={detail} accessories={accessories || []} gifts={gifts || []} telefono2={telefono2} /></div>
+          <ReservationForm reservation={reservation} detail={detail} vins={vins} accessories={accessories || []} gifts={gifts || []} options={options || { accessories: [], gifts: [] }} update={update} readOnly={isSigned} />
+        </div>
         {carDataOpen ? (
           <CarDataDialog
             open={carDataOpen}
@@ -115,7 +167,7 @@ export default function ReservationDetailPage({ id }) {
             update={update}
           />
         ) : null}
-        {false ? <Dialog open={false} onOpenChange={() => {}}>
+        {false ? <Dialog open={false} onOpenChange={() => { }}>
           <DialogContent className="max-w-sm bg-white text-slate-950">
             <DialogHeader>
               <DialogTitle>Descargar PDF de reserva</DialogTitle>
@@ -127,6 +179,172 @@ export default function ReservationDetailPage({ id }) {
             </DialogFooter>
           </DialogContent>
         </Dialog> : null}
+      </div>
+    </div>
+  );
+}
+
+function ReservationPdfPreview({ reservation, detail, accessories, gifts, telefono2 }) {
+  const field = (label, value, labelClass = "") => (
+    <>
+      <div className={`bg-slate-100 px-1 font-bold ${labelClass}`}>{label}</div>
+      <div className="px-1">{firstPresentValue(value)}</div>
+    </>
+  );
+  const amount = (value) => (Number(value || 0) ? money(value) : "");
+  const depositos = detail.depositos || [];
+  const discounts = [
+    ["DESCUENTO DEALER", Number(detail.descuentoTienda || 0)],
+    ["BONO FLOTA", Number(detail.bonoRetoma || 0)],
+    ["DESCUENTO RETAIL", Number(detail.descuentoNper || 0)],
+    ...((detail.descuentos || []).map((item) => [item.nombre || "DESCUENTO ADICIONAL", discountAmount(item, Number(detail.precioUnitario || 0) * Number(detail.cantidad || 1))])),
+  ];
+  const precioLista = Number(detail.precioUnitario || detail.precioBase || 0);
+  const usoPlaca = [detail.usoVehiculo, detail.placa].filter(isPresentValue).join(" / ");
+  const conyugue = [reservation.nombreConyugue, ...(detail.copropietarios || []).map((item) => [item.nombre, item.apellido].filter(isPresentValue).join(" "))].filter(isPresentValue).join(" / ");
+  const dniConyugue = [reservation.dniConyugue, ...(detail.copropietarios || []).map((item) => item.numeroDocumento)].filter(isPresentValue).join(" / ");
+
+  return (
+    <section className="mb-5 overflow-x-auto rounded-lg border bg-white p-3 shadow-sm">
+      <div className="mx-auto w-[980px] border border-black bg-white px-7 py-5 font-sans text-[11px] leading-tight text-black">
+        <div className="grid grid-cols-4 items-start gap-y-1">
+          <Image src="/uploads/ventas-plantillas/1778903861360-27945a90-a2e4-4c59-8e71-dbb8da209848.jpg" alt="Wankamotors" width={144} height={44} className="h-11 w-36 object-contain object-left" />
+          <div />
+          <div />
+          <Image src={reservationBrandLogoPath(detail.marca || reservation.marca)} alt="Marca" width={80} height={56} className="ml-auto h-14 w-20 object-contain object-right" />
+          <div className="font-bold">Asesor</div><div className="font-bold">{reservation.creadoPor || ""}</div>
+          <div className="font-bold">Fecha</div><div>{shortDate(reservation.createdAt)}</div>
+          <div className="font-bold">Origen de Venta</div><div>{reservation.origenVenta || ""}</div>
+          <div className="font-bold">Campaña</div><div>{reservation.campania || ""}</div>
+        </div>
+
+        <div className="mt-2 border border-black bg-slate-100 py-1 text-center font-bold">NOTA DE PEDIDO - PERSONA {detail.tipoPersona === "JURIDICA" ? "JURIDICA" : "NATURAL"}</div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL CLIENTE</div>
+          <div className="grid grid-cols-[165px_1fr_115px_150px]">
+            {field("Tipo de comprobante", detail.tipoComprobante)}
+            <div /><div />
+            {field("Razón social", detail.tipoPersona === "JURIDICA" ? reservation.nombreComercial : firstPresentValue(reservation.nombreComercial, reservation.cliente))}
+            <div /><div />
+            {field("Cliente /Repr legal", reservation.cliente)}
+            <div /><div />
+            {field("DNI / RUC", reservation.documento)}
+            {field("F. de nacimiento", shortDate(reservation.fechaNacimiento))}
+            {field("Correo", reservation.email)}
+            {field("Teléfono 1", reservation.celular)}
+            {field("Ocupación", reservation.ocupacion)}
+            {field("Teléfono 2", telefono2)}
+            {field("Domicilio", reservation.domicilio)}
+            <div /><div />
+            {field("Distrito", reservation.distrito)}
+            {field("Provincia", reservation.provincia)}
+            {field("Departamento", reservation.departamento)}
+            <div className="col-span-4 h-1" />
+            {field("Cónyuge/Copropiedad", conyugue)}
+            <div /><div />
+            {field("DNI Cónyuge", dniConyugue)}
+            <div /><div />
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL VEHICULO</div>
+          <div className="grid grid-cols-[120px_1fr_120px_1fr]">
+            {field("Modelo", detail.modelo)}
+            {field("Versión", detail.version)}
+            {field("Chasis / VIN", detail.vin)}
+            {field("Color", firstPresentValue(detail.colorExterno, detail.colorInterno))}
+            {field("Motor", detail.numeroMotor)}
+            {field("Año Modelo", detail.anio)}
+            {field("Uso del vehículo / Placa", usoPlaca, "whitespace-nowrap")}
+            {field("Código", detail.codigo)}
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">TRANSACCION</div>
+          <div className="grid grid-cols-6">
+            <div className="col-span-2 bg-slate-100 px-1 font-bold">Precio de Lista (Valor incluye IGV)</div><div className="col-span-4 text-center font-bold">{amount(precioLista)}</div>
+            {discounts.slice(0, 6).map(([label, value], index) => (
+              <div key={`${label}-${index}`} className="contents">
+                <div className="bg-slate-100 px-1 font-bold">{label}</div><div className="text-center">{amount(value)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-4 pt-1">
+            {field("T.C. Referencial", detail.tcReferencial ? `S/. ${detail.tcReferencial}` : "")}
+            <div /><div />
+            {field("Forma de Pago", detail.formaPago)}
+            {field("Tipo de crédito", detail.tipoCredito)}
+            {field("Banco", detail.banco)}
+            {field("Origen de Fondos", detail.origenFondos)}
+          </div>
+          <div className="bg-slate-100 px-1 font-bold">Depósitos (Monto / Fecha / Banco / N° OP)</div>
+          <div className="grid grid-cols-5">
+            {[0, 1, 2, 3, 4, 5, 6].map((index) => {
+              const dep = depositos[index] || {};
+              return (
+                <div key={index} className="contents">
+                  <div className="bg-slate-100 px-1 font-bold">Monto de depósito</div>
+                  <div className="text-center">{amount(dep.monto)}</div>
+                  <div className="text-center">{shortDate(dep.fechaDeposito)}</div>
+                  <div className="text-center">{dep.entidadFinanciera || ""}</div>
+                  <div className="text-center">{dep.numeroOperacion || ""}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">OTROS</div>
+          <div className="grid grid-cols-8">
+            {field("Considera GLP", detail.glpSn || "NO")}
+            {field("Precio", isYes(detail.glpSn) ? amount(detail.glp) : "")}
+            {field("Flete", detail.fleteSn || "NO")}
+            {field("Precio", isYes(detail.fleteSn) ? amount(detail.flete) : "")}
+            {field("Tarjeta y Placa", detail.tarjetaSn || "NO")}
+            {field("Precio", isYes(detail.tarjetaSn) ? amount(detail.tarjetaPlaca) : "")}
+            <div /><div />
+          </div>
+          <PdfItems title="Accesorios" rows={accessories} />
+          <PdfItems title="Obsequios" rows={gifts} />
+        </div>
+
+        <div className="mt-10 grid grid-cols-3 gap-16 text-center">
+          <div><div className="border-t border-black pt-1">Cliente</div></div>
+          <div><div className="border-t border-black pt-1">Asesor de Ventas</div></div>
+          <div><div className="border-t border-black pt-1">Jefe de Ventas</div></div>
+        </div>
+        <div className="mt-3 border border-black px-4 pb-3 pt-2 text-center">
+          <div className="font-bold">OBSERVACIONES</div>
+          <p className="mt-1 text-justify text-[10px] leading-snug">
+            Se deja constancia que si desiste de la compra y desea la devolución, estará afecta a un % de retención por concepto de gastos administrativos y que el motivo en materia de devolución está afecta a 20 días hábiles, cualquier cambio adicional que no conste en la presente no será responsabilidad de la empresa. La entrega está sujeta a stock, los plazos de entrega pueden sufrir variación por posibles demoras en la entrega del vehículo por parte de la marca, por tal caso no será imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variación por factores externos ajenos a Wankamotors y estipulados por la marca. Una vez emitido el mismo no se aceptará su cambio ni canje. Por tal motivo agradecemos verificar la información registrada, en señal de conformidad el cliente deja como constancia su firma.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PdfItems({ title, rows }) {
+  const visibleRows = [...(rows || []).slice(0, 4)];
+  while (visibleRows.length < 4) visibleRows.push(null);
+  return (
+    <div className="mt-1">
+      <div className="bg-slate-100 px-1 font-bold">{title}</div>
+      <div className="grid grid-cols-[120px_1fr_120px] bg-slate-100 text-center font-bold">
+        <div>Cantidad</div><div>Descripción</div><div>Precio</div>
+      </div>
+      <div className="grid grid-cols-[120px_1fr_120px]">
+        {visibleRows.map((row, index) => (
+          <div key={row?.id || index} className="contents">
+            <div className="text-center">{row?.cantidad || ""}</div>
+            <div className="text-center">{row?.detalle || ""}</div>
+            <div className="text-center">{row ? money(row.total || row.precioUnitario || 0) : ""}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -146,7 +364,7 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
   if (status === "firmado") return null;
   if (status === "borrador") {
     return actions.sendSignature ? (
-      <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => changeStatus("enviado_firma")}>
+      <Button className="h-7 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700" onClick={() => changeStatus("enviado_firma")}>
         Enviar a firma
       </Button>
     ) : null;
@@ -154,24 +372,24 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
   if (status === "enviado_firma") {
     return (
       <>
-        {actions.observe ? <Button variant="outline" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
-        {actions.sign ? <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
+        {actions.observe ? <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
+        {actions.sign ? <Button className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
       </>
     );
   }
   if (status === "observado") {
     return (
       <>
-        {actions.subsanate ? <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => changeStatus("subsanado")}>Subsanar</Button> : null}
-        {actions.sign ? <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
+        {actions.subsanate ? <Button className="h-7 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700" onClick={() => changeStatus("subsanado")}>Subsanar</Button> : null}
+        {actions.sign ? <Button className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
       </>
     );
   }
   if (status === "subsanado") {
     return (
       <>
-        {actions.observe ? <Button variant="outline" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
-        {actions.sign ? <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
+        {actions.observe ? <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
+        {actions.sign ? <Button className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
       </>
     );
   }
@@ -247,18 +465,18 @@ function VinReleaseControls({ currentUser, request, vin, onAction }) {
   if (request) {
     if (currentUser.canViewAll) {
       return (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs">
           <span className="font-semibold text-orange-800">Liberacion VIN pendiente: {vin}</span>
-          <Button size="sm" className="h-8 bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => onAction("approve", { requestId: request.id })}>Aprobar</Button>
-          <Button size="sm" variant="destructive" className="h-8" onClick={() => onAction("reject", { requestId: request.id })}>Rechazar</Button>
+          <Button size="sm" className="h-7 px-2 text-xs bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => onAction("approve", { requestId: request.id })}>Aprobar</Button>
+          <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" onClick={() => onAction("reject", { requestId: request.id })}>Rechazar</Button>
         </div>
       );
     }
     if (Number(request.solicitadoPor) === Number(currentUser.id)) {
       return (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs">
           <span className="font-semibold text-orange-800">Solicitud pendiente para liberar VIN {vin}</span>
-          <Button size="sm" variant="outline" className="h-8" onClick={() => onAction("cancel", { requestId: request.id })}>Cancelar solicitud</Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => onAction("cancel", { requestId: request.id })}>Cancelar solicitud</Button>
         </div>
       );
     }
@@ -266,14 +484,29 @@ function VinReleaseControls({ currentUser, request, vin, onAction }) {
   }
 
   return (
-    <Button variant="outline" onClick={() => onAction("request")}>
+    <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => onAction("request")}>
       Solicitar liberar VIN
     </Button>
   );
 }
 
 function ReservationForm({ reservation, detail, vins, accessories, gifts, options, update, readOnly }) {
-  const [form, setForm] = useState({ ...detail });
+  const [form, setForm] = useState({
+    ...detail,
+    clienteDocumento: reservation.documento || "",
+    clienteRazonSocial: firstPresentValue(reservation.nombreComercial, reservation.cliente),
+    clienteEmail: reservation.email || "",
+    clienteOcupacion: reservation.ocupacion || "",
+    clienteFechaNacimiento: reservation.fechaNacimiento ? String(reservation.fechaNacimiento).slice(0, 10) : "",
+    clienteTelefono1: reservation.celular || "",
+    clienteDomicilio: reservation.domicilio || "",
+    clienteDistrito: reservation.distrito || "",
+    clienteProvincia: reservation.provincia || "",
+    clienteDepartamento: reservation.departamento || "",
+    clienteConyugue: reservation.nombreConyugue || "",
+    clienteDniConyugue: reservation.dniConyugue || "",
+    anioModelo: detail.anio || "",
+  });
   const [itemDialog, setItemDialog] = useState(null);
   const [coownerDialog, setCoownerDialog] = useState(null);
   const [saveState, setSaveState] = useState("guardado");
@@ -284,6 +517,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   const accessoriesTotal = useMemo(() => accessories.reduce((sum, item) => sum + Number(item.total || 0), 0), [accessories]);
   const giftsTotal = useMemo(() => gifts.reduce((sum, item) => sum + Number(item.total || 0), 0), [gifts]);
   const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal + (isYes(form.glpSn) ? Number(form.glp || 0) : 0) + (isYes(form.tarjetaSn) ? Number(form.tarjetaPlaca || 0) : 0) + (isYes(form.fleteSn) ? Number(form.flete || 0) : 0) - Number(form.cuotaInicial || 0) + accessoriesTotal + giftsTotal, [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.glp, form.glpSn, form.tarjetaPlaca, form.tarjetaSn, form.flete, form.fleteSn, form.cuotaInicial, extraDiscountTotal, accessoriesTotal, giftsTotal]);
+  const telefono2 = firstPresentValue(form.telefono2, form.telefono_2, form.telefono, form.telefonoReserva, form.telefono_reserva, reservation.telefono2, reservation.telefono_2);
   const vinMessage = form.vinExiste ? "" : (form.cuotaInicial ? "Anticipo sin data" : "Reserva total sin data");
   const isFactura = String(form.tipoComprobante || "").toUpperCase().includes("FACTURA");
   const isBoleta = String(form.tipoComprobante || "").toUpperCase().includes("BOLETA");
@@ -401,11 +635,47 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   }, [form, readOnly, total, update]);
   return (
     <section className="rounded-lg border bg-white shadow-sm">
-      <div className="flex items-center justify-between bg-slate-50 px-4 py-3 font-bold">
+      <div className="m-2 flex items-center justify-between rounded-md border bg-white px-3 py-2 font-bold shadow-sm lg:sticky lg:top-0 lg:z-20">
         <span><FileText className="mr-2 inline size-4" />NOTA DE PEDIDO</span>
-        <span className={`text-xs ${saveState === "error" ? "text-red-600" : saveState === "guardando" ? "text-orange-600" : "text-emerald-700"}`}>{saveState === "guardando" ? "Autoguardando..." : saveState === "error" ? "Error al guardar" : "Autoguardado"}</span>
+        <span className={`rounded-md border px-2 py-1 text-xs ${saveState === "error" ? "border-red-200 bg-red-50 text-red-600" : saveState === "guardando" ? "border-orange-200 bg-orange-50 text-orange-600" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{saveState === "guardando" ? "Autoguardando..." : saveState === "error" ? "Error al guardar" : "Autoguardado"}</span>
       </div>
-      <div className="space-y-6 p-4">
+      <EditableReservationFormat
+        reservation={reservation}
+        form={form}
+        setForm={setForm}
+        readOnly={readOnly}
+        vins={vins}
+        accessories={accessories}
+        gifts={gifts}
+        telefono2={telefono2}
+        total={total}
+        baseTotal={baseTotal}
+        extraDiscountTotal={extraDiscountTotal}
+        depositsTotal={depositsTotal}
+        accessoriesTotal={accessoriesTotal}
+        giftsTotal={giftsTotal}
+        vinMessage={vinMessage}
+        isFactura={isFactura}
+        isBoleta={isBoleta}
+        updateTipoComprobante={updateTipoComprobante}
+        applySelectedVin={applySelectedVin}
+        addDiscount={addDiscount}
+        updateDiscount={updateDiscount}
+        removeDiscount={removeDiscount}
+        addDeposit={addDeposit}
+        updateDeposit={updateDeposit}
+        removeDeposit={removeDeposit}
+        onAddCoowner={() => setCoownerDialog({ index: null, item: null })}
+        onEditCoowner={(item, index) => setCoownerDialog({ index, item })}
+        onDeleteCoowner={removeCoowner}
+        onAddAccessory={() => setItemDialog({ type: "accessory", item: null })}
+        onEditAccessory={(item) => setItemDialog({ type: "accessory", item })}
+        onDeleteAccessory={(item) => removeQuoteItem("accessory", item)}
+        onAddGift={() => setItemDialog({ type: "gift", item: null })}
+        onEditGift={(item) => setItemDialog({ type: "gift", item })}
+        onDeleteGift={(item) => removeQuoteItem("gift", item)}
+      />
+      <div className="hidden">
         <Block title="DATOS DEL CLIENTE">
           <Field label="Tipo de Comprobante">
             <SearchableSelect
@@ -442,6 +712,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           <Field label="Domicilio"><Input value={reservation.domicilio} disabled /></Field>
           <Field label="Email"><Input value={reservation.email} disabled /></Field>
           <Field label="Celular"><Input value={reservation.celular} disabled /></Field>
+          <Field label="Telefono 2"><Input value={telefono2} disabled /></Field>
           <div className="md:col-span-2">
             <CoownersBlock
               rows={form.copropietarios || []}
@@ -594,23 +865,287 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           </div>
           <div className="mt-3 text-right text-2xl font-bold text-blue-700">TOTAL FINAL: {money(total)}</div>
         </div>
-        {itemDialog ? (
-          <ReservationItemDialog
-            dialog={itemDialog}
-            options={itemDialog.type === "gift" ? options.gifts : options.accessories}
-            onClose={() => setItemDialog(null)}
-            onSubmit={saveQuoteItem}
-          />
-        ) : null}
-        {coownerDialog ? (
-          <CoownerDialog
-            state={coownerDialog}
-            onClose={() => setCoownerDialog(null)}
-            onSubmit={saveCoowner}
-          />
-        ) : null}
       </div>
+      {itemDialog ? (
+        <ReservationItemDialog
+          dialog={itemDialog}
+          options={itemDialog.type === "gift" ? options.gifts : options.accessories}
+          onClose={() => setItemDialog(null)}
+          onSubmit={saveQuoteItem}
+        />
+      ) : null}
+      {coownerDialog ? (
+        <CoownerDialog
+          state={coownerDialog}
+          onClose={() => setCoownerDialog(null)}
+          onSubmit={saveCoowner}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function EditableReservationFormat({
+  reservation,
+  form,
+  setForm,
+  readOnly,
+  vins,
+  accessories,
+  gifts,
+  telefono2,
+  total,
+  baseTotal,
+  extraDiscountTotal,
+  depositsTotal,
+  accessoriesTotal,
+  giftsTotal,
+  vinMessage,
+  isFactura,
+  isBoleta,
+  updateTipoComprobante,
+  applySelectedVin,
+  addDiscount,
+  updateDiscount,
+  removeDiscount,
+  addDeposit,
+  updateDeposit,
+  removeDeposit,
+  onAddCoowner,
+  onEditCoowner,
+  onDeleteCoowner,
+  onAddAccessory,
+  onEditAccessory,
+  onDeleteAccessory,
+  onAddGift,
+  onEditGift,
+  onDeleteGift,
+}) {
+  const updateField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const editableInputClass = "h-5 rounded-[2px] border border-dashed border-slate-300 bg-white/80 px-1 py-0 text-[11px] shadow-none focus-visible:border-blue-500 focus-visible:ring-1 focus-visible:ring-blue-200 disabled:border-transparent disabled:bg-transparent";
+  const editableCenteredInputClass = `${editableInputClass} text-center`;
+  const field = (label, child, labelClass = "") => (
+    <>
+      <div className={`bg-slate-100 px-1 font-bold ${labelClass}`}>{label}</div>
+      <div className="min-w-0 px-1">{child}</div>
+    </>
+  );
+  const input = (key, value, props = {}) => (
+    <Input
+      disabled={readOnly || props.disabled}
+      type={props.type || "text"}
+      step={props.step}
+      value={value ?? ""}
+      onChange={(event) => updateField(key, event.target.value)}
+      className={editableInputClass}
+    />
+  );
+  const textValue = (value) => <span>{firstPresentValue(value)}</span>;
+  const select = (value, options, onChange) => (
+    <SearchableSelect
+      disabled={readOnly}
+      value={value || ""}
+      options={options}
+      placeholder=""
+      onChange={onChange}
+      className={editableInputClass}
+    />
+  );
+  const precioLista = Number(form.precioUnitario || form.precioBase || 0);
+  const usoPlaca = [form.usoVehiculo, form.placa].filter(isPresentValue).join(" / ");
+  const conyugue = [form.clienteConyugue, ...(form.copropietarios || []).map((item) => [item.nombre, item.apellido].filter(isPresentValue).join(" "))].filter(isPresentValue).join(" / ");
+  const dniConyugue = [form.clienteDniConyugue, ...(form.copropietarios || []).map((item) => item.numeroDocumento)].filter(isPresentValue).join(" / ");
+  const discounts = [
+    { label: "DESCUENTO DEALER", key: "descuentoTienda", value: form.descuentoTienda },
+    { label: "BONO FLOTA", key: "bonoRetoma", value: form.bonoRetoma },
+    { label: "DESCUENTO RETAIL", key: "descuentoNper", value: form.descuentoNper },
+  ];
+  const visibleDeposits = [...(form.depositos || [])];
+  while (visibleDeposits.length < 7) visibleDeposits.push(null);
+
+  return (
+    <div className="overflow-x-auto px-2 pb-4 pt-1">
+      <div className="w-full min-w-[980px] border border-black bg-white px-7 py-5 font-sans text-[11px] leading-tight text-black">
+        <div className="grid grid-cols-4 items-start gap-y-1">
+          <Image src="/uploads/ventas-plantillas/1778903861360-27945a90-a2e4-4c59-8e71-dbb8da209848.jpg" alt="Wankamotors" width={144} height={44} className="h-11 w-36 object-contain object-left" />
+          <div />
+          <div />
+          <Image src={reservationBrandLogoPath(form.marca || detail.marca || reservation.marca)} alt="Marca" width={80} height={56} className="ml-auto h-14 w-20 object-contain object-right" />
+          <div className="font-bold">Asesor</div><div className="font-bold">{reservation.creadoPor || ""}</div>
+          <div className="font-bold">Fecha</div><div>{shortDate(reservation.createdAt)}</div>
+          <div className="font-bold">Origen de Venta</div><div>{reservation.origenVenta || ""}</div>
+          <div className="font-bold">Campaña</div><div>{reservation.campania || ""}</div>
+        </div>
+
+        <div className="mt-2 border border-black bg-slate-100 py-1 text-center font-bold">NOTA DE PEDIDO - PERSONA {form.tipoPersona === "JURIDICA" ? "JURIDICA" : "NATURAL"}</div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL CLIENTE</div>
+          <div className="grid grid-cols-[150px_1fr_130px_150px]">
+            {field("Tipo de comprobante", select(form.tipoComprobante, [{ value: "Boleta", label: "Boleta" }, { value: "Factura", label: "Factura" }], updateTipoComprobante))}
+            {field("Tipo de persona", isFactura ? select(form.tipoPersona || "NATURAL_RUC", [{ value: "NATURAL_RUC", label: "Persona natural con RUC" }, { value: "JURIDICA", label: "Persona juridica" }], (value) => updateField("tipoPersona", value)) : textValue(isBoleta ? "Persona natural" : "Persona natural"))}
+            {field("Razón social", input("clienteRazonSocial", form.clienteRazonSocial))}
+            <div /><div />
+            {field("Cliente /Repr legal", textValue(reservation.cliente))}
+            <div /><div />
+            {field("DNI / RUC", input("clienteDocumento", form.clienteDocumento))}
+            {field("F. de nacimiento", input("clienteFechaNacimiento", form.clienteFechaNacimiento, { type: "date" }))}
+            {field("Correo", input("clienteEmail", form.clienteEmail))}
+            {field("Teléfono 1", input("clienteTelefono1", form.clienteTelefono1))}
+            {field("Ocupación", input("clienteOcupacion", form.clienteOcupacion))}
+            {field("Teléfono 2", textValue(telefono2))}
+            {field("Domicilio", input("clienteDomicilio", form.clienteDomicilio))}
+            <div /><div />
+            {field("Distrito", input("clienteDistrito", form.clienteDistrito))}
+            {field("Provincia", input("clienteProvincia", form.clienteProvincia))}
+            {field("Departamento", input("clienteDepartamento", form.clienteDepartamento))}
+            <div className="col-span-4 flex items-center justify-between bg-white py-1">
+              <span />
+              {!readOnly ? <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={onAddCoowner}><UserPlus className="size-3" />Agregar copropietario</Button> : null}
+            </div>
+            {field("Cónyuge/Copropiedad", input("clienteConyugue", conyugue))}
+            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-blue-700" onClick={() => onEditCoowner(item, index)}>Editar</button>)}</div><div />
+            {field("DNI Cónyuge", input("clienteDniConyugue", dniConyugue))}
+            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-red-600" onClick={() => onDeleteCoowner(index)}>Quitar</button>)}</div><div />
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL VEHICULO</div>
+          <div className="grid grid-cols-[120px_1fr_120px_1fr]">
+            {field("Modelo", textValue(form.modelo))}
+            {field("Versión", textValue(form.version))}
+            {field("Chasis / VIN", form.vinExiste ? select(form.vin, vins, applySelectedVin) : <span className="text-red-600">{vinMessage}</span>)}
+            {field("Color", input("colorExterno", form.colorExterno))}
+            {field("Motor", input("numeroMotor", form.numeroMotor))}
+            {field("Año Modelo", input("anioModelo", form.anioModelo))}
+            {field("Uso del vehículo / Placa", input("usoVehiculo", usoPlaca), "whitespace-nowrap")}
+            {field("Código", input("codigo", form.codigo))}
+            <div className="col-span-4 px-1 py-1">
+              <label className="inline-flex items-center gap-2 font-bold"><Switch disabled={readOnly} checked={form.vinExiste} onCheckedChange={(checked) => setForm((old) => ({ ...old, vinExiste: checked, vin: checked ? old.vin : "", numeroMotor: checked ? old.numeroMotor : "" }))} /> VIN existe</label>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">TRANSACCION</div>
+          <div className="grid grid-cols-6">
+            <div className="col-span-2 bg-slate-100 px-1 font-bold">Precio de Lista (Valor incluye IGV)</div><div className="col-span-4 text-center font-bold">{input("precioUnitario", precioLista, { type: "number" })}</div>
+            {discounts.map((discount) => (
+              <div key={discount.key} className="contents">
+                <div className="bg-slate-100 px-1 font-bold">{discount.label}</div><div className="text-center">{input(discount.key, discount.value, { type: "number" })}</div>
+              </div>
+            ))}
+            {(form.descuentos || []).slice(0, 3).map((discount, index) => (
+              <div key={discount.id || index} className="contents">
+                <div className="bg-slate-100 px-1 font-bold">{input(`discount-name-${index}`, discount.nombre || "", { disabled: true })}</div>
+                <div className="grid grid-cols-[1fr_42px_22px] items-center gap-1">
+                  <Input disabled={readOnly} type="number" value={discount.valor || ""} onChange={(event) => updateDiscount(index, { valor: event.target.value })} className={editableCenteredInputClass} />
+                  <button type="button" className="text-[10px] text-blue-700" onClick={() => updateDiscount(index, { tipo: String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "PORCENTAJE" : "MONTO" })}>{String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "$" : "%"}</button>
+                  {!readOnly ? <button type="button" className="text-[10px] text-red-600" onClick={() => removeDiscount(index)}>x</button> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end border-t border-black/20 py-1">
+            {!readOnly ? <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={addDiscount}><Plus className="size-3" />Agregar descuento</Button> : null}
+          </div>
+          <div className="grid grid-cols-4 pt-1">
+            {field("T.C. Referencial", input("tcReferencial", form.tcReferencial, { type: "number", step: "0.0001" }))}
+            <div /><div />
+            {field("Forma de Pago", input("formaPago", form.formaPago))}
+            {field("Tipo de crédito", input("tipoCredito", form.tipoCredito))}
+            {field("Banco", input("banco", form.banco))}
+            {field("Origen de Fondos", input("origenFondos", form.origenFondos))}
+          </div>
+          <div className="flex items-center justify-between bg-slate-100 px-1 font-bold">
+            <span>Depósitos (Monto / Fecha / Banco / N° OP)</span>
+            {!readOnly ? <Button type="button" size="sm" variant="ghost" className="h-6 text-[10px]" onClick={addDeposit}><Plus className="size-3" />Agregar</Button> : null}
+          </div>
+          <div className="grid grid-cols-5">
+            {visibleDeposits.slice(0, 7).map((dep, index) => (
+              <div key={dep?.id || index} className="contents">
+                <div className="bg-slate-100 px-1 font-bold">Monto de depósito</div>
+                <Input disabled={readOnly || !dep} type="number" value={dep?.monto || ""} onChange={(event) => updateDeposit(index, { monto: event.target.value })} className={editableCenteredInputClass} />
+                <Input disabled={readOnly || !dep} type="date" value={dep?.fechaDeposito ? String(dep.fechaDeposito).slice(0, 10) : ""} onChange={(event) => updateDeposit(index, { fechaDeposito: event.target.value })} className={editableCenteredInputClass} />
+                <Input disabled={readOnly || !dep} value={dep?.entidadFinanciera || ""} onChange={(event) => updateDeposit(index, { entidadFinanciera: event.target.value })} className={editableCenteredInputClass} />
+                <div className="grid grid-cols-[1fr_18px]">
+                  <Input disabled={readOnly || !dep} value={dep?.numeroOperacion || ""} onChange={(event) => updateDeposit(index, { numeroOperacion: event.target.value })} className={editableCenteredInputClass} />
+                  {dep && !readOnly ? <button type="button" className="text-[10px] text-red-600" onClick={() => removeDeposit(index)}>x</button> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-x border-b border-black">
+          <div className="border-b border-black bg-slate-100 px-1 font-bold">OTROS</div>
+          <div className="grid grid-cols-8">
+            {field("Considera GLP", select(form.glpSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("glpSn", value)))}
+            {field("Precio", input("glp", isYes(form.glpSn) ? form.glp : "", { type: "number", disabled: !isYes(form.glpSn) }))}
+            {field("Flete", select(form.fleteSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("fleteSn", value)))}
+            {field("Precio", input("flete", isYes(form.fleteSn) ? form.flete : "", { type: "number", disabled: !isYes(form.fleteSn) }))}
+            {field("Tarjeta y Placa", select(form.tarjetaSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("tarjetaSn", value)))}
+            {field("Precio", input("tarjetaPlaca", isYes(form.tarjetaSn) ? form.tarjetaPlaca : "", { type: "number", disabled: !isYes(form.tarjetaSn) }))}
+            <div /><div />
+          </div>
+          <EditablePdfItems title="Accesorios" rows={accessories} onAdd={onAddAccessory} onEdit={onEditAccessory} onDelete={onDeleteAccessory} readOnly={readOnly} />
+          <EditablePdfItems title="Obsequios" rows={gifts} onAdd={onAddGift} onEdit={onEditGift} onDelete={onDeleteGift} readOnly={readOnly} />
+        </div>
+
+        <div className="mt-2 grid grid-cols-4 gap-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px]">
+          <p><b>Vehículo:</b> {money(baseTotal)}</p>
+          <p><b>Accesorios:</b> {money(accessoriesTotal)}</p>
+          <p><b>Regalos:</b> {money(giftsTotal)}</p>
+          <p><b>Depósitos:</b> {money(depositsTotal)}</p>
+          <p><b>Descuentos adicionales:</b> -{money(extraDiscountTotal)}</p>
+          <p className="col-span-3 text-right font-bold text-blue-700">TOTAL FINAL: {money(total)}</p>
+        </div>
+
+        <div className="mt-10 grid grid-cols-3 gap-16 text-center">
+          <div><div className="border-t border-black pt-1">Cliente</div></div>
+          <div><div className="border-t border-black pt-1">Asesor de Ventas</div></div>
+          <div><div className="border-t border-black pt-1">Jefe de Ventas</div></div>
+        </div>
+        <div className="mt-3 border border-black px-4 pb-3 pt-2 text-center">
+          <div className="font-bold">OBSERVACIONES</div>
+          <p className="mt-1 pb-1 text-justify text-[10px] leading-snug">{RESERVATION_OBSERVATION_TEXT}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditablePdfItems({ title, rows, onAdd, onEdit, onDelete, readOnly }) {
+  const visibleRows = [...(rows || []).slice(0, 4)];
+  while (visibleRows.length < 4) visibleRows.push(null);
+  return (
+    <div className="mt-1">
+      <div className="flex items-center justify-between bg-slate-100 px-1 font-bold">
+        <span>{title}</span>
+        {!readOnly ? <Button type="button" size="sm" variant="ghost" className="h-6 text-[10px]" onClick={onAdd}><Plus className="size-3" />Agregar</Button> : null}
+      </div>
+      <div className="grid grid-cols-[120px_1fr_120px_70px] bg-slate-100 text-center font-bold">
+        <div>Cantidad</div><div>Descripción</div><div>Precio</div><div />
+      </div>
+      <div className="grid grid-cols-[120px_1fr_120px_70px]">
+        {visibleRows.map((row, index) => (
+          <div key={row?.id || index} className="contents">
+            <div className="text-center">{row?.cantidad || ""}</div>
+            <div className="text-center">{row?.detalle || ""}</div>
+            <div className="text-center">{row ? money(row.total || row.precioUnitario || 0) : ""}</div>
+            <div className="text-center">
+              {row && !readOnly ? (
+                <>
+                  <button type="button" className="mr-2 text-[10px] text-blue-700" onClick={() => onEdit(row)}>Editar</button>
+                  <button type="button" className="text-[10px] text-red-600" onClick={() => onDelete(row)}>Quitar</button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -648,7 +1183,24 @@ function CoownersBlock({ rows, readOnly, onAdd, onEdit, onDelete }) {
 }
 function ItemsBlock({ title, rows, referenceKey, readOnly, onAdd, onEdit, onDelete }) { const total = rows.reduce((sum, item) => sum + Number(item.total || 0), 0); return <div className="border-t pt-4"><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><h3 className="font-bold">{title}</h3><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{rows.length} registros</span></div>{!readOnly ? <Button size="sm" className="bg-slate-950 text-white hover:bg-slate-800" onClick={onAdd}><Plus className="size-4" />Agregar</Button> : null}</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[860px] text-sm"><thead className="bg-slate-50 text-left"><tr><th className="px-3 py-3">Detalle</th><th>Referencia</th><th>Cant.</th><th>Unitario</th><th>Desc.</th><th>Total</th><th>Acciones</th></tr></thead><tbody className="divide-y">{rows.map((row) => <tr key={row.id}><td className="px-3 py-3 font-medium"><p>{row.detalle}</p>{row.notas ? <p className="text-xs text-slate-500">{row.notas}</p> : null}</td><td>{row[referenceKey] || "-"}</td><td>{row.cantidad}</td><td>{money(row.precioUnitario)}</td><td className="text-red-600">{discountLabel(row)}</td><td className="font-bold text-blue-700">{money(row.total)}</td><td>{!readOnly ? <div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => onEdit(row)}><FileText className="size-4" /></Button><Button size="icon" variant="ghost" className="text-red-600" onClick={() => onDelete(row)}><Trash2 className="size-4" /></Button></div> : "-"}</td></tr>)}{!rows.length ? <tr><td className="py-8 text-center text-slate-500" colSpan={7}>Sin registros</td></tr> : null}</tbody></table></div><div className="mt-3 rounded-lg border bg-slate-50 p-3 text-right font-bold">Total {title}: {money(total)}</div></div>; }
 function Field({ label, children }) { return <div className="space-y-1"><Label className="text-xs font-bold text-slate-600">{label}</Label>{children}</div>; }
-function InfoCard({ title, lines }) { return <div className="rounded-lg border bg-white p-5 shadow-sm"><p className="mb-6 font-semibold">{title}</p>{lines.map((line, index) => <p key={index} className={index === 0 ? "font-bold" : "text-sm text-slate-600"}>{line || "-"}</p>)}</div>; }
+function InfoCard({ title, lines }) {
+  return (
+    <div className="rounded-md border bg-white p-3 text-xs leading-tight tracking-normal shadow-sm">
+      <p className="mb-2 font-semibold text-slate-700">{title}</p>
+      {lines.map((line, index) => (
+        <p key={index} className={index === 0 ? "truncate font-bold" : "truncate text-[11px] text-slate-600"}>{line || "-"}</p>
+      ))}
+    </div>
+  );
+}
+function ActionCard({ title, children, className = "lg:col-span-2" }) {
+  return (
+    <div className={`rounded-md border bg-white p-3 text-xs leading-tight tracking-normal shadow-sm ${className}`}>
+      <p className="mb-2 font-semibold text-slate-700">{title}</p>
+      {children}
+    </div>
+  );
+}
 function StatusBadge({ estado }) { return <span className="ml-2 rounded-full bg-blue-100 px-2 py-1 align-middle text-xs font-bold text-blue-700">{estado}</span>; }
 
 function ReservationItemDialog({ dialog, options, onClose, onSubmit }) {
@@ -1109,6 +1661,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       .join(" / ") || "";
     const origenFondos = firstValue(r.origenFondos, r.origen_fondos, d.origenFondos, d.origen_fondos);
     const banco = firstValue(d.banco, r.banco, depositos[0]?.entidadFinanciera, depositos[0]?.banco);
+    const telefono2 = firstValue(d.telefono2, d.telefono_2, d.telefono, d.telefonoReserva, d.telefono_reserva, r.telefono2, r.telefono_2);
     const showGlp = isYes(d.glpSn || d.glp_sn);
     const showFlete = isYes(d.fleteSn || d.flete_sn);
     const showTarjeta = isYes(d.tarjetaSn || d.tarjeta_sn);
@@ -1150,7 +1703,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       35,
     );
     await drawDirectLogo(
-      "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png",
+      reservationBrandLogoPath(marca),
       x + w - 72,
       20,
       69,
@@ -1191,7 +1744,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     label("Teléfono 1", x + 338, y, 96); put(celular, x + 438, y, { size: 7, max: 14 });
     y += 9;
     label("Ocupación", x + 2, y, 104); put(ocupacion, x + 111, y, { size: 7, max: 35 });
-    label("Teléfono 2", x + 338, y, 96); put(r.telefono2 || "", x + 438, y, { size: 7, max: 14 });
+    label("Teléfono 2", x + 338, y, 96); put(telefono2, x + 438, y, { size: 7, max: 14 });
     y += 9;
     label("Domicilio", x + 2, y, 104); put(domicilio, x + 111, y, { size: 7, max: 70 });
     y += 9;
@@ -1979,12 +2532,12 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   if (showPriceList) row("PRECIO LISTA", money(precioLista));
   const visibleDiscountRows = discountRows.length > 6
     ? [
-        ...discountRows.slice(0, 5),
-        {
-          label: "OTROS DESCUENTOS",
-          value: discountRows.slice(5).reduce((sum, item) => sum + Number(item.value || 0), 0),
-        },
-      ]
+      ...discountRows.slice(0, 5),
+      {
+        label: "OTROS DESCUENTOS",
+        value: discountRows.slice(5).reduce((sum, item) => sum + Number(item.value || 0), 0),
+      },
+    ]
     : discountRows;
   visibleDiscountRows.forEach((item) => row(item.label, money(item.value)));
   row("PRECIO FINAL", money(totalFinal));
@@ -2149,8 +2702,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   text("OBSERVACIONES", left + 1.1, obsY + 2.9);
 
   // título centrado
-  
-  
+
+
   // texto legal
   const obsPad = 2;
   const obsTextX = left + obsPad;

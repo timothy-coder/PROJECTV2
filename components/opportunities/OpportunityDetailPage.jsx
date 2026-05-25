@@ -44,7 +44,7 @@ export default function OpportunityDetailPage({ id }) {
         <TestDriveSection items={testDrives} onOpen={() => setDialog({ type: "testdrive", item: null })} />
         <ClosureSection items={closures} onOpen={() => setDialog({ type: "closure", item: null })} />
         {dialog.type === "interest" ? <InterestDialog state={dialog} clientId={opportunity.clienteId} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "interest", ...payload })} /> : null}
-        {dialog.type === "quote" ? <QuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "quote", ...payload })} /> : null}
+        {dialog.type === "quote" ? <EditableQuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "quote", ...payload })} /> : null}
         {dialog.type === "testdrive" ? <TestDriveDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "testdrive", ...payload })} /> : null}
         {dialog.type === "closure" ? <ClosureDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "closure", ...payload })} /> : null}
       </div>
@@ -312,8 +312,9 @@ function ActionButton({ icon: Icon, label, danger, onClick }) {
 }
 
 function QuotePreview({ quote, onClose }) {
-  const vehicleDiscount = Number(quote.descuento_vehículo || 0) + (Number(quote.precio_base || 0) * Number(quote.descuento_vehículo_porcentaje || 0) / 100);
-  const finalVehicle = Number(quote.precio_base || 0) - vehicleDiscount;
+  const quoteBasePrice = Number(quote.precio_base ?? quote.catalogo_precio_base ?? 0);
+  const vehicleDiscount = Number(quote.descuento_vehículo || 0) + (quoteBasePrice * Number(quote.descuento_vehículo_porcentaje || 0) / 100);
+  const finalVehicle = quoteBasePrice - vehicleDiscount;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[94svh] max-w-5xl overflow-y-auto bg-white text-slate-950">
@@ -321,11 +322,11 @@ function QuotePreview({ quote, onClose }) {
         <div className="space-y-4">
           <section className="rounded-lg border border-violet-200 bg-violet-50 p-4">
             <h3 className="mb-3 font-bold text-violet-700">Informacion General - Vehiculo</h3>
-            <div className="grid gap-4 md:grid-cols-4"><Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Version" value={quote.version} /><Info label="Anio" value={quote.anio || "-"} /><Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="SKU" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} /></div>
+            <div className="grid gap-4 md:grid-cols-4"><Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Version" value={quote.version} /><Info label="Anio" value={quote.anio || "-"} /><Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="Dias de validez de la cotizacion" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} /></div>
           </section>
           <section className="rounded-lg border border-orange-200 bg-orange-50 p-4">
             <h3 className="mb-3 font-bold text-orange-800">Precio del Vehiculo</h3>
-            <div className="grid gap-3 md:grid-cols-3"><Info label="Modelo/Version" value={`${quote.modelo} ${quote.version}`} /><Info label="Precio" value={`$${Number(quote.precio_base || 0).toFixed(2)}`} /><Info label="Precio final" value={`$${finalVehicle.toFixed(2)}`} /></div>
+            <div className="grid gap-3 md:grid-cols-3"><Info label="Modelo/Version" value={`${quote.modelo} ${quote.version}`} /><Info label="Precio" value={`$${quoteBasePrice.toFixed(2)}`} /><Info label="Precio final" value={`$${finalVehicle.toFixed(2)}`} /></div>
           </section>
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <h3 className="mb-3 font-bold text-emerald-800">Resumen General</h3>
@@ -340,6 +341,115 @@ function QuotePreview({ quote, onClose }) {
 
 function Info({ label, value }) {
   return <div><p className="text-xs font-bold text-slate-500">{label}</p><p className="font-bold">{value}</p></div>;
+}
+
+function EditableQuoteDialog({ options, onClose, onSubmit, state }) {
+  const item = state?.item;
+  const isQuote = Boolean(item?.precio_id || item?.precio_base);
+  const initialPrice = item?.precio_base ?? item?.catalogo_precio_base ?? options.prices.find((p) => Number(p.id) === Number(item?.precio_id))?.precio_base ?? "";
+  const [form, setForm] = useState({
+    id: isQuote ? item.id : undefined,
+    marcaId: item?.marca_id ? String(item.marca_id) : "",
+    modeloId: item?.modelo_id ? String(item.modelo_id) : "",
+    precioId: item?.precio_id ? String(item.precio_id) : "",
+    anio: item?.anio_interes || item?.anio || "",
+    sku: item?.sku || "",
+    colorExterno: item?.color_externo || "",
+    colorInterno: item?.color_interno || "",
+    precioBase: initialPrice,
+    tcReferencial: item?.tc_referencial ?? "",
+    discountMode: Number(item?.["descuento_veh\u00edculo"] || 0) > 0 ? "amount" : "percentage",
+    descuentoVehiculo: item?.["descuento_veh\u00edculo"] || 0,
+    descuentoVehiculoPorcentaje: item?.["descuento_veh\u00edculo_porcentaje"] || 0,
+  });
+  const brandOptions = [...new Map(options.prices.map((p) => [p.marca_id, { value: p.marca_id, label: p.marca }])).values()];
+  const modelOptions = [...new Map(options.prices.filter((p) => !form.marcaId || p.marca_id === Number(form.marcaId)).map((p) => [p.modelo_id, { value: p.modelo_id, label: p.modelo }])).values()];
+  const versionRows = options.prices.filter((p) => (!form.marcaId || p.marca_id === Number(form.marcaId)) && (!form.modeloId || p.modelo_id === Number(form.modeloId)));
+  const versionOptions = versionRows.map((p) => ({ value: p.id, label: p.version }));
+  const selectedVersion = options.prices.find((p) => Number(p.id) === Number(form.precioId));
+  const priceValue = Number(form.precioBase || 0);
+  const discountAmount = form.discountMode === "amount" ? Number(form.descuentoVehiculo || 0) : priceValue * Number(form.descuentoVehiculoPorcentaje || 0) / 100;
+  const finalPrice = Math.max(priceValue - discountAmount, 0);
+  const payload = {
+    ...form,
+    precioBase: form.precioBase,
+    tcReferencial: form.tcReferencial,
+    descuentoVehiculo: form.discountMode === "amount" ? form.descuentoVehiculo : 0,
+    descuentoVehiculoPorcentaje: form.discountMode === "percentage" ? form.descuentoVehiculoPorcentaje : 0,
+  };
+  const selectVersion = (value) => {
+    const price = options.prices.find((p) => Number(p.id) === Number(value));
+    setForm((f) => ({ ...f, precioId: value, precioBase: price?.precio_base ?? "" }));
+  };
+  return (
+    <BaseDialog title={isQuote ? "Modificar cotizacion" : "Nueva cotizacion"} wide onClose={onClose} onSubmit={() => onSubmit(payload)}>
+      <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+        <div className="grid gap-4 md:grid-cols-[1fr_1fr_190px]">
+          <div className="space-y-3">
+            <h3 className="font-bold">Selecciona un vehiculo</h3>
+            <Field label="Marca">
+              <SearchableSelect value={form.marcaId} options={brandOptions} onChange={(v) => setForm((f) => ({ ...f, marcaId: v, modeloId: "", precioId: "", precioBase: "" }))} />
+            </Field>
+            <Field label="Modelo">
+              <SearchableSelect value={form.modeloId} options={modelOptions} onChange={(v) => setForm((f) => ({ ...f, modeloId: v, precioId: "", precioBase: "" }))} />
+            </Field>
+            <Field label="AÃ±o">
+              <Input value={form.anio} onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
+            </Field>
+            <Field label="Version">
+              <SearchableSelect value={form.precioId} options={versionOptions} onChange={selectVersion} />
+            </Field>
+          </div>
+          <div className="space-y-3">
+            <h3 className="font-bold">Detalles editables</h3>
+            <Field label="Precio base cotizacion ($)">
+              <Input type="number" min="0" step="0.01" value={form.precioBase} onChange={(e) => setForm((f) => ({ ...f, precioBase: e.target.value }))} />
+            </Field>
+            <Field label="T.C. referencial">
+              <Input type="number" min="0" step="0.0001" value={form.tcReferencial} onChange={(e) => setForm((f) => ({ ...f, tcReferencial: e.target.value }))} />
+            </Field>
+            <Field label="Dias de validez de la cotizacion">
+              <Input value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} />
+            </Field>
+            <Field label="Color externo">
+              <Input value={form.colorExterno} onChange={(e) => setForm((f) => ({ ...f, colorExterno: e.target.value }))} />
+            </Field>
+            <Field label="Color interno">
+              <Input value={form.colorInterno} onChange={(e) => setForm((f) => ({ ...f, colorInterno: e.target.value }))} />
+            </Field>
+          </div>
+          <div className="rounded-xl bg-white p-4 text-sm shadow-sm">
+            <p className="text-xs font-bold text-slate-500">Precio catalogo</p>
+            <p className="text-lg font-bold text-slate-800">${Number(selectedVersion?.precio_base || 0).toFixed(2)}</p>
+            <p className="mt-4 text-xs font-bold text-slate-500">Precio cotizacion</p>
+            <p className="text-lg font-bold text-blue-700">${priceValue.toFixed(2)}</p>
+            <p className="mt-4 text-xs font-bold text-slate-500">Precio final</p>
+            <p className="text-lg font-bold text-emerald-700">${finalPrice.toFixed(2)}</p>
+            <p className="mt-4 text-xs text-slate-500">El precio editado se guarda solo en la cotizacion.</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 border-t pt-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-bold">Descuento del vehiculo</h3>
+          <label className="flex items-center gap-2 text-sm">
+            <span>%</span>
+            <Switch checked={form.discountMode === "amount"} onCheckedChange={(checked) => setForm((f) => ({ ...f, discountMode: checked ? "amount" : "percentage" }))} />
+            <span>{form.discountMode === "amount" ? "Monto ($)" : "Porcentaje (%)"}</span>
+          </label>
+        </div>
+        {form.discountMode === "amount" ? (
+          <Field label="Descuento en monto ($)">
+            <Input type="number" min="0" step="0.01" value={form.descuentoVehiculo} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculo: e.target.value }))} />
+          </Field>
+        ) : (
+          <Field label="Descuento en porcentaje (%)">
+            <Input type="number" min="0" step="0.01" value={form.descuentoVehiculoPorcentaje} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculoPorcentaje: e.target.value }))} />
+          </Field>
+        )}
+      </div>
+    </BaseDialog>
+  );
 }
 
 function QuoteItemsDialog({ state, options, onClose, onSubmit }) {
@@ -422,7 +532,7 @@ function TestDriveSection({ items, onOpen }) { return <section className="mb-4 r
 function ClosureSection({ items, onOpen }) { return <section className="mb-4 rounded-lg bg-white p-5 shadow-sm"><div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Cierres</h2><Button variant="destructive" onClick={onOpen}><Plus className="size-4" />Registrar cierre</Button></div>{items.map((c) => <div key={c.id} className="rounded border p-3">{c.detalle}</div>)}</section>; }
 
 function InterestDialog({ state, clientId, options, onClose, onSubmit }) { const [form, setForm] = useState({ id: state.item?.id, clientId, marcaId: state.item?.marca_id || "", modeloId: state.item?.modelo_id || "", anioInteres: state.item?.anio_interes || "" }); const brands = options.brands.map((b) => ({ value: b.id, label: b.name })); const models = options.models.filter((m) => !form.marcaId || m.marca_id === Number(form.marcaId)).map((m) => ({ value: m.id, label: m.name })); return <BaseDialog title="Vehiculo de interes" onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Marca"><SearchableSelect value={form.marcaId} options={brands} onChange={(v) => setForm((f) => ({ ...f, marcaId: v, modeloId: "" }))} /></Field><Field label="Modelo"><SearchableSelect value={form.modeloId} options={models} onChange={(v) => setForm((f) => ({ ...f, modeloId: v }))} /></Field><Field label="Año"><Input value={form.anioInteres} onChange={(e) => setForm((f) => ({ ...f, anioInteres: e.target.value }))} /></Field></BaseDialog>; }
-function QuoteDialog({ options, onClose, onSubmit, state }) { const item = state?.item; const isQuote = Boolean(item?.precio_id || item?.precio_base); const [form, setForm] = useState({ id: isQuote ? item.id : undefined, marcaId: item?.marca_id ? String(item.marca_id) : "", modeloId: item?.modelo_id ? String(item.modelo_id) : "", precioId: item?.precio_id ? String(item.precio_id) : "", anio: item?.anio_interes || item?.anio || "", sku: item?.sku || "", colorExterno: item?.color_externo || "", colorInterno: item?.color_interno || "", discountMode: Number(item?.descuento_vehículo || 0) > 0 ? "amount" : "percentage", descuentoVehiculo: item?.descuento_vehículo || 0, descuentoVehiculoPorcentaje: item?.descuento_vehículo_porcentaje || 0 }); const brandOptions = [...new Map(options.prices.map((p) => [p.marca_id, { value: p.marca_id, label: p.marca }])).values()]; const modelOptions = [...new Map(options.prices.filter((p) => !form.marcaId || p.marca_id === Number(form.marcaId)).map((p) => [p.modelo_id, { value: p.modelo_id, label: p.modelo }])).values()]; const versionOptions = options.prices.filter((p) => (!form.marcaId || p.marca_id === Number(form.marcaId)) && (!form.modeloId || p.modelo_id === Number(form.modeloId))).map((p) => ({ value: p.id, label: p.version })); const payload = { ...form, descuentoVehiculo: form.discountMode === "amount" ? form.descuentoVehiculo : 0, descuentoVehiculoPorcentaje: form.discountMode === "percentage" ? form.descuentoVehiculoPorcentaje : 0 }; return <BaseDialog title={isQuote ? "Modificar cotizacion" : "Nueva cotizacion"} wide onClose={onClose} onSubmit={() => onSubmit(payload)}><div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4"><div className="grid gap-4 md:grid-cols-[1fr_1fr_180px]"><div className="space-y-3"><h3 className="font-bold">Selecciona un vehiculo</h3><Field label="Marca"><SearchableSelect value={form.marcaId} options={brandOptions} onChange={(v) => setForm((f) => ({ ...f, marcaId: v, modeloId: "", precioId: "" }))} /></Field><Field label="Modelo"><SearchableSelect value={form.modeloId} options={modelOptions} onChange={(v) => setForm((f) => ({ ...f, modeloId: v, precioId: "" }))} /></Field><Field label="Año"><Input value={form.anio} onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} /></Field><Field label="Version"><SearchableSelect value={form.precioId} options={versionOptions} onChange={(v) => setForm((f) => ({ ...f, precioId: v }))} /></Field></div><div className="space-y-3"><h3 className="font-bold">Detalles</h3><Field label="SKU"><Input value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} /></Field><Field label="Color externo"><Input value={form.colorExterno} onChange={(e) => setForm((f) => ({ ...f, colorExterno: e.target.value }))} /></Field><Field label="Color interno"><Input value={form.colorInterno} onChange={(e) => setForm((f) => ({ ...f, colorInterno: e.target.value }))} /></Field></div><div className="flex min-h-56 items-center justify-center rounded-xl bg-slate-100 p-5 text-center font-bold text-slate-700">Vista<br />previa</div></div></div><div className="mt-5 border-t pt-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-bold">Descuento del vehiculo</h3><label className="flex items-center gap-2 text-sm"><span>%</span><Switch checked={form.discountMode === "amount"} onCheckedChange={(checked) => setForm((f) => ({ ...f, discountMode: checked ? "amount" : "percentage" }))} /><span>{form.discountMode === "amount" ? "Monto ($)" : "Porcentaje (%)"}</span></label></div>{form.discountMode === "amount" ? <Field label="Descuento en monto ($)"><Input type="number" value={form.descuentoVehiculo} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculo: e.target.value }))} /></Field> : <Field label="Descuento en porcentaje (%)"><Input type="number" value={form.descuentoVehiculoPorcentaje} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculoPorcentaje: e.target.value }))} /></Field>}</div></BaseDialog>; }
+function QuoteDialog({ options, onClose, onSubmit, state }) { const item = state?.item; const isQuote = Boolean(item?.precio_id || item?.precio_base); const [form, setForm] = useState({ id: isQuote ? item.id : undefined, marcaId: item?.marca_id ? String(item.marca_id) : "", modeloId: item?.modelo_id ? String(item.modelo_id) : "", precioId: item?.precio_id ? String(item.precio_id) : "", anio: item?.anio_interes || item?.anio || "", sku: item?.sku || "", colorExterno: item?.color_externo || "", colorInterno: item?.color_interno || "", discountMode: Number(item?.["descuento_veh\u00edculo"] || 0) > 0 ? "amount" : "percentage", descuentoVehiculo: item?.["descuento_veh\u00edculo"] || 0, descuentoVehiculoPorcentaje: item?.descuento_vehículo_porcentaje || 0 }); const brandOptions = [...new Map(options.prices.map((p) => [p.marca_id, { value: p.marca_id, label: p.marca }])).values()]; const modelOptions = [...new Map(options.prices.filter((p) => !form.marcaId || p.marca_id === Number(form.marcaId)).map((p) => [p.modelo_id, { value: p.modelo_id, label: p.modelo }])).values()]; const versionOptions = options.prices.filter((p) => (!form.marcaId || p.marca_id === Number(form.marcaId)) && (!form.modeloId || p.modelo_id === Number(form.modeloId))).map((p) => ({ value: p.id, label: p.version })); const payload = { ...form, descuentoVehiculo: form.discountMode === "amount" ? form.descuentoVehiculo : 0, descuentoVehiculoPorcentaje: form.discountMode === "percentage" ? form.descuentoVehiculoPorcentaje : 0 }; return <BaseDialog title={isQuote ? "Modificar cotizacion" : "Nueva cotizacion"} wide onClose={onClose} onSubmit={() => onSubmit(payload)}><div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4"><div className="grid gap-4 md:grid-cols-[1fr_1fr_180px]"><div className="space-y-3"><h3 className="font-bold">Selecciona un vehiculo</h3><Field label="Marca"><SearchableSelect value={form.marcaId} options={brandOptions} onChange={(v) => setForm((f) => ({ ...f, marcaId: v, modeloId: "", precioId: "" }))} /></Field><Field label="Modelo"><SearchableSelect value={form.modeloId} options={modelOptions} onChange={(v) => setForm((f) => ({ ...f, modeloId: v, precioId: "" }))} /></Field><Field label="Año"><Input value={form.anio} onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} /></Field><Field label="Version"><SearchableSelect value={form.precioId} options={versionOptions} onChange={(v) => setForm((f) => ({ ...f, precioId: v }))} /></Field></div><div className="space-y-3"><h3 className="font-bold">Detalles</h3><Field label="Dias de validez de la cotizacion"><Input value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} /></Field><Field label="Color externo"><Input value={form.colorExterno} onChange={(e) => setForm((f) => ({ ...f, colorExterno: e.target.value }))} /></Field><Field label="Color interno"><Input value={form.colorInterno} onChange={(e) => setForm((f) => ({ ...f, colorInterno: e.target.value }))} /></Field></div><div className="flex min-h-56 items-center justify-center rounded-xl bg-slate-100 p-5 text-center font-bold text-slate-700">Vista<br />previa</div></div></div><div className="mt-5 border-t pt-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-bold">Descuento del vehiculo</h3><label className="flex items-center gap-2 text-sm"><span>%</span><Switch checked={form.discountMode === "amount"} onCheckedChange={(checked) => setForm((f) => ({ ...f, discountMode: checked ? "amount" : "percentage" }))} /><span>{form.discountMode === "amount" ? "Monto ($)" : "Porcentaje (%)"}</span></label></div>{form.discountMode === "amount" ? <Field label="Descuento en monto ($)"><Input type="number" value={form.descuentoVehiculo} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculo: e.target.value }))} /></Field> : <Field label="Descuento en porcentaje (%)"><Input type="number" value={form.descuentoVehiculoPorcentaje} onChange={(e) => setForm((f) => ({ ...f, descuentoVehiculoPorcentaje: e.target.value }))} /></Field>}</div></BaseDialog>; }
 function TestDriveDialog({ options, onClose, onSubmit }) { const [form, setForm] = useState({ fechaTestdrive: "", horaInicio: "", horaFin: "", modeloId: "", vin: "", placa: "", descripcion: "", estado: "programado" }); const models = options.models.map((m) => ({ value: m.id, label: m.name })); return <BaseDialog title="Programar Test Drive" onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Fecha"><Input type="date" value={form.fechaTestdrive} onChange={(e) => setForm((f) => ({ ...f, fechaTestdrive: e.target.value }))} /></Field><Field label="Hora inicio"><Input type="time" value={form.horaInicio} onChange={(e) => setForm((f) => ({ ...f, horaInicio: e.target.value }))} /></Field><Field label="Hora fin"><Input type="time" value={form.horaFin} onChange={(e) => setForm((f) => ({ ...f, horaFin: e.target.value }))} /></Field><Field label="Modelo"><SearchableSelect value={form.modeloId} options={models} onChange={(v) => setForm((f) => ({ ...f, modeloId: v }))} /></Field><Field label="Placa"><Input value={form.placa} onChange={(e) => setForm((f) => ({ ...f, placa: e.target.value }))} /></Field><Field label="VIN"><Input value={form.vin} onChange={(e) => setForm((f) => ({ ...f, vin: e.target.value }))} /></Field><Field label="Descripcion"><Textarea value={form.descripcion} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field></BaseDialog>; }
 function ClosureDialog({ options, onClose, onSubmit }) { const [form, setForm] = useState({ detalle: "", cierreDetalleId: "" }); const opts = [{ value: "", label: "Sin clasificacion" }, ...options.closeOptions.map((o) => ({ value: o.id, label: o.detalle }))]; return <BaseDialog title="Registrar Cierre" onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Detalle del cierre"><Textarea value={form.detalle} onChange={(e) => setForm((f) => ({ ...f, detalle: e.target.value }))} /></Field><Field label="Clasificacion"><SearchableSelect value={form.cierreDetalleId} options={opts} onChange={(v) => setForm((f) => ({ ...f, cierreDetalleId: v }))} /></Field></BaseDialog>; }
 function BaseDialog({ title, children, onClose, onSubmit, wide }) { return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className={`${wide ? "max-w-4xl" : "max-w-lg"} max-h-[92svh] overflow-y-auto bg-white text-slate-950`}><form onSubmit={(e) => { e.preventDefault(); onSubmit(); onClose(); }} className="space-y-3"><DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>{children}<DialogFooter className="sticky bottom-0 border-t bg-white pt-3"><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar</Button></DialogFooter></form></DialogContent></Dialog>; }

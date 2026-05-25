@@ -103,6 +103,63 @@ export function QuoteVehicleColorEditor({ quoteId, colorExterno, colorInterno })
   );
 }
 
+export function QuoteVehiclePricingEditor({ quoteId, precioBase, tcReferencial, diasValidez, observaciones, otrosProductos }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    precioBase: precioBase ?? "",
+    tcReferencial: tcReferencial ?? "",
+    diasValidez: diasValidez ?? "",
+    observaciones: observaciones ?? "",
+    otrosProductos: otrosProductos ?? "",
+  });
+
+  async function save() {
+    await apiFetch(`/api/cotizacion-preview/${quoteId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ type: "vehicle-pricing", ...form }),
+    });
+    setOpen(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <Button variant="outline" className="mt-4 mr-2" onClick={() => setOpen(true)}><Pencil className="size-4" />Editar datos de cotizacion</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[92svh] max-w-2xl overflow-y-auto bg-white text-slate-950">
+          <DialogHeader><DialogTitle>Datos de la cotizacion</DialogTitle></DialogHeader>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Precio base editable ($)">
+              <Input type="number" min="0" step="0.01" value={form.precioBase} onChange={(event) => setForm((prev) => ({ ...prev, precioBase: event.target.value }))} />
+            </Field>
+            <Field label="T.C. referencial">
+              <Input type="number" min="0" step="0.0001" value={form.tcReferencial} onChange={(event) => setForm((prev) => ({ ...prev, tcReferencial: event.target.value }))} />
+            </Field>
+            <Field label="Dias de validez de la cotizacion">
+              <Input type="number" min="0" step="1" value={form.diasValidez} onChange={(event) => setForm((prev) => ({ ...prev, diasValidez: event.target.value }))} />
+            </Field>
+            <div className="md:col-span-2">
+              <Field label="Observaciones">
+                <Textarea value={form.observaciones} onChange={(event) => setForm((prev) => ({ ...prev, observaciones: event.target.value }))} />
+              </Field>
+            </div>
+            <div className="md:col-span-2">
+              <Field label="Otros productos y servicios">
+                <Textarea value={form.otrosProductos} onChange={(event) => setForm((prev) => ({ ...prev, otrosProductos: event.target.value }))} />
+              </Field>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={save}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function QuotePreviewItems({ quoteId, accessories, gifts, accessoryOptions, giftOptions }) {
   const router = useRouter();
   const [dialog, setDialog] = useState(null);
