@@ -1686,7 +1686,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       pdf.rect(x, ty, w, 10, "F");
       pdf.setDrawColor(...lineColor);
       pdf.rect(x, ty, w, 10);
-      put(value, x + 2, ty + 7.4, { bold: true, size: 7, max: 45 });
+      put(value, x + 2, ty + 7.6, { bold: true, size: 7, max: 45 });
     };
 
     pdf.setDrawColor(...lineColor);
@@ -1728,9 +1728,9 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     pdf.rect(x, 89, w, 10);
     put(personTitle, x + w / 2, 96.5, { bold: true, size: 7.2, align: "center", max: 80 });
 
-    box(101, 102);
+    box(101, 103);
     section("DATOS DEL CLIENTE", 101);
-    let y = 116;
+    let y = 119;
     label("Tipo de comprobante", x + 2, y, 104); put(tipoComprobante, x + 111, y, { size: 7, max: 35 });
     y += 9;
     label("Razón social", x + 2, y, 104); put(razonSocial, x + 111, y, { size: 7, max: 58 });
@@ -1751,16 +1751,16 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     label("Distrito", x + 2, y, 104); put(distrito, x + 111, y, { size: 7, max: 24 });
     label("Provincia", x + 224, y, 72); put(provincia, x + 300, y, { size: 7, max: 24 });
     label("Departamento", x + 373, y, 86); put(region, x + 463, y, { size: 7, max: 16 });
-    y += 12;
+    y += 10;
     label("Cónyuge/Copropiedad", x + 2, y, 104); put(conyugue, x + 111, y, { size: 7, max: 42 });
     y += 9;
     label("DNI Cónyuge", x + 2, y, 104); put(documentoConyugue, x + 111, y, { size: 7, max: 24 });
 
-    outlineBox(101, 102);
+    outlineBox(101, 103);
 
-    box(205, 44.5);
+    box(205, 46.5);
     section("DATOS DEL VEHICULO", 205);
-    y = 220;
+    y = 222.7;
     label("Modelo", x + 2, y, 74); put(modelo, x + 78, y, { size: 7, max: 28 });
     label("Versión", x + 196, y, 78); put(version, x + 282, y, { size: 7, max: 36 });
     y += 9;
@@ -1773,10 +1773,10 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     label("Uso del vehículo / Placa", x + 2, y, 104); put(usoPlaca, x + 111, y, { size: 7, max: 28 });
     label("Código", x + 196, y, 78); put(codigoUnidad, x + 282, y, { size: 7, max: 22 });
 
-    outlineBox(205, 44.5);
+    outlineBox(205, 46.5);
 
-    box(252, 150);
-    section("TRANSACCION", 252);
+    box(253, 151);
+    section("TRANSACCION", 253);
     const col6 = w / 6;
     const col5 = w / 5;
     const col4 = w / 4;
@@ -1785,7 +1785,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       put(value, tx + (tw / 2), ty, { ...opts, align: "center" });
     };
     const discountLabel = (index) => discountRows[index]?.label || "";
-    y = 267;
+    y = 270.7;
     label("Precio de Lista (Valor incluye IGV)", x + 2, y, 214); put(money(d.precioUnitario || d.precio_unitario || precioLista), x + 373, y, { bold: true, size: 7.2, max: 18 });
     y += 9;
     label(discountLabel(0), x + 2, y, col6 - 2); putCentered(amountText(discountRows[0]?.value), x + col6, y, col6, { size: 7, max: 14 });
@@ -1818,11 +1818,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       y += 9;
     });
 
-    outlineBox(252, 150);
+    outlineBox(253, 151);
 
     box(405, 184);
     section("OTROS", 405);
-    y = 424;
+    y = 426;
     label("Considera GLP", x + 2, y, col8 - 2); putCentered(showGlp ? "SI" : "NO", x + col8, y, col8, { size: 7, max: 4 });
     label("Precio", x + (col8 * 2) + 1, y, col8 - 2); putCentered(showGlp ? amountText(d.glp) : "", x + (col8 * 3), y, col8, { size: 7, max: 14 });
     label("Flete", x + (col8 * 4) + 1, y, col8 - 2); putCentered(showFlete ? "SI" : "NO", x + (col8 * 5), y, col8, { size: 7, max: 4 });
