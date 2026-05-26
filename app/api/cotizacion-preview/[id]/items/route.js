@@ -43,6 +43,7 @@ export async function POST(request, { params }) {
       const precioBase = body.precioBase !== undefined && body.precioBase !== "" ? Number(body.precioBase) : null;
       const tcReferencial = body.tcReferencial !== undefined && body.tcReferencial !== "" ? Number(body.tcReferencial) : null;
       const diasValidez = body.diasValidez !== undefined && body.diasValidez !== "" ? String(body.diasValidez).trim() : null;
+      const precioTramite = body.precioTramite !== undefined && body.precioTramite !== "" ? Number(body.precioTramite) : 0;
       const observaciones = String(body.observaciones || "").trim() || null;
       const otrosProductos = String(body.otrosProductos || "").trim() || null;
       if (precioBase === null || Number.isNaN(precioBase) || precioBase < 0) {
@@ -51,9 +52,12 @@ export async function POST(request, { params }) {
       if (tcReferencial !== null && (Number.isNaN(tcReferencial) || tcReferencial < 0)) {
         return NextResponse.json({ message: "Tipo de cambio invalido." }, { status: 400 });
       }
+      if (Number.isNaN(precioTramite) || precioTramite < 0) {
+        return NextResponse.json({ message: "Precio de tramite invalido." }, { status: 400 });
+      }
       await connection.query(
-        `UPDATE ventas_cotizaciones SET precio_base=?, tc_referencial=?, sku=?, observaciones=?, otros_productos=? WHERE id=?`,
-        [precioBase, tcReferencial, diasValidez, observaciones, otrosProductos, cotizacionId]
+        `UPDATE ventas_cotizaciones SET precio_base=?, tc_referencial=?, sku=?, observaciones=?, otros_productos=?, precio_tramite=? WHERE id=?`,
+        [precioBase, tcReferencial, diasValidez, observaciones, otrosProductos, precioTramite, cotizacionId]
       );
       return NextResponse.json({ ok: true });
     }

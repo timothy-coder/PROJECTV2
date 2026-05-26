@@ -103,13 +103,14 @@ export function QuoteVehicleColorEditor({ quoteId, colorExterno, colorInterno })
   );
 }
 
-export function QuoteVehiclePricingEditor({ quoteId, precioBase, tcReferencial, diasValidez, observaciones, otrosProductos }) {
+export function QuoteVehiclePricingEditor({ quoteId, precioBase, tcReferencial, diasValidez, observaciones, otrosProductos, precioTramite }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     precioBase: precioBase ?? "",
     tcReferencial: tcReferencial ?? "",
     diasValidez: diasValidez ?? "",
+    precioTramite: precioTramite ?? "",
     observaciones: observaciones ?? "",
     otrosProductos: otrosProductos ?? "",
   });
@@ -138,6 +139,9 @@ export function QuoteVehiclePricingEditor({ quoteId, precioBase, tcReferencial, 
             </Field>
             <Field label="Dias de validez de la cotizacion">
               <Input type="number" min="0" step="1" value={form.diasValidez} onChange={(event) => setForm((prev) => ({ ...prev, diasValidez: event.target.value }))} />
+            </Field>
+            <Field label="Precio tramite ($)">
+              <Input type="number" min="0" step="0.01" value={form.precioTramite} onChange={(event) => setForm((prev) => ({ ...prev, precioTramite: event.target.value }))} />
             </Field>
             <div className="md:col-span-2">
               <Field label="Observaciones">

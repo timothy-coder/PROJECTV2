@@ -71,6 +71,7 @@ export default async function Page({ params }) {
     const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
     const accessoriesGross = accessories.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
     const giftsGross = gifts.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
+    const quoteTramite = Number(quote.precio_tramite || 0);
     const accessoriesDiscount = accessories.reduce((sum, item) => sum + Number(item.descuento_monto || 0), 0);
     const giftsDiscount = gifts.reduce((sum, item) => sum + Number(item.descuento_monto || 0), 0);
     const itemDiscounts = accessoriesDiscount + giftsDiscount;
@@ -79,7 +80,7 @@ export default async function Page({ params }) {
     const giftsNet = giftsTotal / 1.18;
     const subtotalNet = vehicleNet + accessoriesNet + giftsNet;
     const totalTax = vehicleFinal - vehicleNet + accessoriesTotal - accessoriesNet + giftsTotal - giftsNet;
-    const grandTotal = vehicleFinal + accessoriesTotal + giftsTotal;
+    const grandTotal = vehicleFinal + accessoriesTotal + giftsTotal + quoteTramite;
     return (
       <main className="min-h-full bg-slate-50 p-4 text-slate-950">
         <div id="quote-preview-root" className="mx-auto max-w-6xl space-y-5">
@@ -140,6 +141,7 @@ export default async function Page({ params }) {
               <InfoBox label="Entrega (dí­as)" value={quote.tiempo_entrega_dias || 0} />
               <InfoBox label="$ Precio editable" value={money(quoteBasePrice)} orange />
               <InfoBox label="T.C. Referencial" value={quote.tc_referencial ? Number(quote.tc_referencial).toFixed(4) : "-"} />
+              <InfoBox label="$ Precio tramite" value={money(quoteTramite)} orange />
             </div>
             {vehicleDiscount ? <div className="mt-5 rounded-lg border border-orange-300 bg-orange-100 p-3 text-sm font-bold text-orange-900">Descuento aplicado: -{money(vehicleDiscount)} ({Number(quote["descuento_veh\u00edculo_porcentaje"] || 0).toFixed(2)}%)</div> : null}
             <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehí­culo:</p><p className="text-xl font-bold text-blue-800">{money(vehicleFinal)}</p></div>
@@ -150,6 +152,7 @@ export default async function Page({ params }) {
               diasValidez={quote.sku || ""}
               observaciones={quote.observaciones || ""}
               otrosProductos={quote.otros_productos || ""}
+              precioTramite={quoteTramite}
             />
             <QuoteVehicleDiscountEditor quoteId={id} discountAmount={Number(quote["descuento_veh\u00edculo"] || 0)} discountPercentage={Number(quote["descuento_veh\u00edculo_porcentaje"] || 0)} />
           </section>
@@ -175,6 +178,7 @@ export default async function Page({ params }) {
               
               <SummaryBox label="Accesorios (c/IGV)" sub={`c/desc: ${money(accessoriesTotal)}`} value={money(accessoriesGross)} />
               <SummaryBox label="Regalos (c/IGV)" sub={`c/desc: ${money(giftsTotal)}`} value={money(giftsGross)} />
+              <SummaryBox label="Tramite" value={money(quoteTramite)} />
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <SummaryBox label="Desc. Vehiculo" value={discountMoney(vehicleDiscount)} danger />

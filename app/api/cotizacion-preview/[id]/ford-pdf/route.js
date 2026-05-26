@@ -260,7 +260,8 @@ function drawQuotePage(doc, data) {
   const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
   const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const total = vehicleTotal + accessoriesTotal + giftsTotal;
+  const tramites = Number(quote.precio_tramite || 0);
+  const total = vehicleTotal + accessoriesTotal + giftsTotal + tramites;
 
   let y = 370;
   y = priceRow(doc, y, "DESCRIPCION", `${quote.modelo} ${quote.version}`, "");
@@ -268,6 +269,7 @@ function drawQuotePage(doc, data) {
   y = priceRow(doc, y, "DSCTO.", "", money(vehicleDiscount));
   y = priceRow(doc, y, "ACCESORIOS", "", money(accessoriesTotal));
   y = priceRow(doc, y, "REGALOS", "", money(giftsTotal));
+  y = priceRow(doc, y, "TRAMITES", "", money(tramites));
   y = priceRow(doc, y, "TOTAL EN DOLARES", "", money(total), true);
 
   drawBankTable(doc, x, y + 18);
@@ -355,7 +357,7 @@ function drawQuotePageV2Legacy(doc, data) {
   const vehicleTotal = Math.max(basePrice - vehicleDiscount, 0);
   const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const tramites = Number(quote.tramites || quote.tramite || 100);
+  const tramites = Number(quote.precio_tramite || 0);
   const total = vehicleTotal + accessoriesTotal + giftsTotal + tramites;
 
   let y = 348;
@@ -759,7 +761,7 @@ function getQuoteTotals(quote, accessories = [], gifts = []) {
   const finalPrice = Math.max(price - discount, 0);
   const accessoriesTotal = accessories.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const giftsTotal = gifts.reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const tramites = Number(quote.tramites || quote.tramite || 100);
+  const tramites = Number(quote.precio_tramite || 0);
   return {
     price,
     discount,
