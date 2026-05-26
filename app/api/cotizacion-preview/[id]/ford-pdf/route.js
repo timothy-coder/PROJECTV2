@@ -34,7 +34,7 @@ function dateLongText(value = new Date()) {
 
 function normalizeExchangeRate(value) {
   const cleaned = String(value || "").trim().replace(/[^\d.,]/g, "");
-  return cleaned || "3.55";
+  return cleaned;
 }
 
 export async function GET(request, { params }) {
@@ -417,9 +417,8 @@ function drawCommercialQuotePageOne(doc, data) {
   doc.text("Fecha", 392, 72, { width: 86 });
   doc.text(dateText(quote.created_at), 504, 72, { width: 52, align: "right" });
 
-  doc.fontSize(8.6).text(String(quote.modelo || "-").toUpperCase(), x + 2, 132, { width: 120 });
-  doc.text(`${quote.marca || ""} ${quote.version || ""}`.trim().toUpperCase() || "-", x + 94, 132, { width: 210 });
-  doc.text(String(quote.anio || ""), x + 250, 132, { width: 70, align: "center" });
+  const vehicleTitle = [quote.marca, quote.modelo, quote.version, quote.anio].filter(Boolean).join(" ").toUpperCase();
+  doc.fontSize(8.6).text(vehicleTitle || "-", x + 2, 132, { width: w - 4 });
   quoteBand(doc, x, 146, w, "Condiciones");
 
   if (hero?.href) drawImageOrLink(doc, getQuoteItemHref(hero, origin), x + 40, 188, 205, 105, "center", 205);
@@ -437,15 +436,20 @@ function drawCommercialQuotePageOne(doc, data) {
   quoteBand(doc, x, 304, w, "Especificaciones Técnicas");
   drawTechnicalMiniGrid(doc, technicalItems, x, 319, w);
 
-  let y = 396;
+  let y = 404;
   sections.forEach((section) => {
     quoteBand(doc, x, y, w, section.name);
     y += 16;
     if (section.items.length) {
-      drawEquipmentColumns(doc, section.items, x, y, w);
-      y += 72;
+      if (normalizeSpecName(section.name).includes("DIMENSIONES")) {
+        drawTechnicalMiniGrid(doc, section.items, x, y, w);
+        y += 84;
+      } else {
+        drawEquipmentColumns(doc, section.items, x, y, w);
+        y += 72;
+      }
     } else {
-      y += 72;
+      y += normalizeSpecName(section.name).includes("DIMENSIONES") ? 84 : 72;
     }
   });
 }
@@ -471,16 +475,17 @@ function drawCommercialQuotePageTwo(doc, data) {
   let y = 284;
   y = drawSmallInfoSection(doc, x, y, w, "Mantenimiento", "Es según el plan de mantenimiento de la cartilla del fabricante descrito en el manual de garantía.");
   y = drawSmallInfoSection(doc, x, y, w, "Garantía", getQuoteWarrantyText(quote));
-  y = drawSmallInfoSection(doc, x, y, w, "Observaciones", quote.observaciones || "Precio incluye tarjeta y placa más láminas de seguridad y kit de protección");
+  y = drawSmallInfoSection(doc, x, y, w, "Observaciones", quote.observaciones || "");
   y = drawSmallInfoSection(doc, x, y, w, "Validez de la cotización", getQuoteValidityText(quote));
-  y = drawSmallInfoSection(doc, x, y, w, "Otros productos y servicios", quote.otros_productos || "Seguro vehicular");
+  y = drawSmallInfoSection(doc, x, y, w, "Otros productos y servicios", quote.otros_productos || "");
   y = drawSmallInfoSection(doc, x, y, w, "Servicio Postventa", "Contamos con un variado stock de repuestos y una eficiente infraestructura de servicio nuestro moderno Centro de Servicio.");
 
   doc.fontSize(13).text("¡¡¡ SOLICITE SU PRUEBA DE MANEJO !!!", x, 566, { width: w, align: "center" });
   doc.fontSize(7).text("Sin otro en particular, quedamos de Usted.", x + 48, 612, { width: 230 });
   doc.text("Atentamente", x + 48, 624, { width: 230 });
   drawImageOrLink(doc, "/whatsapp.png", x + 250, 682, 58, 24, "center", 58);
-  doc.fontSize(8.5).text(advisorName, x + 320, 668, { width: 160 });
+  doc.font(doc._registeredAutography ? "Autography" : "Helvetica-Oblique").fontSize(17).text(advisorName, x + 320, 654, { width: 160 });
+  doc.font("Helvetica-Bold").fontSize(8.5);
   doc.text(`Celular: ${advisorContact.phone || ""}`, x + 320, 680, { width: 160 });
   doc.text(`Correo: ${advisorContact.email || ""}`, x + 320, 692, { width: 190 });
 }
@@ -791,11 +796,11 @@ function drawCommercialPriceBox(doc, x, y, w, totals) {
 }
 
 function drawTechnicalMiniGrid(doc, items, x, y, w) {
-  const rows = 8;
+  const rows = 10;
   const pairW = w / 2;
   const labelW = 132;
-  const rowH = 9;
-  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.7);
+  const rowH = 7.5;
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.4);
   items.slice(0, rows * 2).forEach((item, index) => {
     const pair = Math.floor(index / rows);
     const row = index % rows;
@@ -812,8 +817,8 @@ function drawEquipmentColumns(doc, items, x, y, w) {
   const pairW = w / pairs;
   const labelW = pairW - 23;
   const valueW = 18;
-  const rowH = 5.2;
-  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(4.2);
+  const rowH = 4.7;
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5);
   let cursor = 0;
   items.slice(0, rows * pairs).forEach((item) => {
     if (cursor >= rows * pairs) return;
@@ -897,7 +902,7 @@ function getQuoteWarrantyText(quote = {}) {
 
 function getQuoteValidityText(quote = {}) {
   const days = String(quote.sku || "").trim();
-  return days ? `${days} días calendario a partir de la fecha` : "5 días calendario a partir de la fecha";
+  return days ? `${days} días calendario a partir de la fecha` : "";
 }
 
 function getMainTechnicalItems(groups) {
@@ -906,7 +911,7 @@ function getMainTechnicalItems(groups) {
   const picked = preferred
     .map((name) => all.find((item) => normalizeSpecName(item.key).includes(name)))
     .filter(Boolean);
-  return [...picked, ...all.filter((item) => !picked.includes(item))].slice(0, 16);
+  return [...picked, ...all.filter((item) => !picked.includes(item))].slice(0, 20);
 }
 
 function getCommercialSpecSections(groups) {

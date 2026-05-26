@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Car, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Save, UserRound } from "lucide-react";
+import { Calendar, Car, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Save, UserRound, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -24,15 +24,17 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [createdQuote, setCreatedQuote] = useState(null);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const quoteData = usePostventaQuotes(quoteType);
 
   if (loading || !data) return <div className="p-4">Cargando...</div>;
 
-  const { opportunity, stages, details, activities, appointments = [], appointmentOptions = {}, currentUser } = data;
+  const { opportunity, stages, details, activities, appointments = [], appointmentOptions = {}, closings = [], closures = [], currentUser } = data;
   const currentIndex = stages.findIndex((stage) => Number(stage.id) === Number(opportunity.etapaId));
   const progress = Math.round(((Math.max(currentIndex, 0) + 1) / Math.max(stages.length, 1)) * 100);
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre?.toLowerCase() === "nuevo");
+  const isClosed = String(opportunity.etapaNombre || "").toLowerCase().includes("cerrad");
 
   async function addActivity() {
     if (!activity.trim()) return;
@@ -107,6 +109,11 @@ export default function PostventaOpportunityDetailPage({ id }) {
           canCreate={Boolean(currentUser.canCreateAppointment)}
           onCreate={() => setAppointmentOpen(true)}
         />
+        <CloseSection
+          closures={closures}
+          isClosed={isClosed}
+          onOpen={() => setCloseOpen(true)}
+        />
 
         <section className="my-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <h2 className="mb-3 flex gap-2 font-bold"><MessageSquare className="size-5" />Registrar nueva actividad</h2>
@@ -166,6 +173,17 @@ export default function PostventaOpportunityDetailPage({ id }) {
             }}
           />
         ) : null}
+        {closeOpen ? (
+          <CloseOpportunityDialog
+            options={closings}
+            onClose={() => setCloseOpen(false)}
+            onSubmit={async (payload) => {
+              await save({ action: "close", ...payload });
+              setCloseOpen(false);
+              toast.success("Oportunidad cerrada");
+            }}
+          />
+        ) : null}
       </div>
     </TooltipProvider>
   );
@@ -175,6 +193,73 @@ export default function PostventaOpportunityDetailPage({ id }) {
     await navigator.clipboard?.writeText(createdQuote.link);
     toast.success("Enlace publico copiado");
   }
+}
+
+function CloseSection({ closures, isClosed, onOpen }) {
+  return (
+    <section className="mb-4 rounded-lg border border-red-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-red-800"><XCircle className="size-5" />Cierre de oportunidad</h2>
+          <p className="text-sm text-slate-500">Registra el motivo de cierre y mueve la etapa a Cerrada.</p>
+        </div>
+        <Button type="button" variant={isClosed ? "outline" : "destructive"} onClick={onOpen}>
+          {isClosed ? "Agregar cierre" : "Cerrar oportunidad"}
+        </Button>
+      </div>
+      <div className="mt-4 space-y-2">
+        {closures.map((item) => (
+          <div key={item.id} className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm">
+            <p className="font-bold text-red-800">{item.detalle || item.motivo || "Cierre registrado"}</p>
+            {item.motivo ? <p className="text-xs text-red-700">Motivo: {item.motivo}</p> : null}
+            <p className="mt-1 text-xs text-slate-500">{item.userName} - {new Date(item.createdAt).toLocaleString("es-PE")}</p>
+          </div>
+        ))}
+        {!closures.length ? <div className="rounded-lg border border-dashed p-4 text-center text-sm text-slate-500">No hay cierre registrado.</div> : null}
+      </div>
+    </section>
+  );
+}
+
+function CloseOpportunityDialog({ options, onClose, onSubmit }) {
+  const [form, setForm] = useState({ cierreDetalleId: "", detalle: "" });
+  const closeOptions = options.map((item) => ({ value: item.id, label: item.detalle }));
+  const selected = options.find((item) => String(item.id) === String(form.cierreDetalleId));
+  const canSave = Boolean(form.cierreDetalleId || form.detalle.trim());
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle>Cerrar oportunidad</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <Field label="Motivo de cierre">
+            <SearchableSelect
+              value={form.cierreDetalleId}
+              options={closeOptions}
+              placeholder="Seleccionar motivo"
+              onChange={(cierreDetalleId) => {
+                const nextSelected = options.find((item) => String(item.id) === String(cierreDetalleId));
+                setForm((current) => ({ ...current, cierreDetalleId, detalle: current.detalle || nextSelected?.detalle || "" }));
+              }}
+            />
+          </Field>
+          <Field label="Detalle">
+            <Textarea
+              className="min-h-24"
+              value={form.detalle}
+              placeholder={selected?.detalle || "Describe el motivo de cierre..."}
+              onChange={(event) => setForm((current) => ({ ...current, detalle: event.target.value }))}
+            />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button type="button" disabled={!canSave} onClick={() => onSubmit({ ...form, detalle: form.detalle.trim() || selected?.detalle || "Cierre registrado" })}>Aplicar cierre</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function QuoteSection({ canCreate, createdQuote, onCopy, onOpen, quoteType, setQuoteType }) {

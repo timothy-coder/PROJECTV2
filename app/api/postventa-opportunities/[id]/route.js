@@ -24,6 +24,17 @@ function canAssign(user, permission) {
   return Boolean(hasPerm(user.permissions, [permission, "asignar"]) || hasPerm(user.permissions, [permission, "viewall"]));
 }
 
+async function closedStageId(connection) {
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM configuracion_posventa_etapasconversion
+     WHERE LOWER(nombre) IN ('cerrada', 'cerrado')
+     ORDER BY CASE LOWER(nombre) WHEN 'cerrada' THEN 0 WHEN 'cerrado' THEN 1 ELSE 2 END
+     LIMIT 1`
+  );
+  return rows[0]?.id || null;
+}
+
 function datePart(value) {
   if (!value) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -113,6 +124,16 @@ export async function GET(_request, { params }) {
     const [workshops] = await connection.query(`SELECT id,centro_id,nombre FROM configuracion_talleres ORDER BY nombre ASC`);
     const [origins] = await connection.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await connection.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
+    const [closingOptions] = await connection.query(`SELECT id,detalle FROM configuracion_posventas_cierres_detalle ORDER BY id DESC`);
+    const [closures] = await connection.query(
+      `SELECT c.id, c.detalle, c.cierre_detalle_id, c.created_at, u.fullname AS user_name, cd.detalle AS motivo
+       FROM posventa_oportunidades_cierres c
+       INNER JOIN administracion_usuarios u ON u.id=c.created_by
+       LEFT JOIN configuracion_posventas_cierres_detalle cd ON cd.id=c.cierre_detalle_id
+       WHERE c.oportunidad_id=?
+       ORDER BY c.created_at DESC, c.id DESC`,
+      [id]
+    );
 
     return NextResponse.json({
       currentUser: {
@@ -178,6 +199,15 @@ export async function GET(_request, { params }) {
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
       },
+      closings: closingOptions.map((row) => ({ id: row.id, detalle: row.detalle || "" })),
+      closures: closures.map((row) => ({
+        id: row.id,
+        detalle: row.detalle || "",
+        motivo: row.motivo || "",
+        cierreDetalleId: row.cierre_detalle_id,
+        userName: row.user_name,
+        createdAt: row.created_at,
+      })),
       activities: activities.map((row) => ({
         id: row.id,
         etapaId: row.etapasconversion_id,
@@ -219,6 +249,30 @@ export async function POST(request, { params }) {
         `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
          VALUES (?, ?, ?, ?)`,
         [id, Number(body.etapaId), body.detalle || "Cambio de etapa", user.id]
+      );
+    }
+    if (body.action === "close") {
+      const closeDetailId = body.cierreDetalleId ? Number(body.cierreDetalleId) : null;
+      const closeDetail = String(body.detalle || "").trim();
+      if (!closeDetailId && !closeDetail) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Selecciona o escribe un motivo de cierre." }, { status: 400 });
+      }
+      const closeStageId = await closedStageId(connection);
+      if (!closeStageId) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No existe una etapa Cerrada/Cerrado configurada." }, { status: 400 });
+      }
+      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [closeStageId, id]);
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_cierres (oportunidad_id, detalle, cierre_detalle_id, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, closeDetail || "Cierre registrado", closeDetailId, user.id]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, closeStageId, `Oportunidad cerrada: ${closeDetail || "Cierre registrado"}`, user.id]
       );
     }
     if (body.action === "activity") {
