@@ -12,8 +12,14 @@ const DEFAULT_LIMIT = 10000;
 
 function clampNumber(value, fallback, max) {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(Math.floor(parsed), max);
+}
+
+function clampOffset(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
 }
 
 function hasPowerBiToken(request) {
@@ -234,7 +240,7 @@ export async function GET(request) {
 
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
-    const offset = clampNumber(url.searchParams.get("offset"), 0, Number.MAX_SAFE_INTEGER);
+    const offset = clampOffset(url.searchParams.get("offset"));
     const [rows] = await pool.query(`${POWERBI_QUERY} LIMIT ${limit} OFFSET ${offset}`);
 
     return NextResponse.json({
