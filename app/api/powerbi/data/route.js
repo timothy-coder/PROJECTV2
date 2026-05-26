@@ -224,8 +224,6 @@ ORDER BY o.created_at DESC, o.id DESC
 
 export async function GET(request) {
   try {
-    let authMethod = "session";
-
     if (!hasPowerBiToken(request)) {
       const user = await getCurrentUser();
       if (!user) {
@@ -234,8 +232,6 @@ export async function GET(request) {
       if (!canReadPowerBiData(user)) {
         return NextResponse.json({ message: "No tienes permiso para consultar esta data." }, { status: 403 });
       }
-    } else {
-      authMethod = "token";
     }
 
     const url = new URL(request.url);
@@ -243,15 +239,7 @@ export async function GET(request) {
     const offset = clampOffset(url.searchParams.get("offset"));
     const [rows] = await pool.query(`${POWERBI_QUERY} LIMIT ${limit} OFFSET ${offset}`);
 
-    return NextResponse.json({
-      data: rows,
-      meta: {
-        count: rows.length,
-        limit,
-        offset,
-        authMethod,
-      },
-    });
+    return NextResponse.json(rows);
   } catch (error) {
     console.error("Error loading Power BI data:", error);
     return NextResponse.json({ message: "No se pudo cargar la data para Power BI." }, { status: 500 });
