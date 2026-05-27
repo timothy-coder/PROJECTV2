@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 const MAP = {
   ventas: {
@@ -7,6 +9,7 @@ const MAP = {
     stages: "ventas_etapasconversion",
     times: "ventas_configuracion_estados_tiempo",
     closings: "configuracion_ventas_cierres_detalle",
+    hours: "configuracion_horas",
   },
   posventa: {
     schedule: "configuracion_posventa_citas_centro",
@@ -24,6 +27,9 @@ export async function GET(_request, { params }) {
   const { scope } = await params;
   const cfg = MAP[scope];
   if (!cfg) return NextResponse.json({ message: "Scope invalido." }, { status: 404 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ message: "No autenticado." }, { status: 401 });
+  if (!canReadSettings(user, scope)) return NextResponse.json({ message: "No tienes permiso para ver esta configuracion." }, { status: 403 });
   try {
     const [centers] = await pool.query(`SELECT id, nombre FROM configuracion_centros ORDER BY nombre ASC`);
     const [scheduleRows] = await pool.query(
@@ -41,12 +47,18 @@ export async function GET(_request, { params }) {
       const [closingRows] = await pool.query(`SELECT id, detalle, created_at, updated_at FROM ${cfg.closings} ORDER BY id DESC`);
       closings = closingRows.map((row) => ({ id: row.id, detalle: row.detalle, createdAt: row.created_at, updatedAt: row.updated_at }));
     }
+    let hours = [];
+    if (cfg.hours) {
+      const [hourRows] = await pool.query(`SELECT id, TIME_FORMAT(hora, '%H:%i') AS hora FROM ${cfg.hours} ORDER BY hora ASC`);
+      hours = hourRows.map((row) => ({ id: row.id, hora: row.hora }));
+    }
     return NextResponse.json({
       centers: centers.map((row) => ({ id: row.id, nombre: row.nombre })),
       schedules: scheduleRows.map((row) => ({ id: row.id, centroId: row.centro_id, centroNombre: row.centro_nombre, slotMinutes: row.slot_minutes, week: parseJson(row.week_json, defaultWeek()) })),
       stages: stageRows.map((row) => ({ id: row.id, nombre: row.nombre, descripcion: row.descripcion, color: row.color || "#2563eb", sortOrder: row.sort_order ?? row.id, isActive: Boolean(row.is_active), createdAt: row.created_at })),
       times: timeRows.map((row) => ({ id: row.id, nombre: row.nombre, estado: row.estado, minutosDesde: row.minutos_desde, minutosHasta: row.minutos_hasta, colorHexadecimal: row.color_hexadecimal, descripcion: row.descripcion || "", activo: Boolean(row.activo), createdAt: row.created_at, updatedAt: row.updated_at })),
       closings,
+      hours,
     });
   } catch (error) {
     console.error("Error loading sales settings:", error);
@@ -58,8 +70,11 @@ export async function POST(request, { params }) {
   const { scope } = await params;
   const cfg = MAP[scope];
   if (!cfg) return NextResponse.json({ message: "Scope invalido." }, { status: 404 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ message: "No autenticado." }, { status: 401 });
   try {
     const body = await request.json();
+    if (!canWriteSettings(user, scope, body)) return NextResponse.json({ message: "No tienes permiso para guardar esta configuracion." }, { status: 403 });
     if (body.action === "delete") {
       await deleteResource(cfg, body);
     } else if (body.resource === "stage-order") {
@@ -78,6 +93,8 @@ export async function POST(request, { params }) {
       await upsertTime(cfg.times, body);
     } else if (body.resource === "closing" && cfg.closings) {
       await upsertClosing(cfg.closings, body);
+    } else if (body.resource === "hour" && cfg.hours) {
+      await upsertHour(cfg.hours, body);
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -119,11 +136,40 @@ async function upsertClosing(table, body) {
   if (body.id) await pool.query(`UPDATE ${table} SET detalle=? WHERE id=?`, [body.detalle, Number(body.id)]);
   else await pool.query(`INSERT INTO ${table} (detalle) VALUES (?)`, [body.detalle]);
 }
+async function upsertHour(table, body) {
+  const hora = String(body.hora || "").trim();
+  if (!/^\d{2}:\d{2}$/.test(hora)) throw new Error("Hora invalida");
+  if (body.id) await pool.query(`UPDATE ${table} SET hora=? WHERE id=?`, [`${hora}:00`, Number(body.id)]);
+  else await pool.query(`INSERT INTO ${table} (hora) VALUES (?)`, [`${hora}:00`]);
+}
 async function deleteResource(cfg, body) {
-  const tables = { stage: cfg.stages, time: cfg.times, closing: cfg.closings };
+  const tables = { stage: cfg.stages, time: cfg.times, closing: cfg.closings, hour: cfg.hours };
   const table = tables[body.resource];
   if (table) await pool.query(`DELETE FROM ${table} WHERE id=?`, [Number(body.id)]);
 }
 function defaultWeek() {
   return ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].reduce((acc, day) => ({ ...acc, [day]: { active: true, start: "08:00", end: "18:00" } }), {});
+}
+
+function canReadSettings(user, scope) {
+  const permissions = user?.permissions || {};
+  if (scope === "ventas") {
+    return (
+      hasPerm(permissions, ["configagenda", "view"]) ||
+      hasPerm(permissions, ["configuracion_horas", "view"]) ||
+      hasPerm(permissions, ["config_ventas_plantillas", "view"])
+    );
+  }
+  return hasPerm(permissions, ["configcotizacion", "view"]) || hasPerm(permissions, ["config_posventa_cierres", "view"]);
+}
+
+function canWriteSettings(user, scope, body) {
+  const permissions = user?.permissions || {};
+  const resource = body?.resource;
+  const action = body?.action === "delete" ? "delete" : body?.id ? "edit" : "create";
+  if (scope === "ventas" && resource === "hour") return hasPerm(permissions, ["configuracion_horas", action]);
+  if (scope === "posventa" && resource === "closing") return hasPerm(permissions, ["config_posventa_cierres", action]);
+  const baseKey = scope === "ventas" ? "configagenda" : "configcotizacion";
+  const baseAction = resource === "stage-order" || resource === "schedule" ? "edit" : action;
+  return hasPerm(permissions, [baseKey, baseAction]);
 }

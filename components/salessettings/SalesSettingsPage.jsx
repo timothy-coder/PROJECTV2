@@ -25,44 +25,54 @@ const days = [
 export default function SalesSettingsPage({ scope, userPermissions }) {
   const data = useSalesSettings(scope);
   const permKey = scope === "ventas" ? "configagenda" : "configcotizacion";
-  const [tab, setTab] = useState("schedule");
   const [dialog, setDialog] = useState({ open: false, resource: "", item: null });
-  const canView = hasPerm(userPermissions, [permKey, "view"]);
+  const canViewBase = hasPerm(userPermissions, [permKey, "view"]);
   const canCreate = hasPerm(userPermissions, [permKey, "create"]);
   const canEdit = hasPerm(userPermissions, [permKey, "edit"]);
   const canDelete = hasPerm(userPermissions, [permKey, "delete"]);
+  const hourPermKey = "configuracion_horas";
+  const canViewHours = scope === "ventas" && hasPerm(userPermissions, [hourPermKey, "view"]);
+  const hourPerms = {
+    canCreate: hasPerm(userPermissions, [hourPermKey, "create"]),
+    canEdit: hasPerm(userPermissions, [hourPermKey, "edit"]),
+    canDelete: hasPerm(userPermissions, [hourPermKey, "delete"]),
+  };
   const closePermKey = scope === "ventas" ? permKey : "config_posventa_cierres";
-  const canViewClosings = hasPerm(userPermissions, [closePermKey, "view"]) || canView;
+  const canViewClosings = hasPerm(userPermissions, [closePermKey, "view"]) || canViewBase;
   const closingPerms = {
     canCreate: hasPerm(userPermissions, [closePermKey, "create"]) || canCreate,
     canEdit: hasPerm(userPermissions, [closePermKey, "edit"]) || canEdit,
     canDelete: hasPerm(userPermissions, [closePermKey, "delete"]) || canDelete,
   };
-  const canViewTemplates = scope === "ventas" && (hasPerm(userPermissions, ["config_ventas_plantillas", "view"]) || canView);
+  const canViewTemplates = scope === "ventas" && (hasPerm(userPermissions, ["config_ventas_plantillas", "view"]) || canViewBase);
   const templatePerms = {
     canCreate: hasPerm(userPermissions, ["config_ventas_plantillas", "create"]) || canCreate,
     canEdit: hasPerm(userPermissions, ["config_ventas_plantillas", "edit"]) || canEdit,
     canDelete: hasPerm(userPermissions, ["config_ventas_plantillas", "delete"]) || canDelete,
   };
   const tabs = [
-    { id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" },
-    { id: "stages", label: "Etapas de Conversion" },
-    { id: "times", label: "Tiempos" },
+    ...(canViewBase ? [{ id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" }] : []),
+    ...(canViewHours ? [{ id: "hours", label: "Horas" }] : []),
+    ...(canViewBase ? [{ id: "stages", label: "Etapas de Conversion" }, { id: "times", label: "Tiempos" }] : []),
     ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
     ...(canViewTemplates ? [{ id: "templates", label: "Plantillas" }] : []),
   ];
+  const [tab, setTab] = useState(tabs[0]?.id || "schedule");
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id;
+  const canView = canViewBase || canViewHours || canViewClosings || canViewTemplates;
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
   return (
     <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
       <h1 className="mb-4 text-2xl font-bold">Configuracion del sistema</h1>
       <div className="mb-3 overflow-x-auto rounded-lg bg-slate-100 p-1">
-        <div className="flex min-w-max gap-1">{tabs.map((item) => <button key={item.id} className={cn("h-8 rounded-md px-8 text-xs font-semibold text-slate-600", tab === item.id && "bg-white text-slate-950 shadow-sm")} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
+        <div className="flex min-w-max gap-1">{tabs.map((item) => <button key={item.id} className={cn("h-8 rounded-md px-8 text-xs font-semibold text-slate-600", activeTab === item.id && "bg-white text-slate-950 shadow-sm")} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
       </div>
-      {tab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
-      {tab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
-      {tab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
-      {tab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
-      {tab === "templates" ? <TemplatesTab perms={templatePerms} /> : null}
+      {activeTab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
+      {activeTab === "hours" ? <HoursTab data={data} canCreate={hourPerms.canCreate} canEdit={hourPerms.canEdit} canDelete={hourPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "hour", item })} /> : null}
+      {activeTab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
+      {activeTab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
+      {activeTab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
+      {activeTab === "templates" ? <TemplatesTab perms={templatePerms} /> : null}
       {dialog.open ? <EntityDialog state={dialog} onClose={() => setDialog({ open: false, resource: "", item: null })} onSubmit={async (payload) => { await data.save({ ...payload, resource: dialog.resource }); setDialog({ open: false, resource: "", item: null }); }} /> : null}
     </div>
   );
@@ -294,6 +304,24 @@ function StageTab({ data, canCreate, canEdit, canDelete, openDialog }) {
   const toggleStage = (item, checked) => data.save({ resource: "stage", ...item, isActive: checked });
   return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={Workflow} title="Etapas de Conversion" subtitle="Arrastra para reordenar las etapas en el flujo" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nueva Etapa</Button> : null} /><div className="mb-4 grid gap-3 md:grid-cols-3"><Stat label="Total de Etapas" value={data.stages.length} /><Stat label="Etapas Activas" value={active} tone="green" /><Stat label="Inactivas" value={data.stages.length - active} tone="slate" /></div><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={stageIds} strategy={verticalListSortingStrategy}><List>{data.stages.map((item) => <StageRow key={item.id} item={item} canDrag={canEdit} canEdit={canEdit} canDelete={canDelete} onToggle={(checked) => toggleStage(item, checked)} onEdit={() => openDialog(item)} onDelete={() => data.delete("stage", item.id)} />)}</List></SortableContext></DndContext></section>;
 }
+function HoursTab({ data, canCreate, canEdit, canDelete, openDialog }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <Header icon={Clock} title="Horas disponibles" subtitle="Configura las horas que se podran usar en la agenda de ventas" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nueva hora</Button> : null} />
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <Stat label="Total de Horas" value={data.hours.length} />
+        <Stat label="Primera Hora" value={data.hours[0]?.hora || "-"} tone="green" />
+        <Stat label="Ultima Hora" value={data.hours[data.hours.length - 1]?.hora || "-"} tone="slate" />
+      </div>
+      <List>
+        {data.hours.map((item) => (
+          <Row key={item.id} title={item.hora} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("hour", item.id) : null} />
+        ))}
+        {!data.hours.length ? <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No hay horas registradas.</div> : null}
+      </List>
+    </section>
+  );
+}
 function TimeTab({ data, canCreate, canEdit, canDelete, openDialog }) {
   return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={Clock} title="Estados de Tiempo" subtitle="Configura los rangos de tiempo y codigos de color" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo Estado</Button> : null} /><div className="mb-4 grid gap-3 md:grid-cols-3"><Stat label="Total de Estados" value={data.times.length} /><Stat label="Rango Minimo" value={data.times.length ? Math.min(...data.times.map((t) => t.minutosDesde)) : 0} /><Stat label="Rango Maximo" value={data.times.length ? Math.max(...data.times.map((t) => t.minutosHasta)) : 0} /></div><List>{data.times.map((item) => <Row key={item.id} title={item.nombre} subtitle={`${item.minutosDesde} a ${item.minutosHasta} min - ${item.descripcion || ""}`} badges={[item.estado, item.colorHexadecimal]} color={item.colorHexadecimal} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("time", item.id) : null} />)}</List></section>;
 }
@@ -453,9 +481,11 @@ function templateRevisionKey(template) {
 function EntityDialog({ state, onClose, onSubmit }) {
   const isTime = state.resource === "time";
   const isClosing = state.resource === "closing";
+  const isHour = state.resource === "hour";
   const [form, setForm] = useState({
     id: state.item?.id,
     nombre: state.item?.nombre || "",
+    hora: state.item?.hora || "",
     estado: state.item?.estado || "",
     minutosDesde: state.item?.minutosDesde ?? 0,
     minutosHasta: state.item?.minutosHasta ?? 0,
@@ -467,7 +497,47 @@ function EntityDialog({ state, onClose, onSubmit }) {
     isActive: state.item?.isActive ?? true,
     activo: state.item?.activo ?? true,
   });
-  return <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}><DialogContent className="bg-white text-slate-950"><DialogHeader><DialogTitle>{state.item ? "Editar" : "Nuevo"}</DialogTitle><DialogDescription>Completa la informacion.</DialogDescription></DialogHeader><form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-3">{isClosing ? <Field label="Detalle"><Textarea value={form.detalle} onChange={(e) => setForm((f) => ({ ...f, detalle: e.target.value }))} /></Field> : isTime ? <><Field label="Nombre"><Input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} /></Field><Field label="Estado"><Input value={form.estado} onChange={(e) => setForm((f) => ({ ...f, estado: e.target.value }))} /></Field><div className="grid grid-cols-2 gap-2"><Field label="Desde"><Input type="number" value={form.minutosDesde} onChange={(e) => setForm((f) => ({ ...f, minutosDesde: e.target.value }))} /></Field><Field label="Hasta"><Input type="number" value={form.minutosHasta} onChange={(e) => setForm((f) => ({ ...f, minutosHasta: e.target.value }))} /></Field></div><Field label="Color"><Input type="color" value={form.colorHexadecimal} onChange={(e) => setForm((f) => ({ ...f, colorHexadecimal: e.target.value }))} /></Field><Field label="Descripcion"><Textarea value={form.descripcion || ""} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field><label className="flex gap-2"><Switch checked={form.activo} onCheckedChange={(v) => setForm((f) => ({ ...f, activo: Boolean(v) }))} />Activo</label></> : <><Field label="Nombre"><Input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} /></Field><Field label="Color"><Input type="color" value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} /></Field><Field label="Descripcion"><Input type="number" value={form.descripcion ?? 0} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field><Field label="Orden"><Input type="number" value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} /></Field><label className="flex gap-2"><Switch checked={form.isActive} onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: Boolean(v) }))} />Activo</label></>}<DialogFooter><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar</Button></DialogFooter></form></DialogContent></Dialog>;
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle>{state.item ? "Editar" : "Nuevo"}</DialogTitle>
+          <DialogDescription>Completa la informacion.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-3">
+          {isClosing ? (
+            <Field label="Detalle"><Textarea value={form.detalle} onChange={(e) => setForm((f) => ({ ...f, detalle: e.target.value }))} /></Field>
+          ) : isHour ? (
+            <Field label="Hora"><Input type="time" value={form.hora} onChange={(e) => setForm((f) => ({ ...f, hora: e.target.value }))} required /></Field>
+          ) : isTime ? (
+            <>
+              <Field label="Nombre"><Input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} /></Field>
+              <Field label="Estado"><Input value={form.estado} onChange={(e) => setForm((f) => ({ ...f, estado: e.target.value }))} /></Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Desde"><Input type="number" value={form.minutosDesde} onChange={(e) => setForm((f) => ({ ...f, minutosDesde: e.target.value }))} /></Field>
+                <Field label="Hasta"><Input type="number" value={form.minutosHasta} onChange={(e) => setForm((f) => ({ ...f, minutosHasta: e.target.value }))} /></Field>
+              </div>
+              <Field label="Color"><Input type="color" value={form.colorHexadecimal} onChange={(e) => setForm((f) => ({ ...f, colorHexadecimal: e.target.value }))} /></Field>
+              <Field label="Descripcion"><Textarea value={form.descripcion || ""} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field>
+              <label className="flex gap-2"><Switch checked={form.activo} onCheckedChange={(v) => setForm((f) => ({ ...f, activo: Boolean(v) }))} />Activo</label>
+            </>
+          ) : (
+            <>
+              <Field label="Nombre"><Input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} /></Field>
+              <Field label="Color"><Input type="color" value={form.color} onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))} /></Field>
+              <Field label="Descripcion"><Input type="number" value={form.descripcion ?? 0} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field>
+              <Field label="Orden"><Input type="number" value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} /></Field>
+              <label className="flex gap-2"><Switch checked={form.isActive} onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: Boolean(v) }))} />Activo</label>
+            </>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit">Guardar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function Header({ icon: Icon, title, subtitle, action }) { return <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-4"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-md bg-blue-600 text-white"><Icon className="size-5" /></div><div><h2 className="text-2xl font-bold">{title}</h2><p className="text-xs text-slate-500">{subtitle}</p></div></div>{action}</div>; }
