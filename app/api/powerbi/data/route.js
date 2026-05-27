@@ -187,7 +187,16 @@ SELECT
   vhc.created_at_entrega AS historial_created_at_entrega,
   mar.name AS marca_historial,
   model.name AS modelo_historial,
-  mone.nombre AS moneda_historial
+  mone.nombre AS moneda_historial,
+  voc.detalle AS cierreoportunidaddetalle,
+  cvcd.detalle AS motivocierreoportunidad,
+  vhce.numero_factura AS evento_numero_factura,
+  vhce.fecha_facturacion AS evento_fecha_facturacion,
+  vhce.fecha_entrega_cliente AS evento_fecha_entrega_cliente,
+  vhce.fecha_entrega_placa AS evento_fecha_entrega_placa,
+  vhce.kilometraje AS evento_kilometraje,
+  vcep.vistas_totales AS cotizacion_vistas_totales,
+  vcvh.fecha_hora AS cotizacion_vista_fecha_hora
 FROM ventas_oportunidades o
 LEFT JOIN administracion_usuarios u ON u.id = o.asignado_a
 LEFT JOIN administracion_clientes c ON c.id = o.cliente_id
@@ -201,6 +210,8 @@ LEFT JOIN ventas_cotizaciones_regalos vcr ON vcr.cotizacion_id = vc.id
 LEFT JOIN ventas_cotizaciones_accesorios vca ON vca.cotizacion_id = vc.id
 LEFT JOIN ventas_regalos_disponibles vrd ON vrd.id = vcr.regalo_id
 LEFT JOIN ventas_accesorios_disponibles vad ON vad.id = vca.accesorio_id
+LEFT JOIN ventas_cotizacion_enlaces_publicos vcep ON vcep.cotizacion_id = vc.id
+LEFT JOIN ventas_cotizacion_vistas_historial vcvh ON vcvh.enlace_id = vcep.id
 LEFT JOIN configuracion_monedas m ON m.id = vrd.moneda_id
 LEFT JOIN configuracion_impuestos i ON i.id = vrd.impuesto_id
 LEFT JOIN configuracion_monedas mo ON mo.id = vad.moneda_id
@@ -220,6 +231,9 @@ LEFT JOIN ventas_historial_carros vhc ON vhc.vin = vrdt.vin AND vhc.precio_id = 
 LEFT JOIN administracion_marcas mar ON mar.id = vp.marca_id
 LEFT JOIN administracion_modelos model ON model.id = vp.modelo_id
 LEFT JOIN configuracion_monedas mone ON mone.id = vp.moneda_id
+LEFT JOIN ventas_oportunidades_cierres voc ON voc.oportunidad_id = o.id
+LEFT JOIN configuracion_ventas_cierres_detalle cvcd ON cvcd.id = voc.cierre_detalle_id
+LEFT JOIN ventas_historial_carros_eventos vhce ON vhce.vin = vhc.vin
 ORDER BY o.created_at DESC, o.id DESC
 `;
 
