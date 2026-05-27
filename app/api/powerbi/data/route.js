@@ -169,6 +169,7 @@ SELECT
   vrco.nombre_comercial AS copropietario_nombre_comercial,
   vp.precio_base AS preciocatalogo,
   vp.combustible AS combnuistilbe,
+  vp.version,
   vp.created_at AS precio_catalogo_created_at,
   ma.name AS marca_catalogo,
   moy.name AS modelo_catalogo,
