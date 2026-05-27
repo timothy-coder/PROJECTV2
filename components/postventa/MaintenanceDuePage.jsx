@@ -19,7 +19,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [quickRange, setQuickRange] = useState("");
-  const [vehicleFilter, setVehicleFilter] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
   const [dialogVehicle, setDialogVehicle] = useState(null);
   const [clientDetail, setClientDetail] = useState(null);
   const [vehicleDetail, setVehicleDetail] = useState(null);
@@ -47,23 +48,25 @@ export default function MaintenanceDuePage({ userPermissions }) {
         !text || `${item.clienteNombre} ${item.vehiculo} ${item.marca} ${item.modelo} ${item.version} ${item.placa} ${item.vin}`.toLowerCase().includes(text);
 
       const matchesStatus = !status || item.estadoRecordatorio === status;
-      const matchesVehicle = !vehicleFilter || vehicleKey(item) === vehicleFilter;
+      const matchesBrand = !brandFilter || normalizeOption(item.marca) === brandFilter;
+      const matchesModel = !modelFilter || normalizeOption(item.modelo) === modelFilter;
 
       // Filtra por fecha de proximo mantenimiento
       const matchesDate = matchesDateRange(item.proximoMantenimiento, fromDate, toDate);
 
-      return matchesText && matchesStatus && matchesVehicle && matchesDate;
+      return matchesText && matchesStatus && matchesBrand && matchesModel && matchesDate;
     });
-  }, [data.vehicles, query, status, vehicleFilter, fromDate, toDate]);
+  }, [data.vehicles, query, status, brandFilter, modelFilter, fromDate, toDate]);
 
-  const vehicleOptions = useMemo(() => {
-    const options = new Map();
-    for (const item of data.vehicles || []) {
-      const key = vehicleKey(item);
-      if (!key) continue;
-      options.set(key, vehicleLabel(item));
-    }
-    return [{ value: "", label: "Todas las marcas/modelos/versiones" }, ...Array.from(options.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))];
+  const brandOptions = useMemo(() => {
+    return makeUniqueOptions(data.vehicles || [], "marca", "Todas las marcas");
+  }, [data.vehicles, brandFilter]);
+
+  const modelOptions = useMemo(() => {
+    const source = brandFilter
+      ? (data.vehicles || []).filter((item) => normalizeOption(item.marca) === brandFilter)
+      : data.vehicles || [];
+    return makeUniqueOptions(source, "modelo", "Todos los modelos");
   }, [data.vehicles]);
 
   function applyQuickRange(value) {
@@ -115,7 +118,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
       <section className="rounded-lg border bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold">Vista general de proximos mantenimientos</h2>
 
-        <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+        <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input className="w-full pl-9" placeholder="Buscar cliente, vehiculo, placa o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -123,11 +126,21 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
           <div className="min-w-0">
             <SearchableSelect
-              value={vehicleFilter}
-              options={vehicleOptions}
-              placeholder="Marca / modelo / version"
-              searchPlaceholder="Buscar marca, modelo o version..."
-              onChange={setVehicleFilter}
+              value={brandFilter}
+              options={brandOptions}
+              placeholder="Marca"
+              searchPlaceholder="Buscar marca..."
+              onChange={setBrandFilter}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <SearchableSelect
+              value={modelFilter}
+              options={modelOptions}
+              placeholder="Modelo"
+              searchPlaceholder="Buscar modelo..."
+              onChange={setModelFilter}
             />
           </div>
 
@@ -188,7 +201,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
             onClick={() => {
               setQuery("");
               setStatus("");
-              setVehicleFilter("");
+              setBrandFilter("");
+              setModelFilter("");
               setFromDate("");
               setToDate("");
               setQuickRange("");
@@ -451,12 +465,23 @@ function ReminderBadge({ value, motivo }) {
   return <span title={value === "Cerrado" ? motivo || "Cerrado" : undefined} className={`rounded-full border px-2 py-1 text-xs font-semibold ${colors[value] || colors.Programado}`}>{value}</span>;
 }
 
-function vehicleLabel(item) {
-  return [item.marca, item.modelo, item.version].filter(Boolean).join(" / ") || item.vehiculo || "-";
+function makeUniqueOptions(rows, field, emptyLabel) {
+  const options = new Map();
+  for (const item of rows) {
+    const label = String(item?.[field] || "").trim();
+    if (!label) continue;
+    options.set(normalizeOption(label), label);
+  }
+  return [
+    { value: "", label: emptyLabel },
+    ...Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ];
 }
 
-function vehicleKey(item) {
-  return vehicleLabel(item).trim().toLowerCase();
+function normalizeOption(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function formatDate(value) {
