@@ -60,14 +60,14 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
   const brandOptions = useMemo(() => {
     return makeUniqueOptions(data.vehicles || [], "marca", "Todas las marcas");
-  }, [data.vehicles, brandFilter]);
+  }, [data.vehicles]);
 
   const modelOptions = useMemo(() => {
     const source = brandFilter
       ? (data.vehicles || []).filter((item) => normalizeOption(item.marca) === brandFilter)
       : data.vehicles || [];
     return makeUniqueOptions(source, "modelo", "Todos los modelos");
-  }, [data.vehicles]);
+  }, [data.vehicles, brandFilter]);
 
   function applyQuickRange(value) {
     setQuickRange(value);
