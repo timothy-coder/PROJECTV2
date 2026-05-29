@@ -473,7 +473,7 @@ function drawCommercialQuotePageTwo(doc, data) {
   let y = 284;
   y = drawSmallInfoSection(doc, x, y, w, "Mantenimiento", "Es según el plan de mantenimiento de la cartilla del fabricante descrito en el manual de garantía.");
   quoteBand(doc, x, y, w, "Garantía");
-  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.2).text(getQuoteWarrantyText(quote), x + 2, y + 15, { width: w - 4 });
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8.1).text(getQuoteWarrantyText(quote), x + 2, y + 15, { width: w - 4 });
   y += 38;
   y = drawSmallInfoSection(doc, x, y, w, "Observaciones", quote.observaciones || "");
   y = drawSmallInfoSection(doc, x, y, w, "Validez de la cotización", getQuoteValidityText(quote));
@@ -875,10 +875,10 @@ function drawDeliveryProcess(doc, x, y, w) {
   steps.forEach((step, index) => doc.text(step, x + index * colW + 2, y, { width: colW - 4, align: "center" }));
   doc.rect(x, y + 35, w, 18).fill("#f2f2f2");
   // ✅ aumentado de 6.1 a 7.2
-  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.2).text(
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8.1).text(
     "Sujeto a disponibilidad de stock. Si existiera alguna observación de Registros Públicos durante el trámite de registro vehicular que ocasione demora en la entrega de la placa y tarjeta, este retraso no será imputable a Wankamotors.",
     x + 8,
-    y + 39,
+    y + 42,
     { width: w - 16, align: "center" }
   );
 }
