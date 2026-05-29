@@ -199,6 +199,7 @@ SELECT
   vhce.fecha_entrega_placa AS evento_fecha_entrega_placa,
   vhce.kilometraje AS evento_kilometraje,
   vcep.vistas_totales AS cotizacion_vistas_totales,
+  vcep.token as tokenvistacotizacion,
   vcvh.fecha_hora AS cotizacion_vista_fecha_hora,
   voc.created_at as fechacreacioncierre
 FROM ventas_oportunidades o
