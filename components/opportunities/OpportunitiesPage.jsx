@@ -38,7 +38,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const canEdit = hasPerm(userPermissions, [permissionKey(kind), "edit"]);
   const canCreateClient = hasPerm(userPermissions, ["clientes", "create"]);
   const copy = kind === "lead"
-    ? { title: "Leads", subtitle: "Gestiona todos tus leads de ventas", add: "Agregar lead", type: "LD", detailPath: "/leads" }
+    ? { title: "Leads", subtitle: "Gestiona todos tus leads de ventas", add: "Agregar lead", type: "LD / LF", detailPath: "/leads" }
     : { title: "Oportunidades", subtitle: "Gestiona todas tus oportunidades de negocio", add: "Agregar oportunidad", type: "OPO", detailPath: "/oportunidades" };
 
   const filtered = useMemo(() => data.opportunities.filter((item) => {

@@ -32,13 +32,22 @@ export default function SalesAgendaPage({ userPermissions }) {
     [baseDate, mode, schedule.week]
   );
   const slots = timeSlots(schedule.week, schedule.slotMinutes || 30);
+  const kindOptions = useMemo(() => {
+    const availableKinds = new Set(data.items.map((item) => item.kind));
+    const options = data.items.length ? [["all", "Todos"]] : [];
+    if (availableKinds.has("opportunity")) options.push(["opportunity", "OP"]);
+    if (availableKinds.has("lead")) options.push(["lead", "LD"]);
+    if (availableKinds.has("fordLead")) options.push(["fordLead", "LF"]);
+    return options;
+  }, [data.items]);
+  const activeKind = filters.kind === "all" || kindOptions.some(([value]) => value === filters.kind) ? filters.kind : "all";
   const filteredItems = useMemo(() => data.items.filter((item) => {
-    const matchKind = filters.kind === "all" || item.kind === filters.kind;
+    const matchKind = activeKind === "all" || item.kind === activeKind;
     const matchCreated = !filters.createdBy || Number(item.createdBy) === Number(filters.createdBy);
     const matchAssigned = !filters.assignedTo || Number(item.asignadoA) === Number(filters.assignedTo);
     const matchClient = !filters.client || item.clienteNombre.toLowerCase().includes(filters.client.toLowerCase()) || item.code.toLowerCase().includes(filters.client.toLowerCase());
     return matchKind && matchCreated && matchAssigned && matchClient;
-  }), [data.items, filters]);
+  }), [data.items, filters, activeKind]);
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
   const centerOptions = data.centers.map((item) => ({ value: item.id, label: item.nombre }));
   return (
@@ -62,9 +71,11 @@ export default function SalesAgendaPage({ userPermissions }) {
         {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
         {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
         <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
-        <div className="flex rounded-lg border bg-white p-1">
-          {[["all", "Todos"], ["opportunity", "OP"], ["lead", "LD"]].map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${filters.kind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
-        </div>
+        {kindOptions.length > 1 ? (
+          <div className="flex rounded-lg border bg-white p-1">
+            {kindOptions.map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${activeKind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
+          </div>
+        ) : null}
       </section>
       {mode === "month" ? (
         <MonthCalendar days={monthCalendarDays(baseDate)} week={schedule.week} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: "" })} />
@@ -119,7 +130,7 @@ function timeToMinutes(value) {
 }
 
 function AgendaCard({ item }) {
-  const href = item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
+  const href = agendaDetailPath(item);
   return (
     <div
       className="relative z-10 mb-1 rounded border bg-white p-1.5 text-left text-[11px] leading-tight shadow-sm"
@@ -128,13 +139,23 @@ function AgendaCard({ item }) {
     >
       <div className="flex items-start justify-between gap-1">
         <b className="text-slate-950">{item.code}</b>
-        <span className="rounded bg-white/80 px-1 text-[10px] font-bold text-slate-900">{item.kind === "lead" ? "LD" : "OP"}</span>
+        <span className="rounded bg-white/80 px-1 text-[10px] font-bold text-slate-900">{agendaKindLabel(item.kind)}</span>
       </div>
       <p className="mt-0.5 truncate font-semibold text-slate-900">{item.clienteNombre}</p>
       <p className="mt-1 truncate text-[10px] font-bold text-blue-700">{item.asignadoNombre}</p>
       {item.detail ? <p className="mt-1 line-clamp-2 italic text-red-700">{item.detail}</p> : null}
     </div>
   );
+}
+
+function agendaKindLabel(kind) {
+  if (kind === "lead") return "LD";
+  if (kind === "fordLead") return "LF";
+  return "OP";
+}
+
+function agendaDetailPath(item) {
+  return item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
 }
 
 function MonthCalendar({ days, week, items, canCreate, nowTime, onCell }) {

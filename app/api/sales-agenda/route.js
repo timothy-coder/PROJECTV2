@@ -31,6 +31,13 @@ function safeJson(value, fallback) {
   }
 }
 
+function agendaKindFromCode(value) {
+  const code = String(value || "").toUpperCase();
+  if (code.startsWith("LD-")) return "lead";
+  if (code.startsWith("LF-")) return "fordLead";
+  return "opportunity";
+}
+
 function defaultWeek() {
   return {
     monday: { active: true, start: "08:00", end: "18:00" },
@@ -136,7 +143,7 @@ export async function GET(request) {
         return {
           id: row.id,
           code: row.oportunidad_id,
-          kind: String(row.oportunidad_id || "").startsWith("LD-") ? "lead" : "opportunity",
+          kind: agendaKindFromCode(row.oportunidad_id),
           clienteNombre: row.cliente_nombre.trim(),
           etapaId: row.etapasconversion_id,
           etapaNombre: row.etapa_nombre,

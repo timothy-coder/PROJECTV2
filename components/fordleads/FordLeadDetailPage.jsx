@@ -25,12 +25,12 @@ const LEAD_ORIGIN_OPTIONS = ["Manual", "Web", "Ford Credit", "Event", "Oportunid
 const LEAD_SUB_ORIGIN_OPTIONS = ["Website", "Hotsite", "Facebook", "Phone", "Showroom", "Ford Credit", "Linkedin", "Instagram", "Direct Sales Fleet", "Edge Leads Especiais", "Ford Sempre", "Agrishow", "BOT", "Test Drive Delivery", "Prospecção", "Quote Peru", "Form at Site Ford Peru", "Form at Forum Peru", "Website Peru", "Phone Peru", "Facebook Peru", "Showroom Peru", "Landing Page Peru", "Event Peru", "SMS Peru", "Website Ford Chile", "Website Chile", "Phone Chile", "Facebook Chile", "Showroom Chile", "Landing Page", "Event Chile", "Media Chile", "Form at Site Ford.cl Chile", "Form at Forum.cl Chile", "Website Colombia", "Web Page Colombia", "Phone Colombia", "Showroom Colombia", "Landing Page Colombia", "SMS Colombia", "Event + Sales Beach Colombia", "Database Colombia", "Clients Workshop Colombia", "Social Media Colombia", "Ford Call Center Telephone Event Colombia", "Form at SUFI.com.co Colombia", "Form at Ford.com.co Colombia", "Praia da grama", "VIPs Ford", "Fazenda Boa Vista", "Shopping Cidade Jardim", "Resgate", "Social Networks", "Recommended", "Expointer", "Geral", "Genérica", "Agrotins", "Bahia Farm Show", "Norte Show", "Expoingá", "Agrobrasilia", "Rondonia Rural Show", "Expoama", "Ranger Day Campo Grande", "Ranger Day Goiânia", "Ranger Day Salvador", "Ranger Day Bauru", "Event", "Transposul", "Fordi", "Bike Series", "FIPAN", "Ranger Day São José do Rio Preto", "Superminas", "Fleet", "SMS Chile", "SMS", "Chatbot", "Website Oval Plan", "Landing Page"];
 const LEAD_SUB_ORIGIN2_OPTIONS = ["Organic", "Email Campaign", "Facebook Campaign", "Instagram Campaign", "Xaxis Campaign", "YouTube Campaign", "Adwords Campaign", "Red Display Campaign", "Facebook Lead Ads", "Whatsapp/SMS Campaign", "Display Campaign", "Chatbot / Chat online", "Chatbot", "Specialized Portal Campaigns", "Quote", "Test Drive", "Remote Purchase", "Facebook", "Instagram", "Twitter", "e-Agro"];
 const PLAN_CODE_OPTIONS = ["EMP10", "MAFI1", "MAFI3", "PRFT2", "PRFT4", "PRXL3", "PRXL5", "RAFI1", "RAFI2", "RAFI5", "RAFI6", "TEFI2", "TEFI4"];
-const FORD_CREATE_STATUS_OPTIONS = ["Assigned"];
+const FORD_CREATE_STATUS_OPTIONS = ["New", "Contacted", "Closed Won", "Closed Lost"];
 const FORD_PATCH_STATUS_OPTIONS = ["New", "Contacted", "Closed Won", "Closed Lost"];
 const FORD_DOCUMENT_TYPE_OPTIONS = ["DNI", "RUC", "RUT", "Cédula de identidad", "Pasaporte"];
 const FORD_MOBILE_PHONE_TYPE_OPTIONS = ["Personal", "Casa", "Otro", "Trabajo"];
 const FORD_COUNTRY_OPTIONS = ["PER"];
-const FORD_ADDRESS_COUNTRY_OPTIONS = ["Unknown", "PER"];
+const FORD_ADDRESS_COUNTRY_OPTIONS = ["PER", "Unknown"];
 const FORD_VEHICLE_MODEL_OPTIONS = ["Mustang Peru", "Territory Peru", "Escape Peru", "Edge Peru", "Explorer Peru", "Expedition Peru", "Ranger Peru", "F150 Peru", "Bronco Sport Peru", "Maverick Peru", "Maverick Hibrida"];
 const FORD_LEAD_SOURCE_OPTIONS = {
   "Digital Dealer": ["Sitio Web", "Facebook", "Landing Page"],
@@ -214,7 +214,7 @@ const SECTIONS = [
 ];
 
 const CREATE_SECTIONS = [
-  { title: "Lead", fields: ["status", "lastModifiedDate"] },
+  { title: "Lead", fields: ["status", "lastModifiedDate", "lossReason"] },
   { title: "Contacto", fields: ["contact.name", "contact.documentType", "contact.documentNumber", "contact.country", "contact.email", "contact.phone", "contact.mobilePhoneType", "contact.mobilePhone", "contact.contactPreference", "contact.company"] },
   { title: "Direccion contacto", fields: ["contact.address.city", "contact.address.countryCode", "contact.address.street", "contact.address.postalCode", "contact.address.state"] },
   { title: "Vehiculo", fields: ["vehicle.model", "vehicle.version", "vehicle.accessories", "vehicle.accessoriesDetails"] },
@@ -229,6 +229,7 @@ const EDIT_SECTIONS = [
 ];
 
 const EDITABLE_FIELDS = new Set([...CREATE_SECTIONS.flatMap((section) => section.fields), "contact.firstName", "contact.lastName", "lossReason"]);
+const LOCKED_CREATE_FIELDS = new Set(["preferenceDealer.code", "preferenceDealer.uniqueCode", "preferenceDealer.name"]);
 
 const FIELD_LABELS = {
   id: "ID",
@@ -437,6 +438,46 @@ function buildCreatePayload(lead) {
   return cleanPayload(payloadFromSections(lead, CREATE_SECTIONS));
 }
 
+function shouldShowField(lead, field) {
+  if (field === "lossReason") return readPath(lead, "status") === "Closed Lost";
+  return true;
+}
+
+function createFieldEditable(field, saved) {
+  return !saved && !LOCKED_CREATE_FIELDS.has(field);
+}
+
+function sourceHintForCreateField(item, field) {
+  const fieldsWithOpportunityHint = new Set([
+    "status",
+    "contact.name",
+    "contact.documentType",
+    "contact.documentNumber",
+    "contact.email",
+    "contact.phone",
+    "contact.mobilePhone",
+    "contact.company",
+    "contact.address.city",
+    "contact.address.street",
+    "contact.address.state",
+    "vehicle.model",
+    "vehicle.version",
+    "vehicle.accessories",
+  ]);
+  if (!fieldsWithOpportunityHint.has(field)) return "";
+  if (field === "status") return item.oportunidadTexto || "";
+  return displayValue(readPath(item.lead, `sourceHints.${field}`) || readPath(item.lead, field));
+}
+
+function leadContextItems(lead) {
+  return [
+    ["Lead Ford", lead?.id],
+    ["Contacto", readPath(lead, "contact.name") || [readPath(lead, "contact.firstName"), readPath(lead, "contact.lastName")].filter(Boolean).join(" ")],
+    ["Estado", lead?.status],
+    ["Vehiculo", [readPath(lead, "vehicle.model"), readPath(lead, "vehicle.version")].filter(Boolean).join(" ")],
+  ];
+}
+
 function hasChanged(current, original, path) {
   return JSON.stringify(readPath(current, path) ?? null) !== JSON.stringify(readPath(original, path) ?? null);
 }
@@ -462,7 +503,7 @@ function blankLeadFromSections() {
   }, {});
   return {
     ...lead,
-    status: "Assigned",
+    status: "New",
     lastModifiedDate: new Date().toISOString(),
     contact: {
       ...(lead.contact || {}),
@@ -471,7 +512,7 @@ function blankLeadFromSections() {
       contactPreference: "WhatsApp",
       address: {
         ...(lead.contact?.address || {}),
-        countryCode: "Unknown",
+        countryCode: "PER",
       },
     },
     preferenceDealer: {
@@ -524,10 +565,22 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [opportunityOpen, setOpportunityOpen] = useState(false);
+  const [opportunitySearch, setOpportunitySearch] = useState("");
   const [opportunityOptions, setOpportunityOptions] = useState([]);
   const [opportunityLoading, setOpportunityLoading] = useState(isCreate);
   const [createDrafts, setCreateDrafts] = useState([]);
+  const [expandedDraftIds, setExpandedDraftIds] = useState(new Set());
   const [savingOpportunityId, setSavingOpportunityId] = useState(null);
+
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (!main) return undefined;
+    const previousOverflow = main.style.overflow;
+    main.style.overflow = "hidden";
+    return () => {
+      main.style.overflow = previousOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     if (isCreate) return;
@@ -580,15 +633,51 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
   }, [isCreate, loadPendingOpportunities]);
 
   const title = useMemo(() => isCreate ? "Agregar Lead" : lead?.id || id, [id, isCreate, lead?.id]);
+  const filteredOpportunityOptions = useMemo(() => {
+    const term = opportunitySearch.trim().toLowerCase();
+    if (!term) return opportunityOptions;
+    return opportunityOptions.filter((option) => String(option.oportunidadTexto || "").toLowerCase().includes(term));
+  }, [opportunityOptions, opportunitySearch]);
 
   function toggleOpportunity(option) {
     setMessage("");
     setError("");
     setCreateDrafts((current) => {
       if (current.some((item) => item.oportunidadId === option.oportunidadId)) {
+        setExpandedDraftIds((ids) => {
+          const next = new Set(ids);
+          next.delete(option.oportunidadId);
+          return next;
+        });
         return current.filter((item) => item.oportunidadId !== option.oportunidadId);
       }
       return [...current, { ...option, lead: option.payload || blankLeadFromSections(), saved: false, token: "" }];
+    });
+  }
+
+  function selectAllFilteredOpportunities() {
+    setMessage("");
+    setError("");
+    setCreateDrafts((current) => {
+      const selectedIds = new Set(current.map((item) => item.oportunidadId));
+      const next = filteredOpportunityOptions
+        .filter((option) => !selectedIds.has(option.oportunidadId))
+        .map((option) => ({ ...option, lead: option.payload || blankLeadFromSections(), saved: false, token: "" }));
+      return [...current, ...next];
+    });
+  }
+
+  function clearOpportunitySelection() {
+    setCreateDrafts([]);
+    setExpandedDraftIds(new Set());
+  }
+
+  function toggleDraftExpanded(oportunidadId) {
+    setExpandedDraftIds((ids) => {
+      const next = new Set(ids);
+      if (next.has(oportunidadId)) next.delete(oportunidadId);
+      else next.add(oportunidadId);
+      return next;
     });
   }
 
@@ -600,6 +689,9 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
         const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
         if (!allowed.includes(readPath(nextLead, "leadSource.subOrigin"))) nextLead = writePath(nextLead, "leadSource.subOrigin", allowed[0] || "");
       }
+      if (field === "status" && nextValue !== "Closed Lost") {
+        nextLead = writePath(nextLead, "lossReason", "");
+      }
       return { ...item, lead: nextLead };
     }));
   }
@@ -609,6 +701,9 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
     setError("");
     setMessage("");
     try {
+      if (readPath(item.lead, "status") === "Closed Lost" && !String(readPath(item.lead, "lossReason") || "").trim()) {
+        throw new Error("Completa el motivo de perdida para enviar un lead Closed Lost.");
+      }
       const payload = { ...buildCreatePayload(item.lead), oportunidadId: item.oportunidadId };
       const response = await fetch("/api/ford-leads", {
         method: "POST",
@@ -657,42 +752,45 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 text-black">
-        <div className="flex items-center gap-3">
-          <Link href="/leads-ford" className="inline-flex size-8 items-center justify-center rounded-md border bg-white hover:bg-slate-50">
+      <div className="flex h-[calc(100svh-80px)] flex-col overflow-hidden bg-slate-50 p-4 text-black sm:p-6 lg:p-8">
+        <div className="mb-4 flex shrink-0 items-center gap-3">
+          <Link href="/leads-ford" className="inline-flex size-8 items-center justify-center rounded-md border border-violet-200 bg-white text-violet-700 hover:bg-violet-50">
             <ArrowLeft className="size-4" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-black">{isCreate ? "Agregar Lead Ford" : editing ? "Editar Lead Ford" : "Detalle Lead Ford"}</h1>
+            <h1 className="text-2xl font-bold text-violet-700">{isCreate ? "Agregar Lead Ford" : editing ? "Editar Lead Ford" : "Detalle Lead Ford"}</h1>
             <p className="text-sm text-black">{title}</p>
           </div>
           {isCreate ? null : lead && editing ? (
             <div className="ml-auto flex gap-2">
-              <Button variant="outline" onClick={cancelEdit} disabled={saving}>
+              <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={cancelEdit} disabled={saving}>
                 <X className="mr-2 size-4" />
                 Cancelar
               </Button>
-              <Button onClick={updateLead} disabled={saving}>
+              <Button className="bg-violet-700 text-white hover:bg-violet-800" onClick={updateLead} disabled={saving}>
                 {saving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
                 Actualizar Lead
               </Button>
             </div>
           ) : lead ? (
-            <Button className="ml-auto" onClick={() => setEditing(true)}>
+            <Button className="ml-auto bg-violet-700 text-white hover:bg-violet-800" onClick={() => setEditing(true)}>
               <Edit3 className="mr-2 size-4" />
               Editar
             </Button>
           ) : null}
         </div>
 
-        {loading ? <div className="rounded-lg bg-white p-6 text-sm font-semibold"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando detalle...</div> : null}
-        {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div> : null}
-        {message ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{message}</div> : null}
+        {loading ? <div className="mb-4 shrink-0 rounded-lg border border-violet-200 bg-white p-6 text-sm font-semibold"><Loader2 className="mr-2 inline size-4 animate-spin text-violet-700" />Cargando detalle...</div> : null}
+        {error ? <div className="mb-4 shrink-0 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div> : null}
+        {message ? <div className="mb-4 shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{message}</div> : null}
 
         {isCreate ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-violet-200 bg-white p-3 pr-2 shadow-sm"
+            onWheel={(event) => event.stopPropagation()}
+          >
             <div className="relative">
-              <Button type="button" variant="outline" className="h-9 w-full justify-between text-xs font-semibold" onClick={() => {
+              <Button type="button" variant="outline" className="h-9 w-full justify-between border-violet-200 text-xs font-semibold text-violet-700 hover:bg-violet-50" onClick={() => {
                 const nextOpen = !opportunityOpen;
                 setOpportunityOpen(nextOpen);
                 if (nextOpen) loadPendingOpportunities();
@@ -701,64 +799,95 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
                 <ChevronsUpDown className="size-4 opacity-60" />
               </Button>
               {opportunityOpen ? (
-                <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg">
-                  {opportunityOptions.length ? opportunityOptions.map((option) => {
-                    const selected = createDrafts.some((item) => item.oportunidadId === option.oportunidadId);
-                    return (
-                      <button
-                        key={option.oportunidadId}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-black hover:bg-slate-100"
-                        onClick={() => toggleOpportunity(option)}
-                      >
-                        <span className="inline-flex size-4 items-center justify-center rounded border border-slate-300">
-                          {selected ? <Check className="size-3" /> : null}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">{option.oportunidadTexto}</span>
-                      </button>
-                    );
-                  }) : (
-                    <div className="px-2 py-6 text-center text-xs font-semibold text-slate-500">
-                      {opportunityLoading ? "Cargando..." : "No hay oportunidades pendientes."}
+                <div
+                  className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-violet-200 bg-white p-1 shadow-lg"
+                  onWheel={(event) => event.stopPropagation()}
+                >
+                  <div className="space-y-1 border-b border-violet-100 bg-white p-2">
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder="Buscar oportunidad..."
+                      value={opportunitySearch}
+                      onChange={(event) => setOpportunitySearch(event.target.value)}
+                    />
+                    <div className="flex gap-1">
+                      <Button type="button" size="sm" variant="outline" className="h-7 flex-1 border-violet-200 text-[11px] text-violet-700 hover:bg-violet-50" onClick={selectAllFilteredOpportunities} disabled={!filteredOpportunityOptions.length}>
+                        Seleccionar todo
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" className="h-7 flex-1 text-[11px]" onClick={clearOpportunitySelection} disabled={!createDrafts.length}>
+                        Limpiar
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                  <div
+                    className="max-h-[260px] overflow-y-auto overscroll-contain py-1"
+                    onWheel={(event) => event.stopPropagation()}
+                  >
+                    {filteredOpportunityOptions.length ? filteredOpportunityOptions.map((option) => {
+                      const selected = createDrafts.some((item) => item.oportunidadId === option.oportunidadId);
+                      return (
+                        <button
+                          key={option.oportunidadId}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs font-semibold text-black hover:bg-violet-50"
+                          onClick={() => toggleOpportunity(option)}
+                        >
+                          <span className="inline-flex size-4 items-center justify-center rounded border border-violet-200 text-violet-700">
+                            {selected ? <Check className="size-3" /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{option.oportunidadTexto}</span>
+                        </button>
+                      );
+                    }) : (
+                      <div className="px-2 py-6 text-center text-xs font-semibold text-slate-500">
+                        {opportunityLoading ? "Cargando..." : opportunityOptions.length ? "No hay coincidencias." : "No hay oportunidades pendientes."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : null}
             </div>
 
             <div className="mt-3 space-y-3">
-              {createDrafts.length ? createDrafts.map((item) => (
-                <section key={item.oportunidadId} className="rounded-md border border-slate-200 bg-white p-3">
-                  <div className="mb-2 flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-[11px] font-bold text-red-600">Oportunidad: {item.oportunidadTexto}</p>
+              {createDrafts.length ? createDrafts.map((item) => {
+                const isExpanded = expandedDraftIds.has(item.oportunidadId);
+                return (
+                <section key={item.oportunidadId} className="rounded-md border border-violet-200 bg-white">
+                  <div className="flex items-center gap-2 p-3">
+                    <button type="button" className="inline-flex size-7 items-center justify-center rounded border border-violet-200 bg-white text-violet-700 hover:bg-violet-50" onClick={() => toggleDraftExpanded(item.oportunidadId)} title={isExpanded ? "Contraer" : "Desplegar"}>
+                      <ChevronsUpDown className="size-4 opacity-70" />
+                    </button>
+                    <p className="min-w-0 flex-1 truncate text-[11px] font-bold text-violet-700">Oportunidad: {item.oportunidadTexto}</p>
                     {item.saved ? <span className="rounded bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Guardado {item.token}</span> : null}
-                    <Button size="sm" onClick={() => submitOpportunityLead(item)} disabled={item.saved || savingOpportunityId === item.oportunidadId}>
+                    <Button size="sm" className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => submitOpportunityLead(item)} disabled={item.saved || savingOpportunityId === item.oportunidadId}>
                       {savingOpportunityId === item.oportunidadId ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
                       Guardar
                     </Button>
                   </div>
-                  <div className="grid gap-x-3 gap-y-2 md:grid-cols-2 xl:grid-cols-4">
+                  {isExpanded ? <div className="grid gap-x-3 gap-y-2 border-t border-violet-200 p-3 md:grid-cols-2 xl:grid-cols-4">
                     {CREATE_SECTIONS.map((section) => (
                       <div key={section.title} className="contents">
-                        <h2 className="col-span-full mt-1 border-t border-slate-200 pt-2 text-xs font-bold text-black first:mt-0 first:border-t-0 first:pt-0">{section.title}</h2>
+                        <h2 className="col-span-full mt-1 border-t border-violet-100 pt-2 text-xs font-bold text-violet-700 first:mt-0 first:border-t-0 first:pt-0">{section.title}</h2>
                         <div className="contents">
-                          {section.fields.map((field) => (
+                          {section.fields.filter((field) => shouldShowField(item.lead, field)).map((field) => (
                             <DetailField
                               key={field}
                               lead={item.lead}
                               field={field}
                               isCreate
-                              editable={!item.saved}
+                              sourceHint={sourceHintForCreateField(item, field)}
+                              editable={createFieldEditable(field, item.saved)}
+                              locked={LOCKED_CREATE_FIELDS.has(field)}
                               onChange={(nextValue) => updateDraft(item.oportunidadId, field, nextValue)}
                             />
                           ))}
                         </div>
                       </div>
                     ))}
-                  </div>
+                  </div> : null}
                 </section>
-              )) : (
-                <div className="rounded-md border border-dashed border-slate-300 p-6 text-center text-xs font-semibold text-slate-500">
+              ); }) : (
+                <div className="rounded-md border border-dashed border-violet-200 bg-violet-50/40 p-6 text-center text-xs font-semibold text-violet-700">
                   Selecciona una o varias oportunidades para cargar sus datos y enviarlas a Ford.
                 </div>
               )}
@@ -766,23 +895,46 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
           </div>
         ) : lead ? (
           <>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="grid gap-3 xl:grid-cols-2">
-              {(isCreate ? CREATE_SECTIONS : editing ? EDIT_SECTIONS : SECTIONS).map((section) => (
-                <section key={section.title} className="rounded-md border border-slate-200 bg-white p-3">
-                  <h2 className="mb-2 text-sm font-bold text-black">{section.title}</h2>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {section.fields.map((field) => <DetailField key={field} lead={lead} field={field} isCreate={isCreate} editable={isCreate || (editing && EDITABLE_FIELDS.has(field))} locked={editing && !EDITABLE_FIELDS.has(field)} onChange={(nextValue) => setLead((current) => {
-                      let next = writePath(current, field, parseFieldValue(field, nextValue));
-                      if (field === "leadSource.origin") {
-                        const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
-                        if (!allowed.includes(readPath(next, "leadSource.subOrigin"))) next = writePath(next, "leadSource.subOrigin", allowed[0] || "");
-                      }
-                      return next;
-                    })} />)}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border border-violet-200 bg-white p-3 pr-2 shadow-sm"
+              onWheel={(event) => event.stopPropagation()}
+            >
+              <div className="mb-3 grid gap-2 rounded-md border border-violet-200 bg-violet-50/50 p-3 md:grid-cols-4">
+                {leadContextItems(lead).map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase text-violet-700">{label}</p>
+                    <p className="truncate text-xs font-bold text-black">{displayValue(value)}</p>
                   </div>
-                </section>
-              ))}
+                ))}
+              </div>
+              <div className="grid gap-x-3 gap-y-2 md:grid-cols-2 xl:grid-cols-4">
+                  {(editing ? EDIT_SECTIONS : SECTIONS).map((section) => (
+                    <div key={section.title} className="contents">
+                      <h2 className="col-span-full mt-1 border-t border-violet-100 pt-2 text-xs font-bold text-violet-700 first:mt-0 first:border-t-0 first:pt-0">{section.title}</h2>
+                      <div className="contents">
+                        {section.fields.filter((field) => shouldShowField(lead, field)).map((field) => (
+                          <DetailField
+                            key={field}
+                            lead={lead}
+                            field={field}
+                            editable={editing && EDITABLE_FIELDS.has(field)}
+                            locked={editing && !EDITABLE_FIELDS.has(field)}
+                            onChange={(nextValue) => setLead((current) => {
+                              let next = writePath(current, field, parseFieldValue(field, nextValue));
+                              if (field === "leadSource.origin") {
+                                const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
+                                if (!allowed.includes(readPath(next, "leadSource.subOrigin"))) next = writePath(next, "leadSource.subOrigin", allowed[0] || "");
+                              }
+                              if (field === "status" && nextValue !== "Closed Lost") {
+                                next = writePath(next, "lossReason", "");
+                              }
+                              return next;
+                            })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -793,7 +945,7 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
   );
 }
 
-function DetailField({ lead, field, isCreate = false, editable = false, locked = false, onChange }) {
+function DetailField({ lead, field, isCreate = false, editable = false, locked = false, sourceHint = "", onChange }) {
   const value = readPath(lead, field);
   const info = FIELD_INFO[field];
   const options = fieldOptions(lead, field, { isCreate });
@@ -802,10 +954,10 @@ function DetailField({ lead, field, isCreate = false, editable = false, locked =
     <div className="min-w-0 space-y-0.5">
       <div className="flex items-center gap-1">
         <span className="truncate text-[10px] font-bold uppercase text-black">{FIELD_LABELS[field] || field}</span>
-        {locked ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">Bloqueado</span> : null}
+        {locked ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">Bloqueado</span> : null}
         {info ? (
           <Tooltip>
-            <TooltipTrigger className="inline-flex size-5 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100">
+            <TooltipTrigger className="inline-flex size-5 items-center justify-center rounded-full text-violet-700 hover:bg-violet-50">
               <Info className="size-3.5" />
             </TooltipTrigger>
             <TooltipContent className="max-w-sm whitespace-normal bg-slate-950 text-white">
@@ -814,9 +966,10 @@ function DetailField({ lead, field, isCreate = false, editable = false, locked =
           </Tooltip>
         ) : null}
       </div>
+      <div className="min-h-4 truncate text-[10px] font-bold leading-4 text-red-600">{sourceHint && sourceHint !== "-" ? sourceHint : "\u00A0"}</div>
       {options ? (
         <Select value={value === undefined || value === null ? "" : String(value)} onValueChange={(nextValue) => editable && onChange?.(nextValue)} disabled={!editable}>
-          <SelectTrigger className="h-8 w-full bg-white text-xs text-black">
+          <SelectTrigger className="h-8 w-full border-violet-100 bg-white text-xs text-black focus:ring-violet-200">
             <SelectValue placeholder="-" />
           </SelectTrigger>
           <SelectContent>
@@ -828,12 +981,12 @@ function DetailField({ lead, field, isCreate = false, editable = false, locked =
       ) : (
         editable ? (
           field === "description" || field.endsWith(".description") ? (
-            <Textarea className="min-h-16 bg-white text-xs text-black" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+            <Textarea className="min-h-16 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
           ) : (
-            <Input className="h-8 bg-white text-xs text-black" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+            <Input className="h-8 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
           )
         ) : (
-          <div className="min-h-8 break-words rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-medium text-black">{displayValue(value)}</div>
+          <div className="min-h-8 break-words rounded-md border border-violet-100 bg-slate-50 px-2 py-1.5 text-xs font-medium text-black">{displayValue(value)}</div>
         )
       )}
     </div>

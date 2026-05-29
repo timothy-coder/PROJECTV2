@@ -12,10 +12,12 @@ export default function SalesPanelPage({ userPermissions }) {
   const [taskPeriod, setTaskPeriod] = useState("day");
   const [opportunityPeriod, setOpportunityPeriod] = useState("day");
   const [leadPeriod, setLeadPeriod] = useState("day");
+  const [fordLeadPeriod, setFordLeadPeriod] = useState("day");
   const canViewAll = Boolean(hasPerm(userPermissions, ["agenda", "viewall"]) || data.currentUser?.canViewAll);
 
   const allOpportunities = useMemo(() => data.items.filter((item) => item.kind === "opportunity"), [data.items]);
   const allLeads = useMemo(() => data.items.filter((item) => item.kind === "lead"), [data.items]);
+  const allFordLeads = useMemo(() => data.items.filter((item) => item.kind === "fordLead"), [data.items]);
   const opportunities = useMemo(
     () => allOpportunities.filter((item) => matchesPeriod(item.agendaDate || new Date(), opportunityPeriod)),
     [allOpportunities, opportunityPeriod]
@@ -23,6 +25,10 @@ export default function SalesPanelPage({ userPermissions }) {
   const leads = useMemo(
     () => allLeads.filter((item) => matchesPeriod(item.agendaDate || new Date(), leadPeriod)),
     [allLeads, leadPeriod]
+  );
+  const fordLeads = useMemo(
+    () => allFordLeads.filter((item) => matchesPeriod(item.agendaDate || new Date(), fordLeadPeriod)),
+    [allFordLeads, fordLeadPeriod]
   );
   const tasks = useMemo(() => {
     return data.items.filter((item) => {
@@ -44,16 +50,21 @@ export default function SalesPanelPage({ userPermissions }) {
         </Button>
       </header>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2">
-        <Stat label="OPO Totales" value={allOpportunities.length} accent="violet" />
-        <Stat label="Leads Totales" value={allLeads.length} accent="red" />
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        {allOpportunities.length ? <Stat label="OPO Totales" value={allOpportunities.length} accent="violet" /> : null}
+        {allLeads.length ? <Stat label="Leads Totales" value={allLeads.length} accent="red" /> : null}
+        {allFordLeads.length ? <Stat label="Leads Ford Totales" value={allFordLeads.length} accent="amber" /> : null}
       </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {stages.map((stage) => {
           const op = allOpportunities.filter((item) => Number(item.etapaId) === Number(stage.id)).length;
           const ld = allLeads.filter((item) => Number(item.etapaId) === Number(stage.id)).length;
-          return <Stat key={stage.id} label={stage.nombre} value={op + ld} sub={`OPO: ${op} | LD: ${ld}`} accent="cyan" />;
+          const lf = allFordLeads.filter((item) => Number(item.etapaId) === Number(stage.id)).length;
+          const total = op + ld + lf;
+          if (!total) return null;
+          const sub = [["OPO", op], ["LD", ld], ["LF", lf]].filter(([, count]) => count > 0).map(([label, count]) => `${label}: ${count}`).join(" | ");
+          return <Stat key={stage.id} label={stage.nombre} value={total} sub={sub} accent="cyan" />;
         })}
       </div>
 
@@ -68,14 +79,15 @@ export default function SalesPanelPage({ userPermissions }) {
         </div>
       </section>
 
-      <Table title={`Oportunidades - ${opportunities.length} registros`} rows={opportunities} period={opportunityPeriod} onPeriodChange={setOpportunityPeriod} />
-      <Table title={`Leads - ${leads.length} registros`} rows={leads} period={leadPeriod} onPeriodChange={setLeadPeriod} />
+      {allOpportunities.length ? <Table title={`Oportunidades - ${opportunities.length} registros`} rows={opportunities} period={opportunityPeriod} onPeriodChange={setOpportunityPeriod} /> : null}
+      {allLeads.length ? <Table title={`Leads - ${leads.length} registros`} rows={leads} period={leadPeriod} onPeriodChange={setLeadPeriod} /> : null}
+      {allFordLeads.length ? <Table title={`Leads Ford - ${fordLeads.length} registros`} rows={fordLeads} period={fordLeadPeriod} onPeriodChange={setFordLeadPeriod} /> : null}
     </div>
   );
 }
 
 function Stat({ label, value, sub, accent }) {
-  const colors = { violet: "border-violet-300 text-violet-700", red: "border-red-200 text-red-500", cyan: "border-cyan-300 text-cyan-600" };
+  const colors = { violet: "border-violet-300 text-violet-700", red: "border-red-200 text-red-500", amber: "border-amber-200 text-amber-600", cyan: "border-cyan-300 text-cyan-600" };
   return (
     <div className={`rounded-lg border bg-white p-4 shadow-sm ${colors[accent] || ""}`}>
       <p className="text-xs text-slate-600">{label}</p>
@@ -98,7 +110,7 @@ function PeriodFilter({ value, onChange }) {
 }
 
 function TaskRow({ item }) {
-  const detailPath = item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
+  const detailPath = detailPathForItem(item);
   return (
     <div className="flex items-center justify-between rounded-lg border p-3" style={item.timeState?.color ? { backgroundColor: `${item.timeState.color}22`, borderLeft: `4px solid ${item.timeState.color}` } : undefined}>
       <div>
@@ -131,7 +143,7 @@ function Table({ title, rows, period, onPeriodChange }) {
           </thead>
           <tbody className="divide-y">
             {rows.map((item) => {
-              const detailPath = item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
+              const detailPath = detailPathForItem(item);
               return (
                 <tr key={item.id}>
                   <td className="py-3 font-bold">{item.code}</td>
@@ -151,6 +163,10 @@ function Table({ title, rows, period, onPeriodChange }) {
       </div>
     </section>
   );
+}
+
+function detailPathForItem(item) {
+  return item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
 }
 
 function normalizeStage(value) {

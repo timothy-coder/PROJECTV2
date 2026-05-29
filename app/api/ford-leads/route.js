@@ -80,7 +80,6 @@ function documentTypeFromClient(value = "") {
 }
 
 function buildLeadPayloadFromOpportunity(row) {
-  const leadSource = fordOriginFromOpportunity(row.origen_nombre, row.suborigen_nombre);
   const documentType = documentTypeFromClient(row.tipo_identificacion);
   const model = fordModelFromOpportunity(row.modelo_nombre);
   const contactName = [row.nombre, row.apellido].filter(Boolean).join(" ").trim();
@@ -89,7 +88,28 @@ function buildLeadPayloadFromOpportunity(row) {
     oportunidadCodigo: row.oportunidad_id,
     oportunidadTexto: `${row.oportunidad_id} - ${contactName || "Sin cliente"}`,
     payload: {
-      status: "Assigned",
+      sourceHints: {
+        contact: {
+          name: contactName,
+          documentType,
+          documentNumber: row.identificacion_fiscal || "",
+          email: row.email || "",
+          phone: row.celular || "",
+          mobilePhone: row.celular || "",
+          company: row.nombre_comercial || "",
+          address: {
+            city: row.distrito_nombre || "",
+            street: row.domicilio || "",
+            state: row.departamento_nombre || "",
+          },
+        },
+        vehicle: {
+          model: row.modelo_nombre || "",
+          version: row.version || "",
+          accessories: row.accesorios || "",
+        },
+      },
+      status: "New",
       lastModifiedDate: new Date().toISOString(),
       contact: {
         name: contactName,
@@ -97,14 +117,14 @@ function buildLeadPayloadFromOpportunity(row) {
         documentNumber: row.identificacion_fiscal || "",
         country: "PER",
         email: row.email || "",
-        phone: "",
+        phone: row.celular || "",
         mobilePhoneType: "Personal",
         mobilePhone: row.celular || "",
         contactPreference: "WhatsApp",
-        company: documentType === "RUC" ? row.nombre_comercial || contactName : null,
+        company: row.nombre_comercial || (documentType === "RUC" ? contactName : null),
         address: {
           city: row.distrito_nombre || "",
-          countryCode: "Unknown",
+          countryCode: "PER",
           street: row.domicilio || "",
           postalCode: null,
           state: row.departamento_nombre || "",
@@ -113,15 +133,20 @@ function buildLeadPayloadFromOpportunity(row) {
       vehicle: {
         model,
         version: row.version || "",
-        accessories: null,
-        accessoriesDetails: [],
+        accessories: row.accesorios || null,
+        accessoriesDetails: row.accesorios
+          ? String(row.accesorios).split(",").map((name) => ({ name: name.trim() })).filter((item) => item.name)
+          : [],
       },
       preferenceDealer: {
         code: envValue("FORD_DEALER_CODE", "DEALER_CODE") || "00024",
         uniqueCode: envValue("FORD_DEALER_UNIQUE_CODE") || "00024Peru",
         name: envValue("FORD_DEALER_NAME") || "WANKAMOTORS",
       },
-      leadSource,
+      leadSource: {
+        origin: "Manual",
+        subOrigin: "Piso",
+      },
     },
   };
 }
@@ -134,7 +159,8 @@ async function pendingOpportunitiesForFord(user) {
             c.identificacion_fiscal, c.domicilio, c.nombre_comercial,
             d.nombre AS departamento_nombre, p.nombre AS provincia_nombre, di.nombre AS distrito_nombre,
             oc.name AS origen_nombre, so.name AS suborigen_nombre,
-            mo.name AS modelo_nombre, vp.version
+            mo.name AS modelo_nombre, vp.version,
+            acc.accesorios
      FROM ventas_oportunidades o
      INNER JOIN administracion_clientes c ON c.id = o.cliente_id
      LEFT JOIN departamentos d ON d.id = c.departamento_id
@@ -150,11 +176,16 @@ async function pendingOpportunitiesForFord(user) {
      LEFT JOIN ventas_cotizaciones vc ON vc.id = latest_quote.id
      LEFT JOIN ventas_precios vp ON vp.id = vc.precio_id
      LEFT JOIN administracion_modelos mo ON mo.id = vp.modelo_id
+     LEFT JOIN (
+       SELECT vca.cotizacion_id, GROUP_CONCAT(vad.detalle ORDER BY vad.detalle SEPARATOR ', ') AS accesorios
+       FROM ventas_cotizaciones_accesorios vca
+       LEFT JOIN ventas_accesorios_disponibles vad ON vad.id = vca.accesorio_id
+       GROUP BY vca.cotizacion_id
+     ) acc ON acc.cotizacion_id = vc.id
      LEFT JOIN ventas_oportunidad_tokens vot ON vot.oportunidad_id = o.id
      WHERE vot.id IS NULL
      ${canViewAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)"}
-     ORDER BY o.updated_at DESC
-     LIMIT 500`,
+     ORDER BY o.updated_at DESC`,
     canViewAll ? [] : [user.id, user.id]
   );
   return rows.map(buildLeadPayloadFromOpportunity);
@@ -187,6 +218,14 @@ async function sentFordLeads(user) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+async function filterImportedFordLeads(items) {
+  const ids = items.map((item) => String(item.id || "").trim()).filter(Boolean);
+  if (!ids.length) return items;
+  const [rows] = await pool.query(`SELECT token FROM ventas_oportunidad_tokens WHERE token IN (?)`, [ids]);
+  const importedTokens = new Set(rows.map((row) => String(row.token || "")));
+  return items.filter((item) => !importedTokens.has(String(item.id || "")));
 }
 
 export async function GET(request) {
@@ -282,7 +321,8 @@ export async function GET(request) {
     };
 
     const data = await fordLeadsFetch("/leads", { request, search });
-    return NextResponse.json({ items: normalizeFordLeadListResponse(data) });
+    const items = await filterImportedFordLeads(normalizeFordLeadListResponse(data));
+    return NextResponse.json({ items });
   } catch (error) {
     return fordError(error);
   }

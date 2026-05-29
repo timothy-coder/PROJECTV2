@@ -13,29 +13,12 @@ import { hasPerm } from "@/lib/permissions";
 const TYPE_STATUS_OPTIONS = [
   "",
   "New",
-  "Certified",
-  "Assigned",
-  "Warming",
-  "Agency Classification",
-  "ChatBot Classification",
-  "Rescheduled",
-  "SalesManager",
-  "Seller",
-  "ContactFail",
   "Contacted",
-  "Test-Drive",
-  "Negotiating",
-  "OnVisit",
-  "Order",
-  "Quotation",
-  "Purchase Order",
-  "Billing",
   "Closed Won",
   "Closed Lost",
-  "Signed",
 ];
 
-const CLOSED_TYPE_STATUS = new Set(["Closed Won", "Closed Lost", "Signed"]);
+const CLOSED_TYPE_STATUS = new Set(["Closed Won", "Closed Lost"]);
 
 function normalizeDateTime(value) {
   if (!value) return "";
@@ -258,27 +241,27 @@ export default function FordLeadsPage({ userPermissions = {} }) {
 
   return (
     <div className="min-h-[calc(100svh-80px)] space-y-5 bg-slate-50 p-4 text-black sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-violet-200 border-l-4 border-l-violet-700 bg-white p-5 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-black">Leads Ford</h1>
+          <h1 className="text-2xl font-bold text-violet-700">Leads Ford</h1>
           <p className="mt-1 text-sm text-slate-600">Consulta, crea y actualiza leads usando la configuracion Ford del entorno.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canSync ? (
-            <Button variant="outline" onClick={() => createOpportunitiesNow({ selectedOnly: true })} disabled={importingOpportunities || !selectedLeadIds.length}>
+            <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => createOpportunitiesNow({ selectedOnly: true })} disabled={importingOpportunities || !selectedLeadIds.length}>
               {importingOpportunities ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
               Crear seleccionados
             </Button>
           ) : null}
           {canSync ? (
-            <Button variant="outline" onClick={() => createOpportunitiesNow({ selectedOnly: false })} disabled={importingOpportunities}>
+            <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => createOpportunitiesNow({ selectedOnly: false })} disabled={importingOpportunities}>
               {importingOpportunities ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
               Crear todos
             </Button>
           ) : null}
           {canCreate ? (
             <Link href="/leads-ford/nuevo">
-              <Button>
+              <Button className="bg-violet-700 text-white hover:bg-violet-800">
                 <Send className="mr-2 size-4" />
                 Agregar Lead
               </Button>
@@ -287,12 +270,12 @@ export default function FordLeadsPage({ userPermissions = {} }) {
         </div>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-xl border border-violet-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap gap-2">
-          <Button type="button" variant={tab === "ford" ? "default" : "outline"} onClick={() => setTab("ford")}>
+          <Button type="button" variant={tab === "ford" ? "default" : "outline"} className={tab === "ford" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 text-violet-700 hover:bg-violet-50"} onClick={() => setTab("ford")}>
             Leads Ford
           </Button>
-          <Button type="button" variant={tab === "sent" ? "default" : "outline"} onClick={() => setTab("sent")}>
+          <Button type="button" variant={tab === "sent" ? "default" : "outline"} className={tab === "sent" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 text-violet-700 hover:bg-violet-50"} onClick={() => setTab("sent")}>
             Enviados desde sistema
           </Button>
         </div>
@@ -304,23 +287,23 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                 <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Token, oportunidad, cliente..." />
               </Field>
               <div className="flex items-end">
-                <Button variant="outline" onClick={loadSentLeads} disabled={sentLoading}>
+                <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={loadSentLeads} disabled={sentLoading}>
                   {sentLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                   Actualizar
                 </Button>
               </div>
             </div>
 
-            {message ? <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-black">{message}</div> : null}
+            {message ? <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700">{message}</div> : null}
 
-            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-                <h2 className="text-sm font-bold text-black">Leads enviados a Ford</h2>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{filteredSentItems.length} visibles</span>
+            <div className="mt-5 overflow-hidden rounded-xl border border-violet-200">
+              <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-4 py-3">
+                <h2 className="text-sm font-bold text-violet-700">Leads enviados a Ford</h2>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-violet-700">{filteredSentItems.length} visibles</span>
               </div>
               <div className="max-h-[calc(100svh-360px)] overflow-auto">
                 <table className="min-w-full text-sm">
-                  <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase text-black">
+                  <thead className="sticky top-0 z-10 bg-violet-50 text-left text-xs uppercase text-violet-700">
                     <tr>
                       <th className="px-3 py-2">Oportunidad</th>
                       <th className="px-3 py-2">Token Ford</th>
@@ -339,8 +322,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                       </tr>
                     ) : null}
                     {!sentLoading && filteredSentItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 font-bold">{item.oportunidadCodigo || "-"}</td>
+                      <tr key={item.id} className="hover:bg-violet-50/50">
+                        <td className="px-3 py-2 font-bold text-violet-700">{item.oportunidadCodigo || "-"}</td>
                         <td className="max-w-[230px] truncate px-3 py-2 font-mono text-xs">{item.token || "-"}</td>
                         <td className="px-3 py-2">{item.clienteNombre || "-"}</td>
                         <td className="px-3 py-2">{item.email || item.celular || "-"}</td>
@@ -350,12 +333,12 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                         <td className="px-3 py-2 text-right">
                           <div className="flex justify-end gap-1">
                           {item.oportunidadId ? (
-                            <Link href={`/oportunidades/${item.oportunidadId}`} className="inline-flex size-7 items-center justify-center rounded-md hover:bg-slate-100" title="Ver oportunidad">
+                            <Link href={`/oportunidades/${item.oportunidadId}`} className="inline-flex size-7 items-center justify-center rounded-md text-violet-700 hover:bg-violet-50" title="Ver oportunidad">
                               <Eye className="size-4" />
                             </Link>
                           ) : null}
                           {item.token ? (
-                            <Link href={`/leads-ford/${encodeURIComponent(item.token)}`} className="inline-flex size-7 items-center justify-center rounded-md border border-slate-200 hover:bg-slate-100" title="Ver detalle Ford">
+                            <Link href={`/leads-ford/${encodeURIComponent(item.token)}`} className="inline-flex size-7 items-center justify-center rounded-md border border-violet-200 text-violet-700 hover:bg-violet-50" title="Ver detalle Ford">
                               <Eye className="size-4" />
                             </Link>
                           ) : null}
@@ -387,12 +370,12 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             </Field>
             <Field label="Tipo estado">
               <div className="relative">
-                <Button type="button" variant="outline" className="h-9 w-full justify-between text-black" onClick={() => setTypeStatusOpen((open) => !open)}>
+                <Button type="button" variant="outline" className="h-9 w-full justify-between border-violet-200 text-black hover:bg-violet-50" onClick={() => setTypeStatusOpen((open) => !open)}>
                   {typeStatus || "Todos"}
                   <ChevronsUpDown className="size-4 opacity-60" />
                 </Button>
                 {typeStatusOpen ? (
-                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-violet-200 bg-white shadow-lg">
                     <Command>
                       <CommandInput placeholder="Buscar estado..." />
                       <CommandList>
@@ -422,23 +405,23 @@ export default function FordLeadsPage({ userPermissions = {} }) {
               <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="ID, cliente, documento, modelo..." />
             </Field>
             <div className="flex items-end">
-              <Button className="w-full" onClick={searchLeads} disabled={!canSync || loading}>
+              <Button className="w-full bg-violet-700 text-white hover:bg-violet-800" onClick={searchLeads} disabled={!canSync || loading}>
                 <Filter className="mr-2 size-4" />
                 Filtrar
               </Button>
             </div>
           </div>
 
-          {message ? <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-black">{message}</div> : null}
+          {message ? <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700">{message}</div> : null}
 
-          <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <h2 className="text-sm font-bold text-black">Resultados</h2>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{filteredItems.length} visibles</span>
+          <div className="mt-5 overflow-hidden rounded-xl border border-violet-200">
+            <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-4 py-3">
+              <h2 className="text-sm font-bold text-violet-700">Resultados</h2>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-violet-700">{filteredItems.length} visibles</span>
             </div>
             <div className="max-h-[calc(100svh-360px)] overflow-auto">
             <table className="min-w-full text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs uppercase text-black">
+              <thead className="sticky top-0 z-10 bg-violet-50 text-left text-xs uppercase text-violet-700">
                 <tr>
                   <th className="px-3 py-2">
                     <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Seleccionar visibles" />
@@ -459,11 +442,11 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   </tr>
                 ) : null}
                 {!loading && filteredItems.map((item, index) => (
-                  <tr key={`${item.id || "lead"}-${index}`} className="hover:bg-slate-50">
+                  <tr key={`${item.id || "lead"}-${index}`} className="hover:bg-violet-50/50">
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={Boolean(item.id && selectedLeadIds.includes(item.id))} onChange={() => toggleLeadSelection(item.id)} aria-label={`Seleccionar ${item.id || "lead"}`} />
                     </td>
-                    <td className="max-w-[190px] truncate px-3 py-2 font-mono text-xs">{item.id || "-"}</td>
+                    <td className="max-w-[190px] truncate px-3 py-2 font-mono text-xs text-violet-700">{item.id || "-"}</td>
                     <td className="px-3 py-2">{item.status || "-"}</td>
                     <td className="px-3 py-2 font-medium">{contactName(item.contact)}</td>
                     <td className="px-3 py-2 text-black">{item.contact?.email || item.contact?.mobilePhone || item.contact?.phone || "-"}</td>
@@ -471,7 +454,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                     <td className="px-3 py-2">{formatFordDate(item.lastModifiedDate || item.createdDate)}</td>
                     <td className="px-3 py-2 text-right">
                       {item.id ? (
-                        <Link href={`/leads-ford/${encodeURIComponent(item.id)}`} className="inline-flex size-7 items-center justify-center rounded-md hover:bg-slate-100" title="Ver detalle">
+                        <Link href={`/leads-ford/${encodeURIComponent(item.id)}`} className="inline-flex size-7 items-center justify-center rounded-md text-violet-700 hover:bg-violet-50" title="Ver detalle">
                           <Eye className="size-4" />
                         </Link>
                       ) : (

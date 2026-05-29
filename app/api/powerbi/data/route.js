@@ -49,6 +49,9 @@ SELECT
   o.created_at AS fechacreacionoportunidad,
   o.oportunidad_id AS codigodeoportunidad,
   o.id AS oportunidad_db_id,
+  voll.fecha_agenda AS fecha_agenda,
+  voll.hora_agenda AS hora_agenda,
+  tk.token AS token,
   u.fullname AS usuarionombreasignadoaoportunidad,
   u.username AS usuarioasignadoaoportunidad,
   us.fullname AS usuarionombrecreadoroportunidad,
@@ -199,6 +202,16 @@ SELECT
   vcvh.fecha_hora AS cotizacion_vista_fecha_hora,
   voc.created_at as fechacreacioncierre
 FROM ventas_oportunidades o
+LEFT JOIN (
+  SELECT vod.*
+  FROM ventas_oportunidades_detalles vod
+  INNER JOIN (
+    SELECT oportunidad_padre_id, MAX(id) AS max_id
+    FROM ventas_oportunidades_detalles
+    GROUP BY oportunidad_padre_id
+  ) latest_vod ON latest_vod.max_id = vod.id
+) voll ON voll.oportunidad_padre_id = o.id
+LEFT JOIN ventas_oportunidad_tokens tk ON tk.oportunidad_id = o.id
 LEFT JOIN administracion_usuarios u ON u.id = o.asignado_a
 LEFT JOIN administracion_clientes c ON c.id = o.cliente_id
 LEFT JOIN administracion_usuarios usu ON c.created_by = usu.id

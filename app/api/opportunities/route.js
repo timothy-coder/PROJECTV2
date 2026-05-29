@@ -42,8 +42,8 @@ function normalizeStageName(value) {
 
 function configFromKind(kind) {
   return kind === "lead"
-    ? { prefix: "LD", permission: "leads", label: "leads" }
-    : { prefix: "OPO", permission: "oportunidades", label: "oportunidades" };
+    ? { prefix: "LD", listPrefixes: ["LD", "LF"], permission: "leads", label: "leads" }
+    : { prefix: "OPO", listPrefixes: ["OPO"], permission: "oportunidades", label: "oportunidades" };
 }
 
 async function nextCode(connection, prefix) {
@@ -84,7 +84,8 @@ export async function GET(request) {
     }
     const canViewAll = canSeeAll(user, config.permission);
     const canViewAllClients = canSeeAllClients(user);
-    const prefixFilter = `${config.prefix}-%`;
+    const prefixFilters = config.listPrefixes.map((prefix) => `${prefix}-%`);
+    const prefixWhere = prefixFilters.map(() => "o.oportunidad_id LIKE ?").join(" OR ");
     const [opportunityRows] = await pool.query(
       `SELECT o.id, o.oportunidad_id, o.cliente_id, o.origen_id, o.suborigen_id, o.etapasconversion_id,
               o.created_by, o.asignado_a, o.created_at, o.updated_at,
@@ -99,10 +100,10 @@ export async function GET(request) {
        INNER JOIN ventas_etapasconversion e ON e.id = o.etapasconversion_id
        INNER JOIN administracion_usuarios cu ON cu.id = o.created_by
        LEFT JOIN administracion_usuarios au ON au.id = o.asignado_a
-       WHERE o.oportunidad_id LIKE ?
+       WHERE (${prefixWhere})
        ${canViewAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)"}
        ORDER BY o.updated_at DESC`,
-      canViewAll ? [prefixFilter] : [prefixFilter, user.id, user.id]
+      canViewAll ? prefixFilters : [...prefixFilters, user.id, user.id]
     );
     const ids = opportunityRows.map((row) => row.id);
     let detailRows = [];

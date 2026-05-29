@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fordLeadsFetch, normalizeFordLeadListResponse } from "@/lib/fordLeads";
+import { fordLeadsFetch, normalizeFordLeadListResponse, normalizeFordLeadPatch } from "@/lib/fordLeads";
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
@@ -147,7 +147,27 @@ async function findOrCreateClient(connection, lead, userId) {
   return result.insertId;
 }
 
-async function createOpportunityFromLead(connection, lead, userId) {
+function fordPatchStatus(value, lossReason) {
+  const status = String(value || "").trim();
+  if (status === "Closed Lost" && !lossReason) return "Assigned";
+  return ["New", "Contacted", "Assigned", "Closed Won", "Closed Lost"].includes(status) ? status : "Assigned";
+}
+
+async function touchFordLeadModifiedDate(request, lead, changedAt) {
+  const leadId = String(lead.id || "").trim();
+  if (!leadId) return null;
+  const body = normalizeFordLeadPatch({
+    status: fordPatchStatus("Assigned", lead.lossReason),
+    contact: lead.contact || {},
+    vehicle: lead.vehicle || {},
+    preferenceDealer: lead.preferenceDealer || {},
+    lastModifiedDate: changedAt,
+    lossReason: lead.lossReason || undefined,
+  });
+  return fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body });
+}
+
+async function createOpportunityFromLead(connection, lead, userId, request) {
   const token = lead.id;
   if (!token) return { skipped: true, reason: "Lead sin ID." };
 
@@ -176,7 +196,9 @@ async function createOpportunityFromLead(connection, lead, userId) {
      VALUES (?, ?, 1, ?)`,
     [oportunidadId, token, userId]
   );
-  return { id: oportunidadId, code, token };
+  const changedAt = new Date().toISOString();
+  await touchFordLeadModifiedDate(request, lead, changedAt);
+  return { id: oportunidadId, code, token, lastModifiedDate: changedAt };
 }
 
 async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {
@@ -216,7 +238,7 @@ export async function POST(request) {
     const skipped = [];
     await connection.beginTransaction();
     for (const lead of leads) {
-      const result = await createOpportunityFromLead(connection, lead, user.id);
+      const result = await createOpportunityFromLead(connection, lead, user.id, request);
       if (result.skipped) skipped.push(result);
       else created.push(result);
     }
