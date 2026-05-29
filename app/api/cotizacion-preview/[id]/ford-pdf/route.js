@@ -139,8 +139,8 @@ async function loadTemplate(type, brand = "") {
   );
   const template = brandName && type === "COTIZACION"
     ? templates.find((item) => String(item.nombre || "").toLowerCase().includes(brandName.toLowerCase())) ||
-      templates.find((item) => /general|generica|gen[eé]rica|otras/i.test(String(item.nombre || ""))) ||
-      templates[0]
+    templates.find((item) => /general|generica|gen[eé]rica|otras/i.test(String(item.nombre || ""))) ||
+    templates[0]
     : templates[0];
   if (!template) return null;
   const [sections] = await pool.query(
@@ -443,15 +443,11 @@ function drawCommercialQuotePageOne(doc, data) {
     quoteBand(doc, x, y, w, section.name);
     y += 16;
     if (section.items.length) {
-      if (normalizeSpecName(section.name).includes("DIMENSIONES")) {
-        drawTechnicalMiniGrid(doc, section.items, x, y, w);
-        y += 84;
-      } else {
-        drawEquipmentColumns(doc, section.items, x, y, w);
-        y += 72;
-      }
+      // ✅ Usa drawTechnicalMiniGrid para todas (Dimensiones, Interior, Exterior, Seguridad)
+      drawTechnicalMiniGrid(doc, section.items, x, y, w);
+      y += 84;
     } else {
-      y += normalizeSpecName(section.name).includes("DIMENSIONES") ? 84 : 72;
+      y += 84;
     }
   });
 }
@@ -476,7 +472,9 @@ function drawCommercialQuotePageTwo(doc, data) {
 
   let y = 284;
   y = drawSmallInfoSection(doc, x, y, w, "Mantenimiento", "Es según el plan de mantenimiento de la cartilla del fabricante descrito en el manual de garantía.");
-  y = drawSmallInfoSection(doc, x, y, w, "Garantía", getQuoteWarrantyText(quote));
+  quoteBand(doc, x, y, w, "Garantía");
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.2).text(getQuoteWarrantyText(quote), x + 2, y + 15, { width: w - 4 });
+  y += 38;
   y = drawSmallInfoSection(doc, x, y, w, "Observaciones", quote.observaciones || "");
   y = drawSmallInfoSection(doc, x, y, w, "Validez de la cotización", getQuoteValidityText(quote));
   y = drawSmallInfoSection(doc, x, y, w, "Otros productos y servicios", quote.otros_productos || "");
@@ -876,7 +874,8 @@ function drawDeliveryProcess(doc, x, y, w) {
   doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.8);
   steps.forEach((step, index) => doc.text(step, x + index * colW + 2, y, { width: colW - 4, align: "center" }));
   doc.rect(x, y + 35, w, 18).fill("#f2f2f2");
-  doc.fillColor("#000000").text(
+  // ✅ aumentado de 6.1 a 7.2
+  doc.fillColor("#000000").font("Helvetica-Bold").fontSize(7.2).text(
     "Sujeto a disponibilidad de stock. Si existiera alguna observación de Registros Públicos durante el trámite de registro vehicular que ocasione demora en la entrega de la placa y tarjeta, este retraso no será imputable a Wankamotors.",
     x + 8,
     y + 39,
