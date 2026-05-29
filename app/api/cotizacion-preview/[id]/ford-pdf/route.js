@@ -873,7 +873,7 @@ function drawDeliveryProcess(doc, x, y, w) {
   const colW = w / steps.length;
   doc.fillColor("#000000").font("Helvetica-Bold").fontSize(5.8);
   steps.forEach((step, index) => doc.text(step, x + index * colW + 2, y, { width: colW - 4, align: "center" }));
-  doc.rect(x, y + 35, w, 18).fill("#f2f2f2");
+  doc.rect(x, y + 42, w, 18).fill("#f2f2f2");
   // ✅ aumentado de 6.1 a 7.2
   doc.fillColor("#000000").font("Helvetica-Bold").fontSize(8.1).text(
     "Sujeto a disponibilidad de stock. Si existiera alguna observación de Registros Públicos durante el trámite de registro vehicular que ocasione demora en la entrega de la placa y tarjeta, este retraso no será imputable a Wankamotors.",
