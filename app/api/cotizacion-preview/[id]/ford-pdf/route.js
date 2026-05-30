@@ -423,8 +423,8 @@ function drawCommercialQuotePageOne(doc, data) {
   doc.fontSize(8.6).text(vehicleTitle || "-", x + 2, 132, { width: w - 4 });
   quoteBand(doc, x, 146, w, "Condiciones");
 
-  // ✅ Imagen empieza en y: 146 (donde empieza "Condiciones") y ocupa todo el espacio hasta precio
-  if (hero?.href) drawImageOrLink(doc, getQuoteItemHref(hero, origin), x + 2, 146, 280, 150, "center", 280);
+  // ✅ Imagen debajo de "Condiciones" (y: 158), ocupa hasta un poco arriba de "Imagen referencial"
+  if (hero?.href) drawImageOrLink(doc, getQuoteItemHref(hero, origin), x + 2, 158, w - 286, 130, "center", w - 286);
   doc.fontSize(4.8).text("Imagen referencial*", x + 2, 296, { width: 120 });
 
   drawCommercialPriceBox(doc, x + 288, 158, 230, totals);
