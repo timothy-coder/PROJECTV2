@@ -483,11 +483,11 @@ function drawCommercialQuotePageTwo(doc, data) {
   doc.fontSize(13).text("¡¡¡ SOLICITE SU PRUEBA DE MANEJO !!!", x, 566, { width: w, align: "center" });
   doc.fontSize(7).text("Sin otro en particular, quedamos de Usted.", x + 48, 612, { width: 230 });
   doc.text("Atentamente", x + 48, 624, { width: 230 });
-  drawImageOrLink(doc, "/whatsapp.png", x + 250, 682, 58, 24, "center", 58);
-  doc.font(doc._registeredAutography ? "Autography" : "Helvetica-Oblique").fontSize(17).text(advisorName, x + 320, 654, { width: 160 });
-  doc.font("Helvetica-Bold").fontSize(8.5);
-  doc.text(`Celular: ${advisorContact.phone || ""}`, x + 320, 680, { width: 160 });
-  doc.text(`Correo: ${advisorContact.email || ""}`, x + 320, 692, { width: 190 });
+  drawImageOrLink(doc, "/whatsapp.png", x + 250, 654, 80, 36, "center", 80);
+doc.font(doc._registeredAutography ? "Autography" : "Helvetica-Oblique").fontSize(17).text(advisorName, x + 320, 654, { width: 160 });
+doc.font("Helvetica-Bold").fontSize(8.5);
+doc.text(`Celular: ${advisorContact.phone || ""}`, x + 320, 680, { width: 160 });
+doc.text(`Correo: ${advisorContact.email || ""}`, x + 320, 692, { width: 190 });
 }
 
 function drawOtherQuotePage(doc, data, { tc = "3.55" } = {}) {
