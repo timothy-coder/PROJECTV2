@@ -52,6 +52,46 @@ export async function GET(_request, { params }) {
       const [hourRows] = await pool.query(`SELECT id, TIME_FORMAT(hora, '%H:%i') AS hora FROM ${cfg.hours} ORDER BY hora ASC`);
       hours = hourRows.map((row) => ({ id: row.id, hora: row.hora }));
     }
+    let userCounts = [];
+    let userCountUsers = [];
+    if (scope === "ventas" && hasPerm(user.permissions || {}, ["configuracion_usuario_counts", "view"])) {
+      const [countRows] = await pool.query(
+        `SELECT u.id AS usuario_id, u.fullname, u.username, auc.id, COALESCE(auc.count, 0) AS count, auc.created_at, auc.updated_at
+         FROM (
+           SELECT c1.*
+           FROM administracion_usuario_counts c1
+           INNER JOIN (
+             SELECT usuario_id, MIN(id) AS id
+             FROM administracion_usuario_counts
+             GROUP BY usuario_id
+           ) first_count ON first_count.id = c1.id
+         ) auc
+         INNER JOIN administracion_usuarios u ON u.id = auc.usuario_id
+         ORDER BY COALESCE(NULLIF(u.fullname, ''), u.username) ASC, u.id ASC`
+      );
+      userCounts = countRows.map((row) => ({
+        id: row.id,
+        usuarioId: row.usuario_id,
+        fullname: row.fullname,
+        username: row.username,
+        count: Number(row.count || 0),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+      const [userRows] = await pool.query(
+        `SELECT u.id, u.fullname, u.username
+         FROM administracion_usuarios u
+         WHERE NOT EXISTS (
+           SELECT 1 FROM administracion_usuario_counts c WHERE c.usuario_id = u.id
+         )
+         ORDER BY COALESCE(NULLIF(u.fullname, ''), u.username) ASC, u.id ASC`
+      );
+      userCountUsers = userRows.map((row) => ({
+        id: row.id,
+        fullname: row.fullname,
+        username: row.username,
+      }));
+    }
     return NextResponse.json({
       centers: centers.map((row) => ({ id: row.id, nombre: row.nombre })),
       schedules: scheduleRows.map((row) => ({ id: row.id, centroId: row.centro_id, centroNombre: row.centro_nombre, slotMinutes: row.slot_minutes, week: parseJson(row.week_json, defaultWeek()) })),
@@ -59,6 +99,8 @@ export async function GET(_request, { params }) {
       times: timeRows.map((row) => ({ id: row.id, nombre: row.nombre, estado: row.estado, minutosDesde: row.minutos_desde, minutosHasta: row.minutos_hasta, colorHexadecimal: row.color_hexadecimal, descripcion: row.descripcion || "", activo: Boolean(row.activo), createdAt: row.created_at, updatedAt: row.updated_at })),
       closings,
       hours,
+      userCounts,
+      userCountUsers,
     });
   } catch (error) {
     console.error("Error loading sales settings:", error);
@@ -76,7 +118,8 @@ export async function POST(request, { params }) {
     const body = await request.json();
     if (!canWriteSettings(user, scope, body)) return NextResponse.json({ message: "No tienes permiso para guardar esta configuracion." }, { status: 403 });
     if (body.action === "delete") {
-      await deleteResource(cfg, body);
+      if (scope === "ventas" && body.resource === "user-count") await deleteUserCount(body);
+      else await deleteResource(cfg, body);
     } else if (body.resource === "stage-order") {
       await reorderStages(cfg.stages, body.items || []);
     } else if (body.resource === "schedule") {
@@ -95,6 +138,10 @@ export async function POST(request, { params }) {
       await upsertClosing(cfg.closings, body);
     } else if (body.resource === "hour" && cfg.hours) {
       await upsertHour(cfg.hours, body);
+    } else if (scope === "ventas" && body.resource === "user-count") {
+      await upsertUserCount(body);
+    } else if (scope === "ventas" && body.resource === "user-count-reset") {
+      await resetUserCounts();
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -142,6 +189,72 @@ async function upsertHour(table, body) {
   if (body.id) await pool.query(`UPDATE ${table} SET hora=? WHERE id=?`, [`${hora}:00`, Number(body.id)]);
   else await pool.query(`INSERT INTO ${table} (hora) VALUES (?)`, [`${hora}:00`]);
 }
+async function upsertUserCount(body) {
+  const usuarioId = Number(body.usuarioId);
+  const count = Math.max(0, Number(body.count || 0));
+  if (!usuarioId) throw new Error("Usuario invalido");
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT id FROM administracion_usuario_counts WHERE usuario_id=? ORDER BY id ASC`,
+      [usuarioId]
+    );
+    if (rows.length) {
+      await connection.query(`UPDATE administracion_usuario_counts SET count=? WHERE id=?`, [count, rows[0].id]);
+      if (rows.length > 1) {
+        await connection.query(
+          `DELETE FROM administracion_usuario_counts WHERE usuario_id=? AND id<>?`,
+          [usuarioId, rows[0].id]
+        );
+      }
+    } else {
+      await connection.query(
+        `INSERT INTO administracion_usuario_counts (usuario_id, count) VALUES (?, ?)`,
+        [usuarioId, 0]
+      );
+      await connection.query(`UPDATE administracion_usuario_counts SET count=0`);
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+async function deleteUserCount(body) {
+  const id = Number(body.id);
+  if (!id) throw new Error("Registro invalido");
+  await pool.query(`DELETE FROM administracion_usuario_counts WHERE id=?`, [id]);
+}
+async function resetUserCounts() {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO administracion_usuario_counts (usuario_id, count)
+       SELECT u.id, 0
+       FROM administracion_usuarios u
+       WHERE NOT EXISTS (
+         SELECT 1 FROM administracion_usuario_counts c WHERE c.usuario_id = u.id
+       )`
+    );
+    await connection.query(
+      `DELETE c2
+       FROM administracion_usuario_counts c1
+       INNER JOIN administracion_usuario_counts c2
+         ON c1.usuario_id = c2.usuario_id AND c1.id < c2.id`
+    );
+    await connection.query(`UPDATE administracion_usuario_counts SET count=0`);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
 async function deleteResource(cfg, body) {
   const tables = { stage: cfg.stages, time: cfg.times, closing: cfg.closings, hour: cfg.hours };
   const table = tables[body.resource];
@@ -157,6 +270,7 @@ function canReadSettings(user, scope) {
     return (
       hasPerm(permissions, ["configagenda", "view"]) ||
       hasPerm(permissions, ["configuracion_horas", "view"]) ||
+      hasPerm(permissions, ["configuracion_usuario_counts", "view"]) ||
       hasPerm(permissions, ["config_ventas_plantillas", "view"])
     );
   }
@@ -168,6 +282,10 @@ function canWriteSettings(user, scope, body) {
   const resource = body?.resource;
   const action = body?.action === "delete" ? "delete" : body?.id ? "edit" : "create";
   if (scope === "ventas" && resource === "hour") return hasPerm(permissions, ["configuracion_horas", action]);
+  if (scope === "ventas" && resource === "user-count") return hasPerm(permissions, ["configuracion_usuario_counts", action]);
+  if (scope === "ventas" && resource === "user-count-reset") {
+    return hasPerm(permissions, ["configuracion_usuario_counts", "create"]) || hasPerm(permissions, ["configuracion_usuario_counts", "edit"]);
+  }
   if (scope === "posventa" && resource === "closing") return hasPerm(permissions, ["config_posventa_cierres", action]);
   const baseKey = scope === "ventas" ? "configagenda" : "configcotizacion";
   const baseAction = resource === "stage-order" || resource === "schedule" ? "edit" : action;

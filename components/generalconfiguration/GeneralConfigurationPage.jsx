@@ -8,6 +8,7 @@ import { configurationTabs } from "@/components/generalconfiguration/config";
 import { canViewTab } from "@/components/generalconfiguration/permissionUtils";
 import { CentersTab } from "@/components/generalconfiguration/tabs/centers/CentersTab";
 import { CurrencyTab } from "@/components/generalconfiguration/tabs/currency/CurrencyTab";
+import { LinksTab } from "@/components/generalconfiguration/tabs/links/LinksTab";
 import { MotivesTab } from "@/components/generalconfiguration/tabs/motives/MotivesTab";
 import { OriginsTab } from "@/components/generalconfiguration/tabs/origins/OriginsTab";
 import { PlaceholderTab } from "@/components/generalconfiguration/tabs/PlaceholderTab";
@@ -79,6 +80,11 @@ export default function GeneralConfigurationPage({ userPermissions }) {
             />
           ) : activeConfig.id === "moneda" ? (
             <CurrencyTab
+              tab={activeConfig}
+              userPermissions={userPermissions}
+            />
+          ) : activeConfig.id === "links" ? (
+            <LinksTab
               tab={activeConfig}
               userPermissions={userPermissions}
             />

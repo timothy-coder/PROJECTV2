@@ -5,6 +5,7 @@ import {
   CircleDollarSign,
   Factory,
   HandCoins,
+  Link,
   MapPin,
   MessageSquareText,
   Package,
@@ -117,6 +118,17 @@ export const configurationTabs = [
       createImpuesto: ["configuracion_impuestos", "create"],
       editImpuesto: ["configuracion_impuestos", "edit"],
       deleteImpuesto: ["configuracion_impuestos", "delete"],
+    },
+  },
+  {
+    id: "links",
+    label: "Links",
+    icon: Link,
+    perm: ["configuracion_links", "view"],
+    actions: {
+      create: ["configuracion_links", "create"],
+      edit: ["configuracion_links", "edit"],
+      delete: ["configuracion_links", "delete"],
     },
   },
   {

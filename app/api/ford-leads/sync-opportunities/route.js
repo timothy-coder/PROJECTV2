@@ -147,6 +147,27 @@ async function findOrCreateClient(connection, lead, userId) {
   return result.insertId;
 }
 
+async function pickAssignedUserByCount(connection) {
+  const [rows] = await connection.query(
+    `SELECT auc.id, auc.usuario_id, auc.count
+     FROM administracion_usuario_counts auc
+     INNER JOIN administracion_usuarios u ON u.id = auc.usuario_id
+     WHERE COALESCE(u.is_active, 1) = 1
+     ORDER BY auc.count ASC, auc.updated_at ASC, auc.id ASC
+     LIMIT 1
+     FOR UPDATE`
+  );
+  const selected = rows[0];
+  if (!selected?.usuario_id) return null;
+  await connection.query(
+    `UPDATE administracion_usuario_counts
+     SET count = count + 1
+     WHERE id = ?`,
+    [selected.id]
+  );
+  return selected.usuario_id;
+}
+
 function fordPatchStatus(value, lossReason) {
   const status = String(value || "").trim();
   if (status === "Closed Lost" && !lossReason) return "Assigned";
@@ -178,12 +199,13 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
   const { origenId, suborigenId } = await originIds(connection, lead);
   const etapaId = await stageId(connection);
   if (!origenId || !etapaId) return { skipped: true, reason: "Falta origen o etapa configurada.", token };
+  const assignedUserId = await pickAssignedUserByCount(connection);
 
   const code = await nextLfCode(connection);
   const [result] = await connection.query(
     `INSERT INTO ventas_oportunidades (cliente_id, origen_id, suborigen_id, etapasconversion_id, created_by, asignado_a, oportunidad_id)
-     VALUES (?, ?, ?, ?, ?, NULL, ?)`,
-    [clienteId, origenId, suborigenId, etapaId, userId, code]
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [clienteId, origenId, suborigenId, etapaId, userId, assignedUserId, code]
   );
   const oportunidadId = result.insertId;
   await connection.query(
@@ -198,7 +220,7 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
   );
   const changedAt = new Date().toISOString();
   await touchFordLeadModifiedDate(request, lead, changedAt);
-  return { id: oportunidadId, code, token, lastModifiedDate: changedAt };
+  return { id: oportunidadId, code, token, assignedUserId, lastModifiedDate: changedAt };
 }
 
 async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {

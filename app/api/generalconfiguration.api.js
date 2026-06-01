@@ -138,6 +138,21 @@ export const generalConfigurationApi = {
     apiFetch(`/api/generalconfiguration/impuestos/${id}`, {
       method: "DELETE",
     }),
+  links: () => apiFetch("/api/generalconfiguration/links"),
+  createLink: ({ link, isForDesktop = false, isForMobile = false }) =>
+    apiFetch("/api/generalconfiguration/links", {
+      method: "POST",
+      body: JSON.stringify({ link, isForDesktop, isForMobile }),
+    }),
+  updateLink: (id, { link, isForDesktop = false, isForMobile = false }) =>
+    apiFetch(`/api/generalconfiguration/links/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ link, isForDesktop, isForMobile }),
+    }),
+  deleteLink: (id) =>
+    apiFetch(`/api/generalconfiguration/links/${id}`, {
+      method: "DELETE",
+    }),
   tarifas: (tipo) => apiFetch(`/api/generalconfiguration/tarifas?tipo=${tipo}`),
   createTarifa: ({ tipo, monedaId, nombre, precioHora, activo = true }) =>
     apiFetch("/api/generalconfiguration/tarifas", {

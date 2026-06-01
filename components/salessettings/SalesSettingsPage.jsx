@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignCenter, AlignLeft, AlignRight, Calendar, Clock, Edit3, Eye, FileImage, FileText, GripVertical, ImagePlus, Link, Plus, Save, Trash2, Type, Workflow } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Calendar, Clock, Edit3, Eye, FileImage, FileText, GripVertical, ImagePlus, Link, Plus, RotateCcw, Save, Trash2, Type, Users, Workflow } from "lucide-react";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,6 +37,13 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
     canEdit: hasPerm(userPermissions, [hourPermKey, "edit"]),
     canDelete: hasPerm(userPermissions, [hourPermKey, "delete"]),
   };
+  const userCountPermKey = "configuracion_usuario_counts";
+  const canViewUserCounts = scope === "ventas" && hasPerm(userPermissions, [userCountPermKey, "view"]);
+  const userCountPerms = {
+    canCreate: hasPerm(userPermissions, [userCountPermKey, "create"]),
+    canEdit: hasPerm(userPermissions, [userCountPermKey, "edit"]),
+    canDelete: hasPerm(userPermissions, [userCountPermKey, "delete"]),
+  };
   const closePermKey = scope === "ventas" ? permKey : "config_posventa_cierres";
   const canViewClosings = hasPerm(userPermissions, [closePermKey, "view"]) || canViewBase;
   const closingPerms = {
@@ -53,13 +60,14 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
   const tabs = [
     ...(canViewBase ? [{ id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" }] : []),
     ...(canViewHours ? [{ id: "hours", label: "Horas" }] : []),
+    ...(canViewUserCounts ? [{ id: "user-counts", label: "Conteo Usuarios" }] : []),
     ...(canViewBase ? [{ id: "stages", label: "Etapas de Conversion" }, { id: "times", label: "Tiempos" }] : []),
     ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
     ...(canViewTemplates ? [{ id: "templates", label: "Plantillas" }] : []),
   ];
   const [tab, setTab] = useState(tabs[0]?.id || "schedule");
   const activeTab = tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id;
-  const canView = canViewBase || canViewHours || canViewClosings || canViewTemplates;
+  const canView = canViewBase || canViewHours || canViewUserCounts || canViewClosings || canViewTemplates;
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
   return (
     <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
@@ -69,6 +77,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
       </div>
       {activeTab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
       {activeTab === "hours" ? <HoursTab data={data} canCreate={hourPerms.canCreate} canEdit={hourPerms.canEdit} canDelete={hourPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "hour", item })} /> : null}
+      {activeTab === "user-counts" ? <UserCountsTab data={data} canCreate={userCountPerms.canCreate} canEdit={userCountPerms.canEdit} canDelete={userCountPerms.canDelete} /> : null}
       {activeTab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
       {activeTab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
       {activeTab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
@@ -320,6 +329,107 @@ function HoursTab({ data, canCreate, canEdit, canDelete, openDialog }) {
         {!data.hours.length ? <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No hay horas registradas.</div> : null}
       </List>
     </section>
+  );
+}
+function UserCountsTab({ data, canCreate, canEdit, canDelete }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const totalUsers = data.userCounts.length;
+  const configured = data.userCounts.filter((item) => item.id).length;
+  const totalCount = data.userCounts.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const canReset = canCreate || canEdit;
+  const userOptions = data.userCountUsers || [];
+  async function addUser() {
+    if (!selectedUserId) return;
+    await data.save({ resource: "user-count", usuarioId: selectedUserId, count: 0 });
+    setSelectedUserId("");
+    setDialogOpen(false);
+  }
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <Header
+        icon={Users}
+        title="Conteo de Usuarios"
+        subtitle="Inicializa y administra el contador comercial de cada usuario"
+        action={
+          <div className="flex flex-wrap gap-2">
+            {canReset ? (
+              <Button variant="outline" onClick={() => data.save({ resource: "user-count-reset" })}>
+                <RotateCcw className="size-4" />Resetear a cero
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="size-4" />Agregar usuario
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <Stat label="Usuarios agregados" value={totalUsers} />
+        <Stat label="Registros creados" value={configured} tone="green" />
+        <Stat label="Conteo total" value={totalCount} tone="slate" />
+      </div>
+      <List>
+        {data.userCounts.map((item) => (
+          <UserCountRow key={item.usuarioId} item={item} canDelete={canDelete} data={data} />
+        ))}
+        {!data.userCounts.length ? <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No hay usuarios para mostrar.</div> : null}
+      </List>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setSelectedUserId(""); }}>
+        <DialogContent className="bg-white text-slate-950">
+          <DialogHeader>
+            <DialogTitle>Agregar usuario al conteo</DialogTitle>
+            <DialogDescription>El usuario se agregara con count en 0 y todos los conteos registrados volveran a cero.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addUser();
+            }}
+          >
+            <Field label="Usuario">
+              <NativeSelect
+                value={selectedUserId}
+                onChange={(event) => setSelectedUserId(event.target.value)}
+                options={[
+                  ["", userOptions.length ? "Seleccione usuario" : "No hay usuarios pendientes"],
+                  ...userOptions.map((user) => [String(user.id), user.fullname || user.username || `Usuario ${user.id}`]),
+                ]}
+              />
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={!selectedUserId}>Agregar</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+function UserCountRow({ item, canDelete, data }) {
+  const userName = item.fullname || item.username || `Usuario ${item.usuarioId}`;
+  const subtitle = [
+    item.username ? `Usuario: ${item.username}` : null,
+    item.id ? `Registro ${item.id}` : "Sin registro creado",
+  ].filter(Boolean).join(" - ");
+  return (
+    <div className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_auto] md:items-center">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-bold text-slate-900">{userName}</p>
+        <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+      </div>
+      <div className="flex gap-2">
+        {canDelete ? (
+          <Button variant="destructive" onClick={() => data.delete("user-count", item.id)}>
+            <Trash2 className="size-4" />Eliminar
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 function TimeTab({ data, canCreate, canEdit, canDelete, openDialog }) {
