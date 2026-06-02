@@ -38,6 +38,8 @@ function toDateTimeLocal(value) {
 
 function shortDate(value) {
   if (!value) return "";
+  const dateOnlyMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnlyMatch) return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   const pad = (part) => String(part).padStart(2, "0");
@@ -1444,6 +1446,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   const formatDate = (v) => {
     if (!v) return "-";
+    const dateOnlyMatch = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateOnlyMatch) return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
     const dd = String(d.getDate()).padStart(2, "0");
