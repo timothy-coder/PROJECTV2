@@ -1038,7 +1038,14 @@ function EditableReservationFormat({
             ))}
             {(form.descuentos || []).slice(0, 3).map((discount, index) => (
               <div key={discount.id || index} className="contents">
-                <div className="bg-slate-100 px-1 font-bold">{input(`discount-name-${index}`, discount.nombre || "", { disabled: true })}</div>
+                <div className="bg-slate-100 px-1 font-bold">
+                  <Input
+                    disabled={readOnly}
+                    value={discount.nombre || ""}
+                    onChange={(event) => updateDiscount(index, { nombre: event.target.value })}
+                    className={editableInputClass}
+                  />
+                </div>
                 <div className="grid grid-cols-[1fr_42px_22px] items-center gap-1">
                   <Input disabled={readOnly} type="number" value={discount.valor || ""} onChange={(event) => updateDiscount(index, { valor: event.target.value })} className={editableCenteredInputClass} />
                   <button type="button" className="text-[10px] text-blue-700" onClick={() => updateDiscount(index, { tipo: String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "PORCENTAJE" : "MONTO" })}>{String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "$" : "%"}</button>
