@@ -281,7 +281,8 @@ export async function GET(_request, { params }) {
       `SELECT u.fullname
        FROM administracion_usuarios u
        LEFT JOIN configuracion_roles r ON r.id=u.role_id
-       WHERE LOWER(COALESCE(r.name,'')) LIKE '%jefe%venta%' OR LOWER(COALESCE(u.fullname,'')) LIKE '%jefe%venta%'
+       WHERE COALESCE(u.is_active, 1)=1
+         AND LOWER(TRIM(COALESCE(r.name,''))) LIKE '%jefe%venta%'
        ORDER BY u.id ASC
        LIMIT 1`
     );

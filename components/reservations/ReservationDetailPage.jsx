@@ -1873,6 +1873,18 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       text("____________________________", center - 68, signatureY);
       put(value, center, signatureY + 12, { size: 7, align: "center", max: 24 });
     });
+    if (signed) {
+      pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
+      pdf.setFontSize(hasAutography ? 24 : 13);
+      if (asesor) {
+        pdf.text(asesor, x + w / 2, signatureY - 7, { align: "center", maxWidth: 135 });
+      }
+      if (salesBossName) {
+        pdf.text(salesBossName, x + w - 92, signatureY - 7, { align: "center", maxWidth: 135 });
+      }
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+    }
 
     const obsY = 674;
     box(obsY, 36);
