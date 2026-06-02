@@ -17,6 +17,11 @@ const montserrat = localFont({
 export const metadata = {
   title: "One Solution",
   description: "One Solution",
+  icons: {
+    icon: "/Logoarribasin.png",
+    shortcut: "/Logoarribasin.png",
+    apple: "/Logoarribasin.png",
+  },
   other: {
     google: "notranslate",
   },

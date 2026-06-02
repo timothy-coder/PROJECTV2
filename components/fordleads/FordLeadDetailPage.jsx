@@ -27,6 +27,7 @@ const LEAD_SUB_ORIGIN2_OPTIONS = ["Organic", "Email Campaign", "Facebook Campaig
 const PLAN_CODE_OPTIONS = ["EMP10", "MAFI1", "MAFI3", "PRFT2", "PRFT4", "PRXL3", "PRXL5", "RAFI1", "RAFI2", "RAFI5", "RAFI6", "TEFI2", "TEFI4"];
 const FORD_CREATE_STATUS_OPTIONS = ["New", "Contacted", "Closed Won", "Closed Lost"];
 const FORD_PATCH_STATUS_OPTIONS = ["New", "Contacted", "Closed Won", "Closed Lost"];
+const FORD_CLOSED_STATUSES = new Set(["Closed Won", "Closed Lost"]);
 const FORD_DOCUMENT_TYPE_OPTIONS = ["DNI", "RUC", "RUT", "Cédula de identidad", "Pasaporte"];
 const FORD_MOBILE_PHONE_TYPE_OPTIONS = ["Personal", "Casa", "Otro", "Trabajo"];
 const FORD_COUNTRY_OPTIONS = ["PER"];
@@ -385,8 +386,37 @@ const SELECT_OPTIONS = {
   "plan.planCode": PLAN_CODE_OPTIONS,
 };
 
-function fieldOptions(lead, field, { isCreate = false } = {}) {
-  if (field === "status") return isCreate ? FORD_CREATE_STATUS_OPTIONS : FORD_PATCH_STATUS_OPTIONS;
+function fordPatchStatusOptions(lead, originalLead) {
+  const originalStatus = String(readPath(originalLead || lead, "status") || "").trim();
+  const currentStatus = String(readPath(lead, "status") || "").trim();
+  let options = FORD_PATCH_STATUS_OPTIONS;
+
+  if (originalStatus === "New") options = ["Contacted", "Closed Won", "Closed Lost"];
+  else if (originalStatus === "Contacted") options = ["Closed Won", "Closed Lost"];
+  else if (FORD_CLOSED_STATUSES.has(originalStatus)) options = [];
+
+  if (currentStatus && !options.includes(currentStatus)) return [currentStatus, ...options];
+  return options;
+}
+
+function canEditFordStatus(originalLead) {
+  const originalStatus = String(readPath(originalLead, "status") || "").trim();
+  return !FORD_CLOSED_STATUSES.has(originalStatus);
+}
+
+function assertFordStatusTransition(lead, originalLead) {
+  const originalStatus = String(readPath(originalLead, "status") || "").trim();
+  const nextStatus = String(readPath(lead, "status") || "").trim();
+  if (!originalStatus || originalStatus === nextStatus) return;
+
+  const allowed = fordPatchStatusOptions(originalLead, originalLead);
+  if (!allowed.includes(nextStatus)) {
+    throw new Error(`No se puede cambiar el estado de ${originalStatus} a ${nextStatus}.`);
+  }
+}
+
+function fieldOptions(lead, field, { isCreate = false, originalLead = null } = {}) {
+  if (field === "status") return isCreate ? FORD_CREATE_STATUS_OPTIONS : fordPatchStatusOptions(lead, originalLead);
   if (field === "leadSource.subOrigin") {
     const origin = readPath(lead, "leadSource.origin");
     return FORD_LEAD_SOURCE_OPTIONS[origin] || FORD_SUB_ORIGIN_OPTIONS;
@@ -482,14 +512,36 @@ function hasChanged(current, original, path) {
   return JSON.stringify(readPath(current, path) ?? null) !== JSON.stringify(readPath(original, path) ?? null);
 }
 
+function defaultFieldValue(field, value) {
+  if (field === "contact.address.countryCode" && (value === null || value === undefined || value === "")) return "PER";
+  if (field === "lastModifiedDate" && (value === null || value === undefined || value === "")) return new Date().toISOString();
+  return value;
+}
+
+function formatAccessoriesDetails(value) {
+  if (!Array.isArray(value)) return value ?? "";
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    return item?.name || item?.detalle || item?.description || "";
+  }).filter(Boolean).join("\n");
+}
+
 function buildPatchPayload(lead, originalLead) {
+  const contact = {
+    ...(lead.contact || {}),
+    company: lead.contact?.company ?? null,
+    address: {
+      ...(lead.contact?.address || {}),
+      countryCode: lead.contact?.address?.countryCode || "PER",
+    },
+  };
   let payload = {
     status: lead.status || "New",
+    contact,
     preferenceDealer: lead.preferenceDealer || {},
-    lastModifiedDate: lead.lastModifiedDate || new Date().toISOString(),
+    lastModifiedDate: new Date().toISOString(),
   };
   if (lead.status === "Closed Lost") payload.lossReason = lead.lossReason || "";
-  if (!originalLead || hasChanged(lead, originalLead, "contact")) payload.contact = lead.contact || {};
   if (!originalLead || hasChanged(lead, originalLead, "vehicle")) payload.vehicle = lead.vehicle || {};
   return cleanPayload(payload);
 }
@@ -530,6 +582,13 @@ function blankLeadFromSections() {
 }
 
 function parseFieldValue(field, value) {
+  if (field === "vehicle.accessoriesDetails") {
+    return String(value || "")
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((name) => ({ name }));
+  }
   if (BOOLEAN_OPTIONS.includes(String(value)) && ["vehicleAsPartPayment", "financingFlag", "directSales", "traditionalSales"].includes(field)) return value === "true";
   if (field === "vehicleUsed.price") {
     const number = Number(value);
@@ -726,6 +785,7 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
     setError("");
     setMessage("");
     try {
+      assertFordStatusTransition(lead, originalLead);
       const payload = buildPatchPayload(lead, originalLead);
       const response = await fetch(`/api/ford-leads/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -773,7 +833,10 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
               </Button>
             </div>
           ) : lead ? (
-            <Button className="ml-auto bg-violet-700 text-white hover:bg-violet-800" onClick={() => setEditing(true)}>
+            <Button className="ml-auto bg-violet-700 text-white hover:bg-violet-800" onClick={() => {
+              setLead((current) => writePath(current, "lastModifiedDate", new Date().toISOString()));
+              setEditing(true);
+            }}>
               <Edit3 className="mr-2 size-4" />
               Editar
             </Button>
@@ -912,26 +975,30 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
                     <div key={section.title} className="contents">
                       <h2 className="col-span-full mt-1 border-t border-violet-100 pt-2 text-xs font-bold text-violet-700 first:mt-0 first:border-t-0 first:pt-0">{section.title}</h2>
                       <div className="contents">
-                        {section.fields.filter((field) => shouldShowField(lead, field)).map((field) => (
-                          <DetailField
-                            key={field}
-                            lead={lead}
-                            field={field}
-                            editable={editing && EDITABLE_FIELDS.has(field)}
-                            locked={editing && !EDITABLE_FIELDS.has(field)}
-                            onChange={(nextValue) => setLead((current) => {
-                              let next = writePath(current, field, parseFieldValue(field, nextValue));
-                              if (field === "leadSource.origin") {
-                                const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
-                                if (!allowed.includes(readPath(next, "leadSource.subOrigin"))) next = writePath(next, "leadSource.subOrigin", allowed[0] || "");
-                              }
-                              if (field === "status" && nextValue !== "Closed Lost") {
-                                next = writePath(next, "lossReason", "");
-                              }
-                              return next;
-                            })}
-                          />
-                        ))}
+                        {section.fields.filter((field) => shouldShowField(lead, field)).map((field) => {
+                          const statusLocked = field === "status" && !canEditFordStatus(originalLead);
+                          return (
+                            <DetailField
+                              key={field}
+                              lead={lead}
+                              originalLead={originalLead}
+                              field={field}
+                              editable={editing && EDITABLE_FIELDS.has(field) && !statusLocked}
+                              locked={editing && (!EDITABLE_FIELDS.has(field) || statusLocked)}
+                              onChange={(nextValue) => setLead((current) => {
+                                let next = writePath(current, field, parseFieldValue(field, nextValue));
+                                if (field === "leadSource.origin") {
+                                  const allowed = FORD_LEAD_SOURCE_OPTIONS[nextValue] || [];
+                                  if (!allowed.includes(readPath(next, "leadSource.subOrigin"))) next = writePath(next, "leadSource.subOrigin", allowed[0] || "");
+                                }
+                                if (field === "status" && nextValue !== "Closed Lost") {
+                                  next = writePath(next, "lossReason", "");
+                                }
+                                return next;
+                              })}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -945,10 +1012,11 @@ export default function FordLeadDetailPage({ id = "nuevo", mode = "view" }) {
   );
 }
 
-function DetailField({ lead, field, isCreate = false, editable = false, locked = false, sourceHint = "", onChange }) {
-  const value = readPath(lead, field);
+function DetailField({ lead, originalLead = null, field, isCreate = false, editable = false, locked = false, sourceHint = "", onChange }) {
+  const value = defaultFieldValue(field, readPath(lead, field));
   const info = FIELD_INFO[field];
-  const options = fieldOptions(lead, field, { isCreate });
+  const options = fieldOptions(lead, field, { isCreate, originalLead });
+  const inputValue = field === "vehicle.accessoriesDetails" ? formatAccessoriesDetails(value) : value ?? "";
 
   return (
     <div className="min-w-0 space-y-0.5">
@@ -980,10 +1048,10 @@ function DetailField({ lead, field, isCreate = false, editable = false, locked =
         </Select>
       ) : (
         editable ? (
-          field === "description" || field.endsWith(".description") ? (
-            <Textarea className="min-h-16 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+          field === "description" || field.endsWith(".description") || field === "vehicle.accessoriesDetails" ? (
+            <Textarea className="min-h-16 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={inputValue} onChange={(event) => onChange?.(event.target.value)} />
           ) : (
-            <Input className="h-8 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={value ?? ""} onChange={(event) => onChange?.(event.target.value)} />
+            <Input className="h-8 border-violet-100 bg-white text-xs text-black focus-visible:ring-violet-200" value={inputValue} onChange={(event) => onChange?.(event.target.value)} />
           )
         ) : (
           <div className="min-h-8 break-words rounded-md border border-violet-100 bg-slate-50 px-2 py-1.5 text-xs font-medium text-black">{displayValue(value)}</div>
