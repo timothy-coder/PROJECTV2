@@ -1875,12 +1875,21 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     });
     if (signed) {
       pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
-      pdf.setFontSize(hasAutography ? 24 : 13);
+      const fitSignatureFontSize = (value, maxWidth, preferredSize) => {
+        let fontSize = preferredSize;
+        pdf.setFontSize(fontSize);
+        while (fontSize > 10 && pdf.getTextWidth(String(value || "")) > maxWidth) {
+          fontSize -= 1;
+          pdf.setFontSize(fontSize);
+        }
+      };
       if (asesor) {
-        pdf.text(asesor, x + w / 2, signatureY - 7, { align: "center", maxWidth: 135 });
+        fitSignatureFontSize(asesor, 124, hasAutography ? 24 : 13);
+        pdf.text(asesor, x + w / 2, signatureY - 7, { align: "center" });
       }
       if (salesBossName) {
-        pdf.text(salesBossName, x + w - 92, signatureY - 7, { align: "center", maxWidth: 135 });
+        fitSignatureFontSize(salesBossName, 124, hasAutography ? 24 : 13);
+        pdf.text(salesBossName, x + w - 92, signatureY - 7, { align: "center" });
       }
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
