@@ -382,6 +382,7 @@ export async function GET(_request, { params }) {
           numeroOperacion: row.numero_operacion || "",
           monto: Number(row.monto || 0),
           fechaDeposito: row.fecha_deposito,
+          fecha_deposito: row.fecha_deposito,
           observacion: row.observacion || "",
         })),
         copropietarios: coownerRows.map((row) => ({

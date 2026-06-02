@@ -1823,7 +1823,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       const dep = depositos[index];
       label("Monto de depósito", x + 2, y, col5 - 2);
       putCentered(dep ? money(dep.monto || dep.importe || 0) : "", x + col5, y, col5, { size: 7, max: 16 });
-      putCentered(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
+      putCentered(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
       putCentered(firstValue(dep?.entidadFinanciera, dep?.banco), x + (col5 * 3), y, col5, { size: 7, max: 22 });
       putCentered(firstValue(dep?.numeroOperacion, dep?.operacion, dep?.op), x + (col5 * 4), y, col5, { size: 7, max: 18 });
       y += 9;
@@ -2089,7 +2089,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       rowBox(bottomPx);
       putLabel("Monto de depósito", formX + 2, yText(bottomPx), 28);
       put(dep ? money(dep.monto || dep.importe || 0) : "", formX + 92, yText(bottomPx), { bold: true, max: 18 });
-      put(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
+      put(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
       put(dep?.entidadFinanciera || dep?.banco || "", formX + 245, yText(bottomPx), { bold: true, max: 22 });
       put(dep?.numeroOperacion || dep?.operacion || dep?.op || "", formX + 360, yText(bottomPx), { bold: true, max: 22 });
     });
