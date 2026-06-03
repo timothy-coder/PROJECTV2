@@ -17,6 +17,11 @@ export function useMaintenanceDue() {
     return () => clearTimeout(timer);
   }, [reload]);
   const actions = useMemo(() => ({
+    recalculateMaintenance: async () => {
+      const result = await apiFetch("/api/clients/vehicles/maintenance/recalculate", { method: "POST" });
+      await reload();
+      return result;
+    },
     createOpportunity: async (payload) => {
       const created = await apiFetch("/api/postventa-opportunities?kind=opportunity", { method: "POST", body: JSON.stringify({ ...payload, kind: "opportunity" }) });
       const firstDetail = Array.isArray(payload.details) ? payload.details.find((item) => item?.fechaAgenda && item?.horaAgenda) : null;
@@ -28,6 +33,15 @@ export function useMaintenanceDue() {
               ...vehicle,
               oportunidadId: created.id,
               oportunidadCodigo: created.code || "",
+              oportunidades: [
+                ...(vehicle.oportunidades || []),
+                {
+                  id: created.id,
+                  code: created.code || "",
+                  fechaAgendada: firstDetail ? `${firstDetail.fechaAgenda} ${String(firstDetail.horaAgenda || "").slice(0, 5)}` : "",
+                  estado: closed ? "Cerrado" : "Programado",
+                },
+              ],
               fechaAgendada: firstDetail ? `${firstDetail.fechaAgenda} ${String(firstDetail.horaAgenda || "").slice(0, 5)}` : created.code || "",
               estadoRecordatorio: closed ? "Cerrado" : "Programado",
               cierreMotivo: closed ? payload.close.detalle || "Cierre registrado" : vehicle.cierreMotivo,

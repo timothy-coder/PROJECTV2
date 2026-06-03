@@ -109,6 +109,12 @@ export function useClients() {
     return result;
   }, [loadClients]);
 
+  const recalculateVehicleMaintenance = useCallback(async () => {
+    const result = await clientsApi.recalculateVehicleMaintenance();
+    await loadClients();
+    return result;
+  }, [loadClients]);
+
   const createVehicle = useCallback(async (payload) => {
     await clientsApi.createVehicle(payload);
     await loadClients();
@@ -122,6 +128,12 @@ export function useClients() {
   const deleteVehicle = useCallback(async (id) => {
     await clientsApi.deleteVehicle(id);
     await loadClients();
+  }, [loadClients]);
+
+  const addVehicleMaintenance = useCallback(async (id, payload) => {
+    const result = await clientsApi.addVehicleMaintenance(id, payload);
+    await loadClients();
+    return result;
   }, [loadClients]);
 
   const stats = useMemo(
@@ -145,9 +157,11 @@ export function useClients() {
     importClients,
     importVehicles,
     importMaintenance,
+    recalculateVehicleMaintenance,
     createVehicle,
     updateVehicle,
     deleteVehicle,
+    addVehicleMaintenance,
     reload: loadClients,
   };
 }

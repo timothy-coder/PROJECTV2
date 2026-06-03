@@ -2,13 +2,8 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
+import { datePart, daysBetween } from "@/lib/maintenanceNextVisit";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
-
-function datePart(value) {
-  if (!value) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
-}
 
 function addMonths(date, months) {
   const next = new Date(date);
@@ -22,12 +17,6 @@ function addDaysTrunc(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + Math.floor(n)); // trunc como tu ejemplo
   return next;
-}
-
-function daysBetween(from, to) {
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-  return Math.ceil((end - start) / 86400000);
 }
 
 function parseRanges(value) {
@@ -81,14 +70,16 @@ function pickProximo(today, candidates) {
   const valid = candidates.filter((c) => c?.date instanceof Date && !Number.isNaN(c.date.valueOf()));
   if (!valid.length) return { date: null, calculo: "" };
 
-  const futureOrToday = valid.filter((c) => c.date >= today);
-  if (futureOrToday.length) {
-    futureOrToday.sort((a, b) => a.date - b.date);
-    return { date: futureOrToday[0].date, calculo: futureOrToday[0].calculo };
-  }
+  const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
   // todas vencidas: elegir la que pasó primero (más antigua)
-  valid.sort((a, b) => a.date - b.date);
+  valid.sort((a, b) => {
+    const aDay = new Date(a.date.getFullYear(), a.date.getMonth(), a.date.getDate()).getTime();
+    const bDay = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate()).getTime();
+    const distance = Math.abs(aDay - todayDay) - Math.abs(bDay - todayDay);
+    if (distance !== 0) return distance;
+    return aDay - bDay;
+  });
   return { date: valid[0].date, calculo: valid[0].calculo };
 }
 
@@ -159,6 +150,7 @@ export async function GET() {
     // Historial (MySQL 8+): últimos 30 por cliente
     const vehicleIds = Array.from(new Set(vehicles.map((v) => v.id).filter(Boolean)));
     const historyByVehicleId = new Map();
+    const opportunitiesByVehicleId = new Map();
 
     if (vehicleIds.length) {
       const placeholders = vehicleIds.map(() => "?").join(",");
@@ -187,6 +179,62 @@ export async function GET() {
       for (const r of historyRows) {
         if (!historyByVehicleId.has(r.vehiculo_id)) historyByVehicleId.set(r.vehiculo_id, []);
         historyByVehicleId.get(r.vehiculo_id).push(r);
+      }
+
+      const [opportunityRows] = await pool.query(
+        `SELECT
+           o.id,
+           o.vehiculo_id,
+           o.oportunidad_id,
+           o.created_at,
+           e.nombre AS etapa_nombre,
+           e.color AS etapa_color,
+           d.fecha_agenda,
+           d.hora_agenda,
+           cierre.detalle AS cierre_detalle,
+           cierre_config.detalle AS cierre_motivo
+         FROM posventa_oportunidades o
+         LEFT JOIN configuracion_posventa_etapasconversion e ON e.id=o.etapasconversionpv_id
+         LEFT JOIN (
+           SELECT d.*
+           FROM posventa_oportunidades_detalles d
+           INNER JOIN (
+             SELECT oportunidad_padre_id, MAX(id) AS max_id
+             FROM posventa_oportunidades_detalles
+             GROUP BY oportunidad_padre_id
+           ) x ON x.max_id=d.id
+         ) d ON d.oportunidad_padre_id=o.id
+         LEFT JOIN (
+           SELECT *
+           FROM (
+             SELECT pc.*, ROW_NUMBER() OVER (PARTITION BY pc.oportunidad_id ORDER BY pc.created_at DESC, pc.id DESC) AS rn
+             FROM posventa_oportunidades_cierres pc
+           ) latest_close
+           WHERE latest_close.rn=1
+         ) cierre ON cierre.oportunidad_id=o.id
+         LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id=cierre.cierre_detalle_id
+         WHERE o.vehiculo_id IN (${placeholders})
+           AND o.oportunidad_id LIKE 'OPPV-%'
+         ORDER BY o.vehiculo_id ASC, o.created_at DESC, o.id DESC`,
+        vehicleIds
+      );
+
+      for (const opportunity of opportunityRows) {
+        if (!opportunitiesByVehicleId.has(opportunity.vehiculo_id)) {
+          opportunitiesByVehicleId.set(opportunity.vehiculo_id, []);
+        }
+        opportunitiesByVehicleId.get(opportunity.vehiculo_id).push({
+          id: opportunity.id,
+          code: opportunity.oportunidad_id || "",
+          etapaNombre: opportunity.etapa_nombre || "",
+          etapaColor: opportunity.etapa_color || "#2563eb",
+          fechaAgendada: opportunity.fecha_agenda
+            ? `${datePart(opportunity.fecha_agenda)} ${String(opportunity.hora_agenda || "").slice(0, 5)}`
+            : "",
+          estado: opportunity.cierre_detalle || opportunity.cierre_motivo ? "Cerrado" : opportunity.etapa_nombre || "",
+          cierreMotivo: opportunity.cierre_motivo || opportunity.cierre_detalle || "",
+          createdAt: opportunity.created_at,
+        });
       }
     }
 
@@ -246,8 +294,8 @@ export async function GET() {
         { date: nextByKm, calculo: "KM" },
       ]);
 
-      const proximo = picked.date;
-      const calculo = picked.calculo;
+      const proximo = row.fecha_ultima_visita ? new Date(row.fecha_ultima_visita) : null;
+      const calculo = "";
 
       const daysRemaining = proximo ? daysBetween(today, proximo) : null;
 
@@ -321,6 +369,7 @@ export async function GET() {
         oportunidadId: row.oportunidad_abierta_id,
         oportunidadCodigo: row.oportunidad_codigo || "",
         fechaAgendada: row.fecha_agenda ? `${datePart(row.fecha_agenda)} ${String(row.hora_agenda || "").slice(0, 5)}` : "",
+        oportunidades: opportunitiesByVehicleId.get(row.id) || [],
       });
     }
 

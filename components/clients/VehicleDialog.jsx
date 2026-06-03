@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wrench } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ function formFromVehicle(vehicle, client) {
   };
 }
 
-export function VehicleDialog({ open, mode, vehicle, client, options, onClose, onSubmit }) {
+export function VehicleDialog({ open, mode, vehicle, client, options, onClose, onSubmit, onAddMaintenance }) {
   if (!open) return null;
 
   return (
@@ -42,11 +42,12 @@ export function VehicleDialog({ open, mode, vehicle, client, options, onClose, o
       options={options}
       onClose={onClose}
       onSubmit={onSubmit}
+      onAddMaintenance={onAddMaintenance}
     />
   );
 }
 
-function VehicleDialogContent({ mode, vehicle, client, options, onClose, onSubmit }) {
+function VehicleDialogContent({ mode, vehicle, client, options, onClose, onSubmit, onAddMaintenance }) {
   const [form, setForm] = useState(formFromVehicle(vehicle, client));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -134,10 +135,25 @@ function VehicleDialogContent({ mode, vehicle, client, options, onClose, onSubmi
             <Field label="Año" value={form.anio} onChange={(value) => updateField("anio", value)} />
             <Field label="Color" value={form.color} onChange={(value) => updateField("color", value)} />
             <Field label="Kilometraje" value={form.kilometraje} onChange={(value) => updateField("kilometraje", value)} />
-            <Field type="date" label="Ultima visita" value={form.fechaUltimaVisita} onChange={(value) => updateField("fechaUltimaVisita", value)} />
+            <Field type="date" label="Proximo mantenimiento" value={form.fechaUltimaVisita} onChange={(value) => updateField("fechaUltimaVisita", value)} />
           </div>
           {error ? <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
           <DialogFooter className="mt-4">
+            {mode === "edit" && onAddMaintenance ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  onAddMaintenance(vehicle);
+                  onClose();
+                }}
+                disabled={saving}
+                className="mr-auto"
+              >
+                <Wrench className="size-4" />
+                Agregar mantenimiento
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
             <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
+import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function normalize(value) {
@@ -54,6 +55,7 @@ export async function POST(request) {
     const users = await loadUserMap(connection);
     let imported = 0;
     const errors = [];
+    const touchedVehicleIds = new Set();
 
     await connection.beginTransaction();
 
@@ -97,6 +99,7 @@ export async function POST(request) {
           createdBy,
         ]
       );
+      touchedVehicleIds.add(vehicle.id);
       imported += 1;
     }
 
@@ -105,8 +108,12 @@ export async function POST(request) {
       return NextResponse.json({ message: errors[0] || "No se pudo importar mantenimientos." }, { status: 400 });
     }
 
+    for (const vehicleId of touchedVehicleIds) {
+      await updateVehicleNextMaintenanceDate(connection, vehicleId);
+    }
+
     await connection.commit();
-    return NextResponse.json({ ok: true, imported, updated: 0, errors });
+    return NextResponse.json({ ok: true, imported, updated: touchedVehicleIds.size, errors });
   } catch (error) {
     await connection.rollback();
     console.error("Error importing vehicle maintenance:", error);

@@ -1,9 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, Plus, RefreshCw, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { PostventaOpportunityDialog } from "@/components/postventa/PostventaOpportunityDialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +23,7 @@ import { useMaintenanceDue } from "@/hooks/postventa/useMaintenanceDue";
 import { hasPerm } from "@/lib/permissions";
 
 export default function MaintenanceDuePage({ userPermissions }) {
+  const router = useRouter();
   const data = useMaintenanceDue();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -24,6 +35,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [dialogVehicle, setDialogVehicle] = useState(null);
   const [clientDetail, setClientDetail] = useState(null);
   const [vehicleDetail, setVehicleDetail] = useState(null);
+  const [opportunityPicker, setOpportunityPicker] = useState(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   const canViewAll = Boolean(
     hasPerm(userPermissions, ["oportunidadespv", "viewall"]) ||
@@ -92,6 +105,29 @@ export default function MaintenanceDuePage({ userPermissions }) {
     setToDate(today);
   }
 
+  async function handleRecalculateMaintenance() {
+    setRecalculating(true);
+    try {
+      const result = await data.recalculateMaintenance();
+      toast.success(`Proximo mantenimiento recalculado para ${result.updated || 0} vehiculos`);
+    } catch (error) {
+      toast.error(error.message || "No se pudo recalcular los mantenimientos");
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
+  function openOpportunity(item) {
+    const opportunities = Array.isArray(item.oportunidades) ? item.oportunidades : [];
+    if (opportunities.length > 1) {
+      setOpportunityPicker(item);
+      return;
+    }
+
+    const opportunityId = opportunities[0]?.id || item.oportunidadId;
+    if (opportunityId) router.push(`/oportunidadespv/${opportunityId}`);
+  }
+
   if (!canView) {
     return (
       <div className="rounded-lg bg-white p-4 text-sm text-slate-700">
@@ -109,10 +145,20 @@ export default function MaintenanceDuePage({ userPermissions }) {
             Resumen de vehiculos y mantenimiento pronosticado {canViewAll ? "- Vista completa" : "- Mi vista"}
           </p>
         </div>
-        <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={data.reload}>
-          <RefreshCw className="size-4" />
-          Recargar
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRecalculateMaintenance}
+            disabled={recalculating}
+          >
+            {recalculating ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            Recalcular proximos
+          </Button>
+          <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={data.reload}>
+            <RefreshCw className="size-4" />
+            Recargar
+          </Button>
+        </div>
       </header>
 
       <section className="rounded-lg border bg-white p-4 shadow-sm">
@@ -290,19 +336,19 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
                   <td className="px-3 text-right align-top">
                     {item.oportunidadId && canOpenOpportunity ? (
-                      <Button size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { window.location.href = `/oportunidadespv/${item.oportunidadId}`; }}>
-                        Ver oportunidad
+                      <Button size="sm" variant="outline" className="mb-2 whitespace-nowrap" onClick={() => openOpportunity(item)}>
+                        Ver oportunidad{item.oportunidades?.length > 1 ? ` (${item.oportunidades.length})` : ""}
                       </Button>
                     ) : null}
 
-                    {!item.oportunidadId && canCreate ? (
+                    {canCreate ? (
                       <Button
                         size="sm"
                         className="whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700"
                         onClick={() => setDialogVehicle(item)}
                       >
                         <Plus className="size-4" />
-                        Crear oportunidad
+                        {item.oportunidadId ? "Agregar oportunidad" : "Crear oportunidad"}
                       </Button>
                     ) : null}
                   </td>
@@ -339,7 +385,59 @@ export default function MaintenanceDuePage({ userPermissions }) {
       ) : null}
       {clientDetail ? <ClientInfoDialog item={clientDetail} onClose={() => setClientDetail(null)} /> : null}
       {vehicleDetail ? <VehicleInfoDialog item={vehicleDetail} onClose={() => setVehicleDetail(null)} /> : null}
+      {opportunityPicker ? (
+        <OpportunityPickerDialog
+          item={opportunityPicker}
+          onClose={() => setOpportunityPicker(null)}
+          onOpenOpportunity={(id) => router.push(`/oportunidadespv/${id}`)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function OpportunityPickerDialog({ item, onClose, onOpenOpportunity }) {
+  const opportunities = Array.isArray(item.oportunidades) ? item.oportunidades : [];
+
+  return (
+    <CommandDialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title="Seleccionar oportunidad"
+      description="Elige la oportunidad de PostVenta que deseas abrir."
+      className="w-[min(94vw,560px)] bg-white text-slate-950"
+      showCloseButton
+    >
+      <Command>
+        <div className="border-b border-slate-200 px-3 py-2">
+          <p className="text-sm font-bold text-violet-700">{item.clienteNombre}</p>
+          <p className="text-xs text-slate-500">{item.vehiculo}</p>
+        </div>
+        <CommandInput placeholder="Buscar oportunidad..." />
+        <CommandList>
+          <CommandEmpty>No hay oportunidades.</CommandEmpty>
+          <CommandGroup heading="Oportunidades asociadas">
+            {opportunities.map((opportunity) => (
+              <CommandItem
+                key={opportunity.id}
+                value={`${opportunity.code} ${opportunity.etapaNombre} ${opportunity.fechaAgendada}`}
+                onSelect={() => {
+                  onOpenOpportunity(opportunity.id);
+                }}
+                className="items-start py-2"
+              >
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-950">{opportunity.code}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {opportunity.fechaAgendada || "Sin agenda"} {opportunity.estado ? `- ${opportunity.estado}` : ""}
+                  </p>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </CommandDialog>
   );
 }
 

@@ -1,14 +1,27 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Car, Download, Edit3, Loader2, Plus, Search, Trash2, Upload, UserRound } from "lucide-react";
+import {
+  Car,
+  Download,
+  Edit3,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog";
 import { VehicleDialog } from "@/components/clients/VehicleDialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useClients } from "@/hooks/clients/useClients";
 import { hasPerm } from "@/lib/permissions";
 
@@ -19,6 +32,10 @@ function clientName(client) {
 function formatDate(value) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("es-PE", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function todayInputDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ClientsPage({ userPermissions }) {
@@ -33,9 +50,11 @@ export default function ClientsPage({ userPermissions }) {
     importClients,
     importVehicles,
     importMaintenance,
+    recalculateVehicleMaintenance,
     createVehicle,
     updateVehicle,
     deleteVehicle,
+    addVehicleMaintenance,
   } = useClients();
 
   const fileInputRef = useRef(null);
@@ -47,7 +66,9 @@ export default function ClientsPage({ userPermissions }) {
   const [vehiclesClient, setVehiclesClient] = useState(null);
   const [clientDialog, setClientDialog] = useState({ mode: null, client: null });
   const [vehicleDialog, setVehicleDialog] = useState({ mode: null, client: null, vehicle: null });
+  const [maintenanceDialog, setMaintenanceDialog] = useState({ client: null, vehicle: null });
   const [deleteDialog, setDeleteDialog] = useState({ type: null, client: null, vehicle: null });
+  const [recalculatingMaintenance, setRecalculatingMaintenance] = useState(false);
 
   const canCreate = hasPerm(userPermissions, ["clientes", "create"]);
   const canEdit = hasPerm(userPermissions, ["clientes", "edit"]);
@@ -80,6 +101,11 @@ export default function ClientsPage({ userPermissions }) {
         .some((value) => value.toLowerCase().includes(clean))
     );
   }, [clients, query]);
+
+  const activeVehiclesClient = useMemo(() => {
+    if (!vehiclesClient) return null;
+    return clients.find((client) => client.id === vehiclesClient.id) || vehiclesClient;
+  }, [clients, vehiclesClient]);
 
   async function exportClients() {
     const XLSX = await import("xlsx");
@@ -200,6 +226,19 @@ export default function ClientsPage({ userPermissions }) {
     }
   }
 
+  async function handleRecalculateMaintenance() {
+    setImportMessage("");
+    setRecalculatingMaintenance(true);
+    try {
+      const result = await recalculateVehicleMaintenance();
+      setImportMessage(`Proximo mantenimiento recalculado para ${result.updated || 0} vehiculos.`);
+    } catch (error) {
+      setImportMessage(error.message || "No se pudo recalcular los mantenimientos.");
+    } finally {
+      setRecalculatingMaintenance(false);
+    }
+  }
+
   return (
     // ✅ página full-height; la tabla será la que scrollea
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
@@ -252,6 +291,21 @@ export default function ClientsPage({ userPermissions }) {
             <Button variant="outline" onClick={() => maintenanceFileInputRef.current?.click()} className="h-10 justify-center whitespace-nowrap">
               <Upload className="size-4" />
               Importar mantenimientos
+            </Button>
+          ) : null}
+          {canImportMaintenance || canViewVehicles ? (
+            <Button
+              variant="outline"
+              onClick={handleRecalculateMaintenance}
+              disabled={recalculatingMaintenance}
+              className="h-10 justify-center whitespace-nowrap"
+            >
+              {recalculatingMaintenance ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Recalcular proximos
             </Button>
           ) : null}
 
@@ -421,18 +475,28 @@ export default function ClientsPage({ userPermissions }) {
         onSubmit={(payload) =>
           vehicleDialog.mode === "edit" ? updateVehicle(vehicleDialog.vehicle.id, payload) : createVehicle(payload)
         }
+        onAddMaintenance={(vehicle) => setMaintenanceDialog({ client: vehicleDialog.client, vehicle })}
       />
 
       <VehiclesDialog
-        client={vehiclesClient}
-        open={Boolean(vehiclesClient)}
+        client={activeVehiclesClient}
+        open={Boolean(activeVehiclesClient)}
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canDelete}
         onClose={() => setVehiclesClient(null)}
-        onCreate={() => setVehicleDialog({ mode: "create", client: vehiclesClient, vehicle: null })}
-        onEdit={(vehicle) => setVehicleDialog({ mode: "edit", client: vehiclesClient, vehicle })}
-        onDelete={(vehicle) => setDeleteDialog({ type: "vehicle", client: vehiclesClient, vehicle })}
+        onCreate={() => setVehicleDialog({ mode: "create", client: activeVehiclesClient, vehicle: null })}
+        onEdit={(vehicle) => setVehicleDialog({ mode: "edit", client: activeVehiclesClient, vehicle })}
+        onDelete={(vehicle) => setDeleteDialog({ type: "vehicle", client: activeVehiclesClient, vehicle })}
+        onMaintenance={(vehicle) => setMaintenanceDialog({ client: activeVehiclesClient, vehicle })}
+      />
+
+      <MaintenanceDialog
+        client={maintenanceDialog.client}
+        vehicle={maintenanceDialog.vehicle}
+        open={Boolean(maintenanceDialog.vehicle)}
+        onClose={() => setMaintenanceDialog({ client: null, vehicle: null })}
+        onSubmit={(vehicleId, payload) => addVehicleMaintenance(vehicleId, payload)}
       />
 
       <DeleteClientDialog
@@ -450,7 +514,18 @@ export default function ClientsPage({ userPermissions }) {
   );
 }
 
-function VehiclesDialog({ client, open, canCreate, canEdit, canDelete, onClose, onCreate, onEdit, onDelete }) {
+function VehiclesDialog({
+  client,
+  open,
+  canCreate,
+  canEdit,
+  canDelete,
+  onClose,
+  onCreate,
+  onEdit,
+  onDelete,
+  onMaintenance,
+}) {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent className="max-h-[92svh] w-[min(96vw,860px)] max-w-none overflow-hidden bg-white p-0 text-slate-950">
@@ -463,6 +538,7 @@ function VehiclesDialog({ client, open, canCreate, canEdit, canDelete, onClose, 
             onCreate={onCreate}
             onEdit={onEdit}
             onDelete={onDelete}
+            onMaintenance={onMaintenance}
           />
         ) : null}
       </DialogContent>
@@ -470,7 +546,7 @@ function VehiclesDialog({ client, open, canCreate, canEdit, canDelete, onClose, 
   );
 }
 
-function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit, onDelete }) {
+function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit, onDelete, onMaintenance }) {
   return (
     <div className="flex max-h-[92svh] flex-col overflow-hidden bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -507,10 +583,20 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">VIN: {vehicle.vin || "-"}</p>
-                  <p className="text-xs text-slate-500">Última visita: {formatDate(vehicle.fechaUltimaVisita)}</p>
+                  <p className="text-xs text-slate-500">Proximo mantenimiento: {formatDate(vehicle.fechaUltimaVisita)}</p>
                 </div>
 
                 <div className="flex shrink-0 gap-2">
+                  {canEdit ? (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => onMaintenance(vehicle)}
+                      title="Agregar mantenimiento"
+                    >
+                      <Wrench className="size-4" />
+                    </Button>
+                  ) : null}
                   {canEdit ? (
                     <Button variant="ghost" size="icon" onClick={() => onEdit(vehicle)}>
                       <Edit3 className="size-4" />
@@ -536,5 +622,86 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
         </div>
       </div>
     </div>
+  );
+}
+
+function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
+  const [fechaVisitaTaller, setFechaVisitaTaller] = useState(todayInputDate());
+  const [kilometrajeTaller, setKilometrajeTaller] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!vehicle?.id) return;
+
+    setSaving(true);
+    setMessage("");
+    try {
+      await onSubmit(vehicle.id, {
+        fechaVisitaTaller,
+        kilometrajeTaller,
+      });
+      setFechaVisitaTaller(todayInputDate());
+      setKilometrajeTaller("");
+      onClose();
+    } catch (error) {
+      setMessage(error.message || "No se pudo registrar el mantenimiento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="w-[min(94vw,430px)] max-w-none bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-slate-200 px-4 py-3">
+          <DialogTitle className="text-lg font-bold text-violet-700">Agregar mantenimiento</DialogTitle>
+          <p className="text-xs font-medium text-slate-500">
+            {client ? clientName(client) : ""} {vehicle?.placas ? `- ${vehicle.placas}` : ""}
+          </p>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 p-4">
+          {message ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              {message}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <Label>Fecha de visita al taller</Label>
+            <Input
+              type="date"
+              value={fechaVisitaTaller}
+              onChange={(event) => setFechaVisitaTaller(event.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Kilometraje</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={kilometrajeTaller}
+              onChange={(event) => setKilometrajeTaller(event.target.value)}
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Wrench className="size-4" />}
+              Guardar
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

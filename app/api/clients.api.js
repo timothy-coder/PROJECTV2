@@ -31,6 +31,10 @@ export const clientsApi = {
       method: "POST",
       body: JSON.stringify({ rows }),
     }),
+  recalculateVehicleMaintenance: () =>
+    apiFetch("/api/clients/vehicles/maintenance/recalculate", {
+      method: "POST",
+    }),
   createVehicle: (payload) =>
     apiFetch("/api/clients/vehicles", {
       method: "POST",
@@ -44,5 +48,10 @@ export const clientsApi = {
   deleteVehicle: (id) =>
     apiFetch(`/api/clients/vehicles/${id}`, {
       method: "DELETE",
+    }),
+  addVehicleMaintenance: (id, payload) =>
+    apiFetch(`/api/clients/vehicles/${id}/maintenance`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
