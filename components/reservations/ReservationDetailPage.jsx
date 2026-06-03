@@ -38,6 +38,8 @@ function toDateTimeLocal(value) {
 
 function shortDate(value) {
   if (!value) return "";
+  const dateOnlyMatch = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnlyMatch) return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   const pad = (part) => String(part).padStart(2, "0");
@@ -1038,7 +1040,14 @@ function EditableReservationFormat({
             ))}
             {(form.descuentos || []).slice(0, 3).map((discount, index) => (
               <div key={discount.id || index} className="contents">
-                <div className="bg-slate-100 px-1 font-bold">{input(`discount-name-${index}`, discount.nombre || "", { disabled: true })}</div>
+                <div className="bg-slate-100 px-1 font-bold">
+                  <Input
+                    disabled={readOnly}
+                    value={discount.nombre || ""}
+                    onChange={(event) => updateDiscount(index, { nombre: event.target.value })}
+                    className={editableInputClass}
+                  />
+                </div>
                 <div className="grid grid-cols-[1fr_42px_22px] items-center gap-1">
                   <Input disabled={readOnly} type="number" value={discount.valor || ""} onChange={(event) => updateDiscount(index, { valor: event.target.value })} className={editableCenteredInputClass} />
                   <button type="button" className="text-[10px] text-blue-700" onClick={() => updateDiscount(index, { tipo: String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "PORCENTAJE" : "MONTO" })}>{String(discount.tipo || "MONTO").toUpperCase() === "MONTO" ? "$" : "%"}</button>
@@ -1437,6 +1446,8 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
 
   const formatDate = (v) => {
     if (!v) return "-";
+    const dateOnlyMatch = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateOnlyMatch) return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
     const dd = String(d.getDate()).padStart(2, "0");
@@ -1812,7 +1823,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       const dep = depositos[index];
       label("Monto de depósito", x + 2, y, col5 - 2);
       putCentered(dep ? money(dep.monto || dep.importe || 0) : "", x + col5, y, col5, { size: 7, max: 16 });
-      putCentered(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
+      putCentered(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
       putCentered(firstValue(dep?.entidadFinanciera, dep?.banco), x + (col5 * 3), y, col5, { size: 7, max: 22 });
       putCentered(firstValue(dep?.numeroOperacion, dep?.operacion, dep?.op), x + (col5 * 4), y, col5, { size: 7, max: 18 });
       y += 9;
@@ -1866,6 +1877,27 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       text("____________________________", center - 68, signatureY);
       put(value, center, signatureY + 12, { size: 7, align: "center", max: 24 });
     });
+    if (signed) {
+      pdf.setFont(hasAutography ? "Autography" : "helvetica", hasAutography ? "normal" : "italic");
+      const fitSignatureFontSize = (value, maxWidth, preferredSize) => {
+        let fontSize = preferredSize;
+        pdf.setFontSize(fontSize);
+        while (fontSize > 10 && pdf.getTextWidth(String(value || "")) > maxWidth) {
+          fontSize -= 1;
+          pdf.setFontSize(fontSize);
+        }
+      };
+      if (asesor) {
+        fitSignatureFontSize(asesor, 124, hasAutography ? 24 : 13);
+        pdf.text(asesor, x + w / 2, signatureY - 7, { align: "center" });
+      }
+      if (salesBossName) {
+        fitSignatureFontSize(salesBossName, 124, hasAutography ? 24 : 13);
+        pdf.text(salesBossName, x + w - 92, signatureY - 7, { align: "center" });
+      }
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+    }
 
     const obsY = 674;
     box(obsY, 36);
@@ -2057,7 +2089,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       rowBox(bottomPx);
       putLabel("Monto de depósito", formX + 2, yText(bottomPx), 28);
       put(dep ? money(dep.monto || dep.importe || 0) : "", formX + 92, yText(bottomPx), { bold: true, max: 18 });
-      put(dep ? formatDate(dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
+      put(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
       put(dep?.entidadFinanciera || dep?.banco || "", formX + 245, yText(bottomPx), { bold: true, max: 22 });
       put(dep?.numeroOperacion || dep?.operacion || dep?.op || "", formX + 360, yText(bottomPx), { bold: true, max: 22 });
     });
