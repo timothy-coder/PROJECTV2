@@ -4,14 +4,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/app/api/client";
 
-export function useMaintenanceDue() {
-  const [data, setData] = useState({ currentUser: null, vehicles: [], options: { origins: [], suborigins: [], users: [], stages: [], closings: [] } });
+export function useMaintenanceDue(filters = {}) {
+  const [data, setData] = useState({
+    currentUser: null,
+    vehicles: [],
+    meta: { total: 0, page: 1, limit: 50, pages: 1 },
+    options: { origins: [], suborigins: [], users: [], stages: [], closings: [], brands: [], models: [] },
+  });
   const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     setLoading(true);
-    setData(await apiFetch("/api/postventa-maintenance-due"));
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim() !== "") {
+        params.set(key, String(value));
+      }
+    });
+    const query = params.toString();
+    setData(await apiFetch(`/api/postventa-maintenance-due${query ? `?${query}` : ""}`));
     setLoading(false);
-  }, []);
+  }, [filters]);
   useEffect(() => {
     const timer = setTimeout(() => reload(), 0);
     return () => clearTimeout(timer);

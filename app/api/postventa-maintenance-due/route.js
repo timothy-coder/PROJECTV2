@@ -83,7 +83,17 @@ function pickProximo(today, candidates) {
   return { date: valid[0].date, calculo: valid[0].calculo };
 }
 
-export async function GET() {
+function intParam(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number)) return fallback;
+  return Math.min(Math.max(number, min), max);
+}
+
+function cleanParam(value) {
+  return String(value || "").trim();
+}
+
+export async function GET(request) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
@@ -96,18 +106,88 @@ export async function GET() {
       return NextResponse.json({ message: "No tienes permiso para ver proximos mantenimientos." }, { status: 403 });
     }
 
-    const [vehicles] = await pool.query(
-      `SELECT
-          v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita, v.color,
-          CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
-          c.nombre AS cliente_nombre_raw, c.apellido AS cliente_apellido, c.email AS cliente_email,
-          c.celular AS cliente_celular, c.tipo_identificacion, c.identificacion_fiscal,
-          c.fecha_nacimiento, c.ocupacion, c.domicilio, c.nombre_comercial,
-          ma.name AS marca_nombre, mo.name AS modelo_nombre,
-          av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
-          opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
-          od.fecha_agenda, od.hora_agenda,
-          cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo
+    const searchParams = request.nextUrl.searchParams;
+    const page = intParam(searchParams.get("page"), 1, 1, 999999);
+    const limit = intParam(searchParams.get("limit"), 50, 10, 100);
+    const offset = (page - 1) * limit;
+    const query = cleanParam(searchParams.get("q"));
+    const brand = cleanParam(searchParams.get("brand")).toLowerCase();
+    const model = cleanParam(searchParams.get("model")).toLowerCase();
+    const status = cleanParam(searchParams.get("status"));
+    const fromDate = cleanParam(searchParams.get("fromDate"));
+    const toDate = cleanParam(searchParams.get("toDate"));
+
+    const [frequencies] = await pool.query(
+      `SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
+    );
+    const maxFrequencyDays = Math.max(0, ...frequencies.map((item) => Number(item.dias || 0)));
+
+    const where = ["v.deleted_at IS NULL"];
+    const whereParams = [];
+
+    if (query) {
+      const like = `%${query}%`;
+      where.push(
+        `(CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) LIKE ?
+          OR c.identificacion_fiscal LIKE ?
+          OR c.celular LIKE ?
+          OR v.placas LIKE ?
+          OR v.vin LIKE ?
+          OR ma.name LIKE ?
+          OR mo.name LIKE ?)`
+      );
+      whereParams.push(like, like, like, like, like, like, like);
+    }
+
+    if (brand) {
+      where.push("LOWER(TRIM(ma.name)) = ?");
+      whereParams.push(brand);
+    }
+
+    if (model) {
+      where.push("LOWER(TRIM(mo.name)) = ?");
+      whereParams.push(model);
+    }
+
+    if (fromDate) {
+      where.push("v.fecha_ultima_visita >= ?");
+      whereParams.push(fromDate);
+    }
+
+    if (toDate) {
+      where.push("v.fecha_ultima_visita <= ?");
+      whereParams.push(toDate);
+    }
+
+    if (status === "Cerrado") {
+      where.push("(cierre.detalle IS NOT NULL OR cierre_config.detalle IS NOT NULL)");
+    } else if (status === "Sin historial") {
+      where.push("NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)");
+    } else if (status === "Sin algoritmo") {
+      where.push(
+        `EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)
+         AND (av.id IS NULL OR (COALESCE(av.meses,0) <= 0 AND COALESCE(av.kilometraje,0) <= 0))`
+      );
+    } else if (status === "Vencido") {
+      where.push("v.fecha_ultima_visita IS NOT NULL AND v.fecha_ultima_visita < CURDATE()");
+    } else if (status === "Pendiente contacto") {
+      where.push(
+        `v.fecha_ultima_visita IS NOT NULL
+         AND v.fecha_ultima_visita >= CURDATE()
+         AND DATEDIFF(v.fecha_ultima_visita, CURDATE()) <= ?`
+      );
+      whereParams.push(maxFrequencyDays);
+    } else if (status === "Programado") {
+      where.push(
+        `v.fecha_ultima_visita IS NOT NULL
+         AND v.fecha_ultima_visita >= CURDATE()
+         AND DATEDIFF(v.fecha_ultima_visita, CURDATE()) > ?`
+      );
+      whereParams.push(maxFrequencyDays);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const baseFrom = `
        FROM administracion_vehiculos v
        INNER JOIN administracion_clientes c ON c.id=v.cliente_id
        LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
@@ -139,12 +219,29 @@ export async function GET() {
          WHERE latest_close.rn=1
        ) cierre ON cierre.oportunidad_id=opp.id
        LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id=cierre.cierre_detalle_id
-       WHERE v.deleted_at IS NULL
-       ORDER BY c.nombre ASC, v.id DESC`
+       ${whereSql}`;
+
+    const [[countRow]] = await pool.query(
+      `SELECT COUNT(DISTINCT v.id) AS total ${baseFrom}`,
+      whereParams
     );
 
-    const [frequencies] = await pool.query(
-      `SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
+    const [vehicles] = await pool.query(
+      `SELECT
+          v.id, v.cliente_id, v.placas, v.vin, v.anio, v.kilometraje, v.fecha_ultima_visita, v.color,
+          CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+          c.nombre AS cliente_nombre_raw, c.apellido AS cliente_apellido, c.email AS cliente_email,
+          c.celular AS cliente_celular, c.tipo_identificacion, c.identificacion_fiscal,
+          c.fecha_nacimiento, c.ocupacion, c.domicilio, c.nombre_comercial,
+          ma.name AS marca_nombre, mo.name AS modelo_nombre,
+          av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
+          opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
+          od.fecha_agenda, od.hora_agenda,
+          cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo
+       ${baseFrom}
+       ORDER BY c.nombre ASC, v.id DESC
+       LIMIT ? OFFSET ?`,
+      [...whereParams, limit, offset]
     );
 
     // Historial (MySQL 8+): últimos 30 por cliente
@@ -388,6 +485,23 @@ export async function GET() {
     const [closings] = await pool.query(
       `SELECT id, detalle FROM configuracion_posventas_cierres_detalle ORDER BY id DESC`
     );
+    const [brands] = await pool.query(
+      `SELECT DISTINCT ma.name
+       FROM administracion_vehiculos v
+       INNER JOIN administracion_clientes c ON c.id=v.cliente_id
+       LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
+       WHERE v.deleted_at IS NULL AND ma.name IS NOT NULL AND ma.name <> ''
+       ORDER BY ma.name ASC`
+    );
+    const [models] = await pool.query(
+      `SELECT DISTINCT mo.name, ma.name AS marca_name
+       FROM administracion_vehiculos v
+       INNER JOIN administracion_clientes c ON c.id=v.cliente_id
+       LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
+       LEFT JOIN administracion_modelos mo ON mo.id=v.modelo_id
+       WHERE v.deleted_at IS NULL AND mo.name IS NOT NULL AND mo.name <> ''
+       ORDER BY mo.name ASC`
+    );
 
     return NextResponse.json({
       currentUser: {
@@ -398,6 +512,12 @@ export async function GET() {
         ),
       },
       vehicles: Array.from(unique.values()),
+      meta: {
+        total: Number(countRow?.total || 0),
+        page,
+        limit,
+        pages: Math.max(1, Math.ceil(Number(countRow?.total || 0) / limit)),
+      },
       options: {
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         suborigins: suborigins.map((row) => ({ id: row.id, origenId: row.origen_id, name: row.name })),
@@ -409,6 +529,12 @@ export async function GET() {
           sortOrder: row.sort_order || row.id,
         })),
         closings: closings.map((row) => ({ id: row.id, detalle: row.detalle })),
+        brands: brands.map((row) => ({ value: String(row.name || "").trim().toLowerCase(), label: row.name })),
+        models: models.map((row) => ({
+          value: String(row.name || "").trim().toLowerCase(),
+          label: row.name,
+          brand: String(row.marca_name || "").trim().toLowerCase(),
+        })),
       },
     });
   } catch (error) {

@@ -24,7 +24,6 @@ import { hasPerm } from "@/lib/permissions";
 
 export default function MaintenanceDuePage({ userPermissions }) {
   const router = useRouter();
-  const data = useMaintenanceDue();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -37,6 +36,22 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [vehicleDetail, setVehicleDetail] = useState(null);
   const [opportunityPicker, setOpportunityPicker] = useState(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [page, setPage] = useState(1);
+  const limit = 50;
+  const apiFilters = useMemo(
+    () => ({
+      page,
+      limit,
+      q: query,
+      status,
+      brand: brandFilter,
+      model: modelFilter,
+      fromDate,
+      toDate,
+    }),
+    [brandFilter, fromDate, limit, modelFilter, page, query, status, toDate]
+  );
+  const data = useMaintenanceDue(apiFilters);
 
   const canViewAll = Boolean(
     hasPerm(userPermissions, ["oportunidadespv", "viewall"]) ||
@@ -54,35 +69,22 @@ export default function MaintenanceDuePage({ userPermissions }) {
     hasPerm(userPermissions, ["oportunidadespv", "view"]) || hasPerm(userPermissions, ["oportunidadespv", "viewall"])
   );
 
-  const rows = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    return (data.vehicles || []).filter((item) => {
-      const matchesText =
-        !text || `${item.clienteNombre} ${item.vehiculo} ${item.marca} ${item.modelo} ${item.version} ${item.placa} ${item.vin}`.toLowerCase().includes(text);
-
-      const matchesStatus = !status || item.estadoRecordatorio === status;
-      const matchesBrand = !brandFilter || normalizeOption(item.marca) === brandFilter;
-      const matchesModel = !modelFilter || normalizeOption(item.modelo) === modelFilter;
-
-      // Filtra por fecha de proximo mantenimiento
-      const matchesDate = matchesDateRange(item.proximoMantenimiento, fromDate, toDate);
-
-      return matchesText && matchesStatus && matchesBrand && matchesModel && matchesDate;
-    });
-  }, [data.vehicles, query, status, brandFilter, modelFilter, fromDate, toDate]);
+  const rows = data.vehicles || [];
+  const meta = data.meta || { total: rows.length, page, limit, pages: 1 };
 
   const brandOptions = useMemo(() => {
-    return makeUniqueOptions(data.vehicles || [], "marca", "Todas las marcas");
-  }, [data.vehicles]);
+    return [{ value: "", label: "Todas las marcas" }, ...(data.options?.brands || [])];
+  }, [data.options?.brands]);
 
   const modelOptions = useMemo(() => {
     const source = brandFilter
-      ? (data.vehicles || []).filter((item) => normalizeOption(item.marca) === brandFilter)
-      : data.vehicles || [];
-    return makeUniqueOptions(source, "modelo", "Todos los modelos");
-  }, [data.vehicles, brandFilter]);
+      ? (data.options?.models || []).filter((item) => item.brand === brandFilter)
+      : data.options?.models || [];
+    return [{ value: "", label: "Todos los modelos" }, ...source];
+  }, [data.options?.models, brandFilter]);
 
   function applyQuickRange(value) {
+    setPage(1);
     setQuickRange(value);
     const today = dateOnly(new Date());
 
@@ -167,7 +169,15 @@ export default function MaintenanceDuePage({ userPermissions }) {
         <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input className="w-full pl-9" placeholder="Buscar cliente, vehiculo, placa o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <Input
+              className="w-full pl-9"
+              placeholder="Buscar cliente, vehiculo, placa o VIN..."
+              value={query}
+              onChange={(event) => {
+                setPage(1);
+                setQuery(event.target.value);
+              }}
+            />
           </div>
 
           <div className="min-w-0">
@@ -176,7 +186,11 @@ export default function MaintenanceDuePage({ userPermissions }) {
               options={brandOptions}
               placeholder="Marca"
               searchPlaceholder="Buscar marca..."
-              onChange={setBrandFilter}
+              onChange={(value) => {
+                setPage(1);
+                setBrandFilter(value);
+                setModelFilter("");
+              }}
             />
           </div>
 
@@ -186,7 +200,10 @@ export default function MaintenanceDuePage({ userPermissions }) {
               options={modelOptions}
               placeholder="Modelo"
               searchPlaceholder="Buscar modelo..."
-              onChange={setModelFilter}
+              onChange={(value) => {
+                setPage(1);
+                setModelFilter(value);
+              }}
             />
           </div>
 
@@ -201,7 +218,10 @@ export default function MaintenanceDuePage({ userPermissions }) {
                 { value: "Sin algoritmo", label: "Sin algoritmo" },
                 { value: "Cerrado", label: "Cerrado" },
               ]}
-              onChange={setStatus}
+              onChange={(value) => {
+                setPage(1);
+                setStatus(value);
+              }}
             />
           </div>
 
@@ -210,6 +230,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
             className="min-w-0"
             value={fromDate}
             onChange={(event) => {
+              setPage(1);
               setFromDate(event.target.value);
               setQuickRange("");
             }}
@@ -221,6 +242,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
             className="min-w-0"
             value={toDate}
             onChange={(event) => {
+              setPage(1);
               setToDate(event.target.value);
               setQuickRange("");
             }}
@@ -252,6 +274,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
               setFromDate("");
               setToDate("");
               setQuickRange("");
+              setPage(1);
             }}
           >
             Limpiar
@@ -259,7 +282,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
         </div>
 
         <p className="mb-3 text-xs text-slate-500">
-          Mostrando {rows.length} de {(data.vehicles || []).length} vehiculos segun la fecha de proximo mantenimiento.
+          Mostrando {rows.length} de {meta.total || 0} vehiculos segun la fecha de proximo mantenimiento.
         </p>
 
         <div className="max-w-full overflow-x-auto rounded-lg border">
@@ -364,6 +387,30 @@ export default function MaintenanceDuePage({ userPermissions }) {
               ) : null}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="font-medium text-slate-500">
+            Pagina {meta.page || page} de {meta.pages || 1}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={data.loading || page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={data.loading || page >= Number(meta.pages || 1)}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Siguiente
+            </Button>
+          </div>
         </div>
       </section>
 
