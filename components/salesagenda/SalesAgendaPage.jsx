@@ -103,8 +103,8 @@ function SlotRow({ slot, nextSlot, slotMinutes, days, items, canCreate, nowTime,
         const past = new Date(`${day.date}T${slot}`).getTime() < nowTime;
         const cellItems = items.filter((item) => item.agendaDate === day.date && isInsideSlot(item.agendaTime, slot, nextSlot, slotMinutes));
         return (
-          <div key={`${day.date}-${slot}`} className={`group relative min-h-16 border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!past && !cellItems.length && canCreate ? "cursor-pointer" : ""}`} onClick={() => !past && !cellItems.length && canCreate && onCell(day)}>
-            <div className="relative z-10 space-y-1">
+          <div key={`${day.date}-${slot}`} className={`group relative h-24 overflow-hidden border-b border-r p-1 text-left align-top ${past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!past && !cellItems.length && canCreate ? "cursor-pointer" : ""}`} onClick={() => !past && !cellItems.length && canCreate && onCell(day)}>
+            <div className="relative z-10 h-full space-y-1 overflow-y-auto pr-1">
               {cellItems.map((item) => <AgendaCard key={item.id} item={item} />)}
             </div>
             {!cellItems.length && !past && canCreate ? <span className="hidden rounded bg-white px-3 py-2 text-xs font-bold shadow group-hover:block">Nueva Oportunidad</span> : null}
@@ -174,14 +174,14 @@ function MonthCalendar({ days, week, items, canCreate, nowTime, onCell }) {
           return (
             <div
               key={day.date}
-              className={`group relative min-h-32 border-b border-r p-2 text-left last:border-r-0 ${day.outside || inactive ? "bg-slate-50 text-slate-400" : past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!inactive && !past && !dayItems.length && canCreate ? "cursor-pointer" : ""}`}
+              className={`group relative h-36 overflow-hidden border-b border-r p-2 text-left last:border-r-0 ${day.outside || inactive ? "bg-slate-50 text-slate-400" : past ? "bg-slate-100 text-slate-500" : "bg-white hover:bg-blue-50"} ${!inactive && !past && !dayItems.length && canCreate ? "cursor-pointer" : ""}`}
               onClick={() => !inactive && !past && !dayItems.length && canCreate && onCell(day)}
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className={`flex size-7 items-center justify-center rounded-full text-xs font-bold ${day.today ? "bg-violet-700 text-white" : ""}`}>{day.day}</span>
                 <span className="text-[10px] font-bold uppercase text-slate-400">{day.label}</span>
               </div>
-              <div className="relative z-10 space-y-1">
+              <div className="relative z-10 h-[calc(100%-2.25rem)] space-y-1 overflow-y-auto pr-1">
                 {dayItems.map((item) => <AgendaCard key={item.id} item={item} />)}
               </div>
               {!dayItems.length && !inactive && !past && canCreate ? <span className="hidden rounded bg-white px-3 py-2 text-xs font-bold shadow group-hover:inline-block">Nueva Oportunidad</span> : null}

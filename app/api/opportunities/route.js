@@ -90,6 +90,7 @@ export async function GET(request) {
       `SELECT o.id, o.oportunidad_id, o.cliente_id, o.origen_id, o.suborigen_id, o.etapasconversion_id,
               o.created_by, o.asignado_a, o.created_at, o.updated_at,
               CONCAT(COALESCE(c.nombre,''), ' ', COALESCE(c.apellido,'')) AS cliente_nombre,
+              c.identificacion_fiscal AS cliente_documento,
               oc.name AS origen_nombre, so.name AS suborigen_nombre,
               e.nombre AS etapa_nombre, e.descripcion AS etapa_temperatura, e.color AS etapa_color, e.sort_order AS etapa_orden,
               cu.fullname AS creado_por_nombre, au.fullname AS asignado_a_nombre
@@ -122,7 +123,7 @@ export async function GET(request) {
       activityRows = activities;
     }
     const [clients] = await pool.query(
-      `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre
+      `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre, identificacion_fiscal
        FROM administracion_clientes
        ${canViewAllClients ? "" : "WHERE created_by = ?"}
        ORDER BY nombre ASC
@@ -170,6 +171,7 @@ export async function GET(request) {
           code: row.oportunidad_id,
           clienteId: row.cliente_id,
           clienteNombre: row.cliente_nombre.trim(),
+          clienteDocumento: row.cliente_documento || "",
           origenId: row.origen_id,
           origenNombre: row.origen_nombre,
           suborigenId: row.suborigen_id,
@@ -199,7 +201,7 @@ export async function GET(request) {
         };
       }),
       options: {
-        clients: clients.map((row) => ({ id: row.id, nombre: row.nombre.trim() })),
+        clients: clients.map((row) => ({ id: row.id, nombre: row.nombre.trim(), documento: row.identificacion_fiscal || "" })),
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         suborigins: suborigins.map((row) => ({ id: row.id, origenId: row.origen_id, name: row.name })),
         stages: stages.map((row) => ({ id: row.id, nombre: row.nombre, descripcion: Number(row.descripcion || 0), color: row.color || "#2563eb", sortOrder: row.sort_order || row.id })),
