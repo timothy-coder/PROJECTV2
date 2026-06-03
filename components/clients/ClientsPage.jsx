@@ -31,7 +31,15 @@ function clientName(client) {
 
 function formatDate(value) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("es-PE", { dateStyle: "medium" }).format(new Date(value));
+  const textValue = String(value);
+  const dateOnlyMatch = textValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("es-PE", { dateStyle: "medium" }).format(date);
 }
 
 function todayInputDate() {
