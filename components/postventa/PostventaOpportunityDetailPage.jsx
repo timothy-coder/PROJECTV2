@@ -421,7 +421,6 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
     origenId: initial?.origenId || opportunity.origenId ? String(initial?.origenId || opportunity.origenId) : "",
     startDate: initial?.startDate || "",
     startTime: initial?.startTime || "",
-    endTime: initial?.endTime || "",
     estado: initial?.estado || "pendiente",
     tipoServicio: initial?.tipoServicio || "TALLER",
     kilometrajeTaller: initial?.kilometrajeTaller || "",
@@ -449,7 +448,6 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
             <Field label="Origen"><SearchableSelect value={form.origenId} options={originOptions} onChange={(origenId) => setForm((current) => ({ ...current, origenId }))} /></Field>
             <Field label="Fecha inicio *"><Input required type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></Field>
             <Field label="Hora inicio *"><Input required type="time" value={form.startTime} onChange={(event) => setForm((current) => ({ ...current, startTime: event.target.value }))} /></Field>
-            <Field label="Hora fin"><Input type="time" value={form.endTime} onChange={(event) => setForm((current) => ({ ...current, endTime: event.target.value }))} /></Field>
             <Field label="Tipo servicio *"><NativeSelect value={form.tipoServicio} onChange={(event) => setForm((current) => ({ ...current, tipoServicio: event.target.value }))} options={[["TALLER", "Taller"], ["PLANCHADO_PINTURA", "Planchado y pintura"]]} /></Field>
             <Field label="Estado"><NativeSelect value={form.estado} onChange={(event) => setForm((current) => ({ ...current, estado: event.target.value }))} options={[["pendiente", "Pendiente"], ["confirmada", "Confirmada"], ["reprogramada", "Reprogramada"], ["cancelada", "Cancelada"], ["finalizada", "Finalizada"], ["orden creada", "Orden creada"], ["clientenollego", "Cliente no llego"]]} /></Field>
             {isFinalized ? <Field label="KM taller *"><Input required type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} /></Field> : null}
