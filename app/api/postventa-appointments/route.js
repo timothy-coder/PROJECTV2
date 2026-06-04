@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -28,6 +29,16 @@ function timePart(value) {
 function dateTimeValue(date, time) {
   const normalizedTime = String(time || "").length === 5 ? `${time}:00` : String(time || "00:00:00").slice(0, 8);
   return `${date} ${normalizedTime}`;
+}
+
+function numberValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function isFinalizedStatus(value) {
+  return String(value || "").toLowerCase().startsWith("finalizad");
 }
 
 async function stageIdByNames(connection, names) {
@@ -119,7 +130,7 @@ export async function POST(request) {
       return NextResponse.json({ message: "No tienes permiso para crear citas de PostVenta." }, { status: 403 });
     }
     const body = await request.json();
-    if (!body.oportunidadId || !body.centroId || !body.startDate || !body.startTime || !body.endDate || !body.endTime || !body.tipoServicio) {
+    if (!body.oportunidadId || !body.centroId || !body.startDate || !body.startTime || !body.tipoServicio) {
       return NextResponse.json({ message: "Completa oportunidad, centro, fecha, hora y tipo de servicio." }, { status: 400 });
     }
     const [[opportunity]] = await connection.query(
@@ -128,7 +139,15 @@ export async function POST(request) {
     );
     if (!opportunity) return NextResponse.json({ message: "Oportunidad no encontrada." }, { status: 404 });
     const startAt = dateTimeValue(body.startDate, body.startTime);
-    const endAt = dateTimeValue(body.endDate, body.endTime);
+    const endAt = dateTimeValue(body.endDate || body.startDate, body.endTime || body.startTime);
+    const shouldRegisterMaintenance = isFinalizedStatus(body.estado);
+    const maintenanceKm = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+    if (shouldRegisterMaintenance && !opportunity.vehiculo_id) {
+      return NextResponse.json({ message: "La oportunidad no tiene vehiculo para registrar mantenimiento." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance && maintenanceKm === null) {
+      return NextResponse.json({ message: "Ingresa el kilometraje para finalizar la cita." }, { status: 400 });
+    }
     await connection.beginTransaction();
     const [result] = await connection.query(
       `INSERT INTO posventa_citas
@@ -159,6 +178,15 @@ export async function POST(request) {
          VALUES (?, ?, ?, ?)`,
         [opportunity.id, effectiveStageId, `Cita creada: ${body.startDate} ${body.startTime}`, user.id]
       );
+    }
+    if (shouldRegisterMaintenance) {
+      await connection.query(
+        `INSERT INTO administracion_vehiculos_historial_mantenimientos
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [opportunity.vehiculo_id, startAt, maintenanceKm, user.id]
+      );
+      await updateVehicleNextMaintenanceDate(connection, opportunity.vehiculo_id);
     }
     await connection.commit();
     return NextResponse.json({ ok: true, id: result.insertId }, { status: 201 });

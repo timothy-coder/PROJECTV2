@@ -110,7 +110,8 @@ export async function GET(_request, { params }) {
       [id]
     );
     const [appointments] = await connection.query(
-      `SELECT pc.id, pc.start_at, pc.end_at, pc.estado, pc.tipo_servicio,
+      `SELECT pc.id, pc.centro_id, pc.taller_id, pc.asesor_id, pc.origen_id,
+              pc.start_at, pc.end_at, pc.estado, pc.tipo_servicio, pc.nota_cliente, pc.nota_interna,
               cc.nombre AS centro_nombre, ct.nombre AS taller_nombre, asesor.fullname AS asesor_nombre
        FROM posventa_citas pc
        INNER JOIN configuracion_centros cc ON cc.id=pc.centro_id
@@ -157,6 +158,7 @@ export async function GET(_request, { params }) {
         vin: opportunity.vin || "",
         anio: opportunity.anio || "",
         color: opportunity.color || "",
+        origenId: opportunity.origen_id,
         origenNombre: opportunity.origen_nombre,
         suborigenNombre: opportunity.suborigen_nombre || "",
         etapaId: opportunity.etapasconversionpv_id,
@@ -183,12 +185,18 @@ export async function GET(_request, { params }) {
       })),
       appointments: appointments.map((row) => ({
         id: row.id,
+        centroId: row.centro_id,
+        tallerId: row.taller_id,
+        asesorId: row.asesor_id,
+        origenId: row.origen_id,
         startDate: datePart(row.start_at),
         startTime: timePart(row.start_at),
         endDate: datePart(row.end_at),
         endTime: timePart(row.end_at),
         estado: row.estado,
         tipoServicio: row.tipo_servicio,
+        notaCliente: row.nota_cliente || "",
+        notaInterna: row.nota_interna || "",
         centroNombre: row.centro_nombre,
         tallerNombre: row.taller_nombre || "",
         asesorNombre: row.asesor_nombre || "Sin asesor",

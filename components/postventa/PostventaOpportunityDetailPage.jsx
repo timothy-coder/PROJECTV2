@@ -16,7 +16,7 @@ import { usePostventaQuotes } from "@/hooks/postventaquotes/usePostventaQuotes";
 import { QuoteForm } from "@/components/postventaquotes/PostventaQuotesPage";
 
 export default function PostventaOpportunityDetailPage({ id }) {
-  const { data, loading, save, createAppointment } = usePostventaOpportunityDetail(id);
+  const { data, loading, save, createAppointment, updateAppointment } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
   const [editingActivity, setEditingActivity] = useState(null);
@@ -24,6 +24,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [createdQuote, setCreatedQuote] = useState(null);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState(null);
   const [closeOpen, setCloseOpen] = useState(false);
   const quoteData = usePostventaQuotes(quoteType);
 
@@ -108,6 +109,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
           appointments={appointments}
           canCreate={Boolean(currentUser.canCreateAppointment)}
           onCreate={() => setAppointmentOpen(true)}
+          onEdit={setEditingAppointment}
         />
         <CloseSection
           closures={closures}
@@ -170,6 +172,19 @@ export default function PostventaOpportunityDetailPage({ id }) {
               setAppointmentOpen(false);
               toast.success("Cita de PostVenta creada");
               if (result?.id) window.location.href = `/citaspv?id=${result.id}`;
+            }}
+          />
+        ) : null}
+        {editingAppointment ? (
+          <AppointmentDialog
+            opportunity={opportunity}
+            options={appointmentOptions}
+            initial={editingAppointment}
+            onClose={() => setEditingAppointment(null)}
+            onSubmit={async (payload) => {
+              await updateAppointment(editingAppointment.id, payload);
+              setEditingAppointment(null);
+              toast.success("Cita de PostVenta actualizada");
             }}
           />
         ) : null}
@@ -366,7 +381,7 @@ function AgendaSection({ details, agenda, setAgenda, onSubmit }) {
   );
 }
 
-function AppointmentSection({ appointments, canCreate, onCreate }) {
+function AppointmentSection({ appointments, canCreate, onCreate, onEdit }) {
   return (
     <section className="mb-4 rounded-lg border border-violet-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -385,6 +400,7 @@ function AppointmentSection({ appointments, canCreate, onCreate }) {
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-violet-700">{item.estado}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => onEdit(item)}>Editar</Button>
               <Button type="button" variant="outline" size="sm" onClick={() => { window.location.href = `/citaspv?id=${item.id}`; }}>Ir a cita</Button>
             </div>
           </div>
@@ -395,56 +411,68 @@ function AppointmentSection({ appointments, canCreate, onCreate }) {
   );
 }
 
-function AppointmentDialog({ opportunity, options, onClose, onSubmit }) {
+function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit }) {
+  const defaultCenterId = initial?.centroId || options.centers?.[0]?.id || "";
+  const defaultWorkshopId = initial?.tallerId || firstWorkshopForCenter(options.workshops || [], defaultCenterId);
   const [form, setForm] = useState({
-    centroId: "",
-    tallerId: "",
-    asesorId: "",
-    origenId: "",
-    startDate: "",
-    startTime: "",
-    endDate: "",
-    endTime: "",
-    estado: "pendiente",
-    tipoServicio: "TALLER",
-    notaCliente: "",
-    notaInterna: "",
+    centroId: defaultCenterId ? String(defaultCenterId) : "",
+    tallerId: defaultWorkshopId ? String(defaultWorkshopId) : "",
+    asesorId: initial?.asesorId ? String(initial.asesorId) : "",
+    origenId: initial?.origenId || opportunity.origenId ? String(initial?.origenId || opportunity.origenId) : "",
+    startDate: initial?.startDate || "",
+    startTime: initial?.startTime || "",
+    endTime: initial?.endTime || "",
+    estado: initial?.estado || "pendiente",
+    tipoServicio: initial?.tipoServicio || "TALLER",
+    kilometrajeTaller: initial?.kilometrajeTaller || "",
+    notaCliente: initial?.notaCliente || "",
+    notaInterna: initial?.notaInterna || "",
   });
   const centerOptions = (options.centers || []).map((item) => ({ value: item.id, label: item.nombre }));
   const workshopOptions = (options.workshops || []).filter((item) => !form.centroId || Number(item.centroId) === Number(form.centroId)).map((item) => ({ value: item.id, label: item.nombre }));
   const userOptions = [{ value: "", label: "Sin asesor" }, ...(options.users || []).map((item) => ({ value: item.id, label: item.fullname }))];
   const originOptions = [{ value: "", label: "Sin origen" }, ...(options.origins || []).map((item) => ({ value: item.id, label: item.name }))];
+  const isFinalized = isFinalizedStatus(form.estado);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92svh] max-w-[min(96vw,760px)] overflow-y-auto bg-white text-slate-950">
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); onSubmit(form); }}>
           <DialogHeader>
-            <DialogTitle>Crear cita</DialogTitle>
+            <DialogTitle>{initial ? "Editar cita" : "Crear cita"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Cliente"><Input disabled value={opportunity.clienteNombre || ""} /></Field>
             <Field label="Vehiculo"><Input disabled value={opportunity.vehiculoNombre || ""} /></Field>
-            <Field label="Centro *"><SearchableSelect value={form.centroId} options={centerOptions} onChange={(centroId) => setForm((current) => ({ ...current, centroId, tallerId: "" }))} /></Field>
+            <Field label="Centro *"><SearchableSelect value={form.centroId} options={centerOptions} onChange={(centroId) => setForm((current) => ({ ...current, centroId, tallerId: firstWorkshopForCenter(options.workshops || [], centroId) }))} /></Field>
             <Field label="Taller"><SearchableSelect value={form.tallerId} options={workshopOptions} onChange={(tallerId) => setForm((current) => ({ ...current, tallerId }))} /></Field>
             <Field label="Asesor"><SearchableSelect value={form.asesorId} options={userOptions} onChange={(asesorId) => setForm((current) => ({ ...current, asesorId }))} /></Field>
             <Field label="Origen"><SearchableSelect value={form.origenId} options={originOptions} onChange={(origenId) => setForm((current) => ({ ...current, origenId }))} /></Field>
-            <Field label="Fecha inicio *"><Input required type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value, endDate: current.endDate || event.target.value }))} /></Field>
+            <Field label="Fecha inicio *"><Input required type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></Field>
             <Field label="Hora inicio *"><Input required type="time" value={form.startTime} onChange={(event) => setForm((current) => ({ ...current, startTime: event.target.value }))} /></Field>
-            <Field label="Fecha fin *"><Input required type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></Field>
-            <Field label="Hora fin *"><Input required type="time" value={form.endTime} onChange={(event) => setForm((current) => ({ ...current, endTime: event.target.value }))} /></Field>
+            <Field label="Hora fin"><Input type="time" value={form.endTime} onChange={(event) => setForm((current) => ({ ...current, endTime: event.target.value }))} /></Field>
             <Field label="Tipo servicio *"><NativeSelect value={form.tipoServicio} onChange={(event) => setForm((current) => ({ ...current, tipoServicio: event.target.value }))} options={[["TALLER", "Taller"], ["PLANCHADO_PINTURA", "Planchado y pintura"]]} /></Field>
             <Field label="Estado"><NativeSelect value={form.estado} onChange={(event) => setForm((current) => ({ ...current, estado: event.target.value }))} options={[["pendiente", "Pendiente"], ["confirmada", "Confirmada"], ["reprogramada", "Reprogramada"], ["cancelada", "Cancelada"], ["finalizada", "Finalizada"], ["orden creada", "Orden creada"], ["clientenollego", "Cliente no llego"]]} /></Field>
+            {isFinalized ? <Field label="KM taller *"><Input required type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} /></Field> : null}
           </div>
           <Field label="Nota cliente"><Textarea value={form.notaCliente} onChange={(event) => setForm((current) => ({ ...current, notaCliente: event.target.value }))} /></Field>
           <Field label="Nota interna"><Textarea value={form.notaInterna} onChange={(event) => setForm((current) => ({ ...current, notaInterna: event.target.value }))} /></Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-            <Button type="submit">Crear cita</Button>
+            <Button type="submit">{initial ? "Guardar cambios" : "Crear cita"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+function firstWorkshopForCenter(workshops, centerId) {
+  const item = workshops.find((workshop) => !centerId || Number(workshop.centroId) === Number(centerId));
+  return item?.id ? String(item.id) : "";
+}
+
+function isFinalizedStatus(value) {
+  return String(value || "").toLowerCase().startsWith("finalizad");
 }
 
 function NativeSelect({ value, onChange, options }) {

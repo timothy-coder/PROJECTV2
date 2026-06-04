@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -19,6 +20,21 @@ function timePart(value) {
   if (!value) return "";
   if (value instanceof Date) return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
   return String(value).slice(11, 16) || String(value).slice(0, 5);
+}
+
+function dateTimeValue(date, time) {
+  const normalizedTime = String(time || "").length === 5 ? `${time}:00` : String(time || "00:00:00").slice(0, 8);
+  return `${date} ${normalizedTime}`;
+}
+
+function numberValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function isFinalizedStatus(value) {
+  return String(value || "").toLowerCase().startsWith("finalizad");
 }
 
 export async function GET(_request, { params }) {
@@ -57,18 +73,24 @@ export async function GET(_request, { params }) {
     return NextResponse.json({
       appointment: {
         id: row.id,
+        centroId: row.centro_id,
         centroNombre: row.centro_nombre,
+        tallerId: row.taller_id,
         tallerNombre: row.taller_nombre || "",
+        clienteId: row.cliente_id,
         clienteNombre: String(row.cliente_nombre || "").trim(),
         email: row.email || "",
         celular: row.celular || "",
         documento: row.identificacion_fiscal || "",
+        vehiculoId: row.vehiculo_id,
         vehiculoNombre: [row.modelo_nombre, row.marca_nombre].filter(Boolean).join(" - ") || row.placas || row.vin || "-",
         placa: row.placas || "",
         vin: row.vin || "",
         anio: row.anio || "",
         color: row.color || "",
+        asesorId: row.asesor_id,
         asesorNombre: row.asesor_nombre || "Sin asesor",
+        origenId: row.origen_id,
         origenNombre: row.origen_nombre || "",
         oportunidadId: row.oportunidadespv_id,
         oportunidadCodigo: row.oportunidad_codigo || "",
@@ -87,5 +109,84 @@ export async function GET(_request, { params }) {
   } catch (error) {
     console.error("Error loading postventa appointment:", error);
     return NextResponse.json({ message: "No se pudo cargar la cita de PostVenta." }, { status: 500 });
+  }
+}
+
+export async function PUT(request, { params }) {
+  const connection = await pool.getConnection();
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    if (!hasPerm(user.permissions, ["citas", "edit"]) && !hasPerm(user.permissions, ["citas", "viewall"])) {
+      return NextResponse.json({ message: "No tienes permiso para editar citas de PostVenta." }, { status: 403 });
+    }
+
+    const { id: rawId } = await params;
+    const appointmentId = Number(rawId);
+    const body = await request.json();
+    if (!body.centroId || !body.startDate || !body.startTime || !body.tipoServicio) {
+      return NextResponse.json({ message: "Completa centro, fecha, hora y tipo de servicio." }, { status: 400 });
+    }
+
+    const canAll = hasPerm(user.permissions, ["citas", "viewall"]);
+    const [[appointment]] = await connection.query(
+      `SELECT pc.id, pc.vehiculo_id, pc.created_by, pc.asesor_id, pc.oportunidadespv_id
+       FROM posventa_citas pc
+       WHERE pc.id=? ${canAll ? "" : "AND (pc.created_by=? OR pc.asesor_id=?)"}
+       LIMIT 1`,
+      canAll ? [appointmentId] : [appointmentId, user.id, user.id]
+    );
+    if (!appointment?.id) return NextResponse.json({ message: "Cita no encontrada." }, { status: 404 });
+
+    const startAt = dateTimeValue(body.startDate, body.startTime);
+    const endAt = dateTimeValue(body.endDate || body.startDate, body.endTime || body.startTime);
+    const shouldRegisterMaintenance = isFinalizedStatus(body.estado);
+    const maintenanceKm = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+
+    if (shouldRegisterMaintenance && !appointment.vehiculo_id) {
+      return NextResponse.json({ message: "La cita no tiene vehiculo para registrar mantenimiento." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance && maintenanceKm === null) {
+      return NextResponse.json({ message: "Ingresa el kilometraje para finalizar la cita." }, { status: 400 });
+    }
+
+    await connection.beginTransaction();
+    await connection.query(
+      `UPDATE posventa_citas
+       SET centro_id=?, taller_id=?, asesor_id=?, origen_id=?, start_at=?, end_at=?, estado=?, tipo_servicio=?, nota_cliente=?, nota_interna=?
+       WHERE id=?`,
+      [
+        Number(body.centroId),
+        body.tallerId ? Number(body.tallerId) : null,
+        body.asesorId ? Number(body.asesorId) : null,
+        body.origenId ? Number(body.origenId) : null,
+        startAt,
+        endAt,
+        body.estado || "pendiente",
+        body.tipoServicio,
+        body.notaCliente || null,
+        body.notaInterna || null,
+        appointmentId,
+      ]
+    );
+
+    if (shouldRegisterMaintenance) {
+      await connection.query(
+        `INSERT INTO administracion_vehiculos_historial_mantenimientos
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [appointment.vehiculo_id, startAt, maintenanceKm, user.id]
+      );
+      await updateVehicleNextMaintenanceDate(connection, appointment.vehiculo_id);
+    }
+
+    await connection.commit();
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error updating postventa appointment:", error);
+    return NextResponse.json({ message: "No se pudo actualizar la cita de PostVenta." }, { status: 500 });
+  } finally {
+    connection.release();
   }
 }

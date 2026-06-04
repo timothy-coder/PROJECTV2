@@ -29,6 +29,11 @@ export function usePostventaOpportunityDetail(id) {
       await reload();
       return result;
     },
+    updateAppointment: async (appointmentId, payload) => {
+      const result = await apiFetch(`/api/postventa-appointments/${appointmentId}`, { method: "PUT", body: JSON.stringify(payload) });
+      await reload();
+      return result;
+    },
   }), [id, reload]);
 
   return { data, loading, reload, ...actions };
