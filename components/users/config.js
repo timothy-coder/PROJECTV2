@@ -18,6 +18,8 @@ export const USER_PERMISSION_GROUPS = [
   { key: "citas", label: "Agenda PostVenta", actions: ["view", "create", "edit", "delete", "viewall"] },
   { key: "oportunidadespv", label: "Oportunidades PosVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { key: "leadspv", label: "Leads PostVenta", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
+  { key: "ordenespv", label: "Ordenes PostVenta", actions: ["view", "viewall", "create", "edit", "delete"] },
+  { key: "planeador_tallerpv", label: "Planeador Taller PV", actions: ["view", "viewall", "create", "edit", "delete"] },
   { key: "cotizacion", label: "Cotizacion", actions: ["view", "viewall", "create", "edit", "delete", "status"] },
   { key: "cotizacion_ford", label: "Cotizacion Ford", actions: ["view"] },
   { key: "cotizacion_otros", label: "Cotizacion Otros", actions: ["view"] },

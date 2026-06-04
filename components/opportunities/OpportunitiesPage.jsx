@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, Edit3, Eye, Kanban, Loader2, Plus, RefreshCw, Send, Table2 } from "lucide-react";
+import { ArrowUpDown, CalendarDays, Edit3, Eye, Kanban, Loader2, Plus, RefreshCw, Send, Table2 } from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -24,6 +24,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const [view, setView] = useState("general");
   const [timelineMode, setTimelineMode] = useState("timeline");
   const [filters, setFilters] = useState({ clienteId: "", origenId: "", etapaId: "", asignadoA: "", createdBy: "", time: "all" });
+  const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [dialog, setDialog] = useState({ open: false, item: null, mode: "edit" });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
   const [conflict, setConflict] = useState(null);
@@ -51,6 +52,15 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
     const matchTime = filters.time === "all" || matchesTime(item.nextAgenda || item.createdAt, filters.time);
     return matchClient && matchOrigin && matchStage && matchAssigned && matchCreated && matchTime;
   }), [data.opportunities, filters]);
+
+  const sortedFiltered = useMemo(() => sortOpportunities(filtered, sortConfig), [filtered, sortConfig]);
+
+  const handleSort = (key) => {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  };
 
   const clientOptions = [{ value: "", label: "Todos" }, ...data.options.clients.map((item) => ({ value: item.id, label: [item.nombre, item.documento].filter(Boolean).join(" - ") }))];
   const originOptions = [{ value: "", label: "Todos" }, ...data.options.origins.map((item) => ({ value: item.id, label: item.name }))];
@@ -93,7 +103,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
           <ViewButton active={view === "timeline"} onClick={() => setView("timeline")} icon={CalendarDays} label="Tablero" />
           <ViewButton active={view === "kanban"} onClick={() => setView("kanban")} icon={Kanban} label="Kanban" />
         </div>
-        {view === "general" ? <GeneralView data={filtered} loading={data.loading} canEdit={canEdit} canViewAll={canViewAll} onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }} onEdit={(item) => setDialog({ open: true, item, mode: "edit" })} onAssign={(item) => setAssignDialog({ open: true, item })} /> : null}
+        {view === "general" ? <GeneralView data={sortedFiltered} loading={data.loading} canEdit={canEdit} canViewAll={canViewAll} sortConfig={sortConfig} onSort={handleSort} onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }} onEdit={(item) => setDialog({ open: true, item, mode: "edit" })} onAssign={(item) => setAssignDialog({ open: true, item })} /> : null}
         {view === "timeline" ? <TimelineView data={filtered} mode={timelineMode} setMode={setTimelineMode} /> : null}
         {view === "kanban" ? <KanbanView data={filtered} stages={data.options.stages} /> : null}
         {dialog.open ? <OpportunityDialog state={dialog} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} canCreateClient={canCreateClient} onClose={() => setDialog({ open: false, item: null, mode: "edit" })} onSubmit={saveOpportunity} /> : null}
@@ -104,8 +114,59 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   );
 }
 
-function GeneralView({ data, loading, canEdit, canViewAll, onView, onEdit, onAssign }) {
-  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="min-h-0 flex-1 overflow-auto overscroll-contain"><table className="w-full min-w-[1080px] text-left text-xs"><thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold"><tr><th className="px-2 py-2">Codigo</th><th className="px-2 py-2">Fecha creacion</th><th className="px-2 py-2">Cliente</th><th className="px-2 py-2">Origen</th><th className="px-2 py-2">Etapa</th><th className="px-2 py-2">Asignado</th><th className="px-2 py-2">Proxima Agenda</th><th className="px-2 py-2">Tiempo</th><th className="px-2 py-2">Temp.</th><th className="px-2 py-2">Detalle</th><th className="px-2 py-2 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-200">{loading ? <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr> : data.map((item) => <tr key={item.id} style={rowTimeStyle(item)}><td className="px-2 py-2"><button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>{item.code}</button></td><td className="px-2 py-2"><DateTimeStack value={item.createdAt} /></td><td className="max-w-[170px] whitespace-normal px-2 py-2 leading-tight"><p className="font-semibold">{item.clienteNombre}</p>{item.clienteDocumento ? <p className="mt-0.5 text-[10px] font-medium text-slate-500">DNI: {item.clienteDocumento}</p> : null}</td><td className="px-2 py-2">{item.origenNombre}</td><td className="px-2 py-2"><StageBadge item={item} /></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.asignadoANombre}</td><td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td><td className="px-2 py-2"><TimeStateBadge item={item} /></td><td className="px-2 py-2"><span className="rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-bold text-orange-700">{item.temperature}%</span></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td><td className="px-2 py-2"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-8" onClick={() => onView(item)}><Eye className="size-3.5" /></Button>{canEdit ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onEdit(item)}><Edit3 className="size-3.5" /></Button> : null}{canViewAll ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onAssign(item)}><Send className="size-3.5" /></Button> : null}</div></td></tr>)}</tbody></table></div></section>;
+function GeneralView({ data, loading, canEdit, canViewAll, sortConfig, onSort, onView, onEdit, onAssign }) {
+  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="min-h-0 flex-1 overflow-auto overscroll-contain"><table className="w-full min-w-[1080px] text-left text-xs"><thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold"><tr><SortableHeader sortKey="code" sortConfig={sortConfig} onSort={onSort}>Codigo</SortableHeader><SortableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={onSort}>Fecha creacion</SortableHeader><SortableHeader sortKey="clienteNombre" sortConfig={sortConfig} onSort={onSort}>Cliente</SortableHeader><SortableHeader sortKey="origenNombre" sortConfig={sortConfig} onSort={onSort}>Origen</SortableHeader><SortableHeader sortKey="etapaNombre" sortConfig={sortConfig} onSort={onSort}>Etapa</SortableHeader><SortableHeader sortKey="asignadoANombre" sortConfig={sortConfig} onSort={onSort}>Asignado</SortableHeader><SortableHeader sortKey="nextAgenda" sortConfig={sortConfig} onSort={onSort}>Proxima Agenda</SortableHeader><SortableHeader sortKey="timeStateNombre" sortConfig={sortConfig} onSort={onSort}>Tiempo</SortableHeader><SortableHeader sortKey="temperature" sortConfig={sortConfig} onSort={onSort}>Temp.</SortableHeader><SortableHeader sortKey="detail" sortConfig={sortConfig} onSort={onSort}>Detalle</SortableHeader><th className="px-2 py-2 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-200">{loading ? <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr> : data.map((item) => <tr key={item.id} style={rowTimeStyle(item)}><td className="px-2 py-2"><button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>{item.code}</button></td><td className="px-2 py-2"><DateTimeStack value={item.createdAt} /></td><td className="max-w-[170px] whitespace-normal px-2 py-2 leading-tight"><p className="font-semibold">{item.clienteNombre}</p>{item.clienteDocumento ? <p className="mt-0.5 text-[10px] font-medium text-slate-500">DNI: {item.clienteDocumento}</p> : null}</td><td className="px-2 py-2">{item.origenNombre}</td><td className="px-2 py-2"><StageBadge item={item} /></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.asignadoANombre}</td><td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td><td className="px-2 py-2"><TimeStateBadge item={item} /></td><td className="px-2 py-2"><span className="rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-bold text-orange-700">{item.temperature}%</span></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td><td className="px-2 py-2"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-8" onClick={() => onView(item)}><Eye className="size-3.5" /></Button>{canEdit ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onEdit(item)}><Edit3 className="size-3.5" /></Button> : null}{canViewAll ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onAssign(item)}><Send className="size-3.5" /></Button> : null}</div></td></tr>)}</tbody></table></div></section>;
+}
+
+function SortableHeader({ sortKey, sortConfig, onSort, children }) {
+  const active = sortConfig.key === sortKey;
+  const direction = active ? (sortConfig.direction === "asc" ? "↑" : "↓") : "";
+  return (
+    <th className="px-2 py-2">
+      <button type="button" onClick={() => onSort(sortKey)} className={`inline-flex items-center gap-1 font-bold transition hover:text-violet-700 ${active ? "text-violet-700" : ""}`}>
+        {children}
+        {active ? <span className="text-[10px]">{direction}</span> : <ArrowUpDown className="size-3 text-slate-400" />}
+      </button>
+    </th>
+  );
+}
+
+function sortOpportunities(items, sortConfig) {
+  if (!sortConfig.key) return items;
+
+  const direction = sortConfig.direction === "desc" ? -1 : 1;
+  return [...items].sort((a, b) => compareOpportunityValue(a, b, sortConfig.key) * direction);
+}
+
+function compareOpportunityValue(a, b, key) {
+  if (key === "createdAt" || key === "nextAgenda") return compareDates(a[key], b[key]);
+  if (key === "temperature") return compareNumbers(a[key], b[key]);
+  if (key === "timeStateNombre") return compareText(a.timeState?.nombre, b.timeState?.nombre);
+  return compareText(a[key], b[key]);
+}
+
+function compareText(a, b) {
+  return String(a || "").localeCompare(String(b || ""), "es", { sensitivity: "base", numeric: true });
+}
+
+function compareNumbers(a, b) {
+  const left = Number(a);
+  const right = Number(b);
+  if (Number.isNaN(left) && Number.isNaN(right)) return 0;
+  if (Number.isNaN(left)) return 1;
+  if (Number.isNaN(right)) return -1;
+  return left - right;
+}
+
+function compareDates(a, b) {
+  const left = new Date(a).getTime();
+  const right = new Date(b).getTime();
+  const leftInvalid = Number.isNaN(left);
+  const rightInvalid = Number.isNaN(right);
+  if (leftInvalid && rightInvalid) return 0;
+  if (leftInvalid) return 1;
+  if (rightInvalid) return -1;
+  return left - right;
 }
 
 function TimelineView({ data, mode, setMode }) {
