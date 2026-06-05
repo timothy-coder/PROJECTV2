@@ -372,13 +372,7 @@ export default function ClientsPage({ userPermissions }) {
             </Button>
           ) : null}
 
-          <PaginationControls
-            loading={loading}
-            page={currentPage}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            compact
-          />
+        
         </div>
 
         {error ? (
