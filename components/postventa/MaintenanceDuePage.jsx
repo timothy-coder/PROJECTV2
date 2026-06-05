@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -37,7 +37,28 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [opportunityPicker, setOpportunityPicker] = useState(null);
   const [recalculating, setRecalculating] = useState(false);
   const [page, setPage] = useState(1);
-  const limit = 50;
+  const [limit, setLimit] = useState(10);
+  useEffect(() => {
+    function updateLimit() {
+      const height = window.visualViewport?.height || window.innerHeight || 800;
+      const reservedHeight = height < 760 ? 410 : 440;
+      const rowHeight = 74;
+      const nextLimit = Math.max(4, Math.min(100, Math.floor((height - reservedHeight) / rowHeight)));
+      setLimit((current) => {
+        if (current === nextLimit) return current;
+        setPage(1);
+        return nextLimit;
+      });
+    }
+
+    updateLimit();
+    window.addEventListener("resize", updateLimit);
+    window.visualViewport?.addEventListener("resize", updateLimit);
+    return () => {
+      window.removeEventListener("resize", updateLimit);
+      window.visualViewport?.removeEventListener("resize", updateLimit);
+    };
+  }, []);
   const apiFilters = useMemo(
     () => ({
       page,

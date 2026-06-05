@@ -108,7 +108,7 @@ export async function GET(request) {
 
     const searchParams = request.nextUrl.searchParams;
     const page = intParam(searchParams.get("page"), 1, 1, 999999);
-    const limit = intParam(searchParams.get("limit"), 50, 10, 100);
+    const limit = intParam(searchParams.get("limit"), 50, 1, 100);
     const offset = (page - 1) * limit;
     const query = cleanParam(searchParams.get("q"));
     const brand = cleanParam(searchParams.get("brand")).toLowerCase();
