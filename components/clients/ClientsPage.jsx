@@ -95,25 +95,36 @@ export default function ClientsPage({ userPermissions }) {
   const canExportMaintenance = hasPerm(userPermissions, ["clientes", "maintenance_export"]);
 
   const tableColSpan = canViewVehicles ? 8 : 7;
+  const total = Number(meta.total || clients.length || 0);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const currentPage = Math.min(page, totalPages);
 
-  const filteredClients = useMemo(() => {
-    const clean = query.trim().toLowerCase();
-    if (!clean) return clients;
-    return clients.filter((client) =>
-      [
-        client.nombre,
-        client.apellido,
-        client.nombreComercial,
-        client.idLead,
-        client.identificacionFiscal,
-        client.celular,
-        client.email,
-        client.createdByName,
-      ]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(clean))
-    );
-  }, [clients, query]);
+  useEffect(() => {
+    function updateLimit() {
+      const height = window.visualViewport?.height || window.innerHeight || 800;
+      const tableTop = tableContainerRef.current?.getBoundingClientRect().top || 260;
+      const paginationHeight = paginationRef.current?.getBoundingClientRect().height || 46;
+      const tableHeaderHeight = 42;
+      const bottomGap = 18;
+      const rowHeight = 64;
+      const availableRowsHeight = height - tableTop - paginationHeight - tableHeaderHeight - bottomGap;
+      const nextLimit = Math.max(4, Math.min(100, Math.floor(availableRowsHeight / rowHeight)));
+      setLimit((current) => {
+        if (current === nextLimit) return current;
+        setPage(1);
+        return nextLimit;
+      });
+    }
+
+    const frame = window.requestAnimationFrame(updateLimit);
+    window.addEventListener("resize", updateLimit);
+    window.visualViewport?.addEventListener("resize", updateLimit);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateLimit);
+      window.visualViewport?.removeEventListener("resize", updateLimit);
+    };
+  }, []);
 
   const activeVehiclesClient = useMemo(() => {
     if (!vehiclesClient) return null;
@@ -342,7 +353,10 @@ export default function ClientsPage({ userPermissions }) {
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setPage(1);
+                setQuery(event.target.value);
+              }}
               placeholder="Buscar por nombre, apellido, DNI..."
               className="h-10 w-full bg-white pl-9"
             />
@@ -357,6 +371,14 @@ export default function ClientsPage({ userPermissions }) {
               Nuevo Cliente
             </Button>
           ) : null}
+
+          <PaginationControls
+            loading={loading}
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            compact
+          />
         </div>
 
         {error ? (
@@ -365,10 +387,9 @@ export default function ClientsPage({ userPermissions }) {
           </div>
         ) : null}
 
-        {/* ✅ SOLO la tabla hace scroll */}
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div ref={tableContainerRef} className="min-h-0 flex-1 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-2.5">Nombre</th>
                 <th className="px-3 py-2.5">Apellido</th>
@@ -391,8 +412,8 @@ export default function ClientsPage({ userPermissions }) {
                     </span>
                   </td>
                 </tr>
-              ) : filteredClients.length ? (
-                filteredClients.map((client) => (
+              ) : clients.length ? (
+                clients.map((client) => (
                     <tr key={client.id} className="text-slate-800">
                       <td className="px-3 py-3 font-semibold">{client.nombre || client.nombreComercial || "-"}</td>
                       <td className="px-3 py-3">{client.apellido || "-"}</td>
@@ -465,6 +486,12 @@ export default function ClientsPage({ userPermissions }) {
             </tbody>
           </table>
         </div>
+        <div ref={paginationRef} className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-2 text-sm">
+          <span className="font-medium text-slate-500">
+            Mostrando {clients.length} de {total} clientes. Pagina {currentPage} de {totalPages}
+          </span>
+          <PaginationControls loading={loading} page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+        </div>
       </section>
 
       <ClientDialog
@@ -523,6 +550,34 @@ export default function ClientsPage({ userPermissions }) {
         onClose={() => setDeleteDialog({ type: null, client: null, vehicle: null })}
         onConfirm={() => (deleteDialog.type === "vehicle" ? deleteVehicle(deleteDialog.vehicle.id) : deleteClient(deleteDialog.client.id))}
       />
+    </div>
+  );
+}
+
+function PaginationControls({ loading, page, totalPages, onPageChange, compact = false }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size={compact ? "sm" : "default"}
+        disabled={loading || page <= 1}
+        onClick={() => onPageChange((value) => Math.max(1, value - 1))}
+      >
+        Anterior
+      </Button>
+      <span className="min-w-16 text-center text-xs font-bold text-slate-600">
+        {page}/{totalPages}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size={compact ? "sm" : "default"}
+        disabled={loading || page >= totalPages}
+        onClick={() => onPageChange((value) => value + 1)}
+      >
+        Siguiente
+      </Button>
     </div>
   );
 }

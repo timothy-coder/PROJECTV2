@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { clientsApi } from "@/app/api/clients.api";
 
 export function useClients(params = {}) {
+  const page = params.page;
+  const limit = params.limit;
+  const q = params.q;
   const [clients, setClients] = useState([]);
   const [options, setOptions] = useState({
     departamentos: [],
@@ -18,7 +21,7 @@ export function useClients(params = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 0, paginated: false });
-  const listParams = useMemo(() => params, [params.page, params.limit, params.q]);
+  const listParams = useMemo(() => ({ page, limit, q }), [page, limit, q]);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
