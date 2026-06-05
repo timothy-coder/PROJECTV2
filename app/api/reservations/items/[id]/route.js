@@ -11,6 +11,7 @@ function canSeeAll(user) {
 const RESERVATION_STATUS_TRANSITIONS = {
   borrador: {
     enviado_firma: "send_signature",
+    observado: "observe",
   },
   enviado_firma: {
     observado: "observe",
@@ -23,6 +24,9 @@ const RESERVATION_STATUS_TRANSITIONS = {
   subsanado: {
     observado: "observe",
     firmado: "sign",
+  },
+  firmado: {
+    observado: "observe",
   },
 };
 
@@ -622,7 +626,7 @@ export async function PUT(request, { params }) {
       await connection.commit();
       return NextResponse.json({ ok: true });
     }
-    if (reservationState.estado === "firmado" && (body.detail || body.status || body.quoteItem)) {
+    if (reservationState.estado === "firmado" && (body.detail || body.quoteItem || (body.status && String(body.status || "") !== "observado"))) {
       await connection.rollback();
       return NextResponse.json({ message: "La reserva firmada no se puede modificar." }, { status: 409 });
     }
