@@ -1,7 +1,14 @@
 import { apiFetch } from "./client";
 
 export const clientsApi = {
-  list: () => apiFetch("/api/clients"),
+  list: (params = {}) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiFetch(`/api/clients${suffix}`);
+  },
   create: (payload) =>
     apiFetch("/api/clients", {
       method: "POST",

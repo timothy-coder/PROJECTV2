@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, Loader2, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -38,12 +38,18 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [recalculating, setRecalculating] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const tableContainerRef = useRef(null);
+  const paginationRef = useRef(null);
   useEffect(() => {
     function updateLimit() {
       const height = window.visualViewport?.height || window.innerHeight || 800;
-      const reservedHeight = height < 760 ? 410 : 440;
-      const rowHeight = 74;
-      const nextLimit = Math.max(4, Math.min(100, Math.floor((height - reservedHeight) / rowHeight)));
+      const tableTop = tableContainerRef.current?.getBoundingClientRect().top || 215;
+      const paginationHeight = paginationRef.current?.getBoundingClientRect().height || 44;
+      const tableHeaderHeight = 42;
+      const bottomGap = 20;
+      const rowHeight = 60;
+      const availableRowsHeight = height - tableTop - paginationHeight - tableHeaderHeight - bottomGap;
+      const nextLimit = Math.max(4, Math.min(100, Math.floor(availableRowsHeight / rowHeight)));
       setLimit((current) => {
         if (current === nextLimit) return current;
         setPage(1);
@@ -51,10 +57,11 @@ export default function MaintenanceDuePage({ userPermissions }) {
       });
     }
 
-    updateLimit();
+    const frame = window.requestAnimationFrame(updateLimit);
     window.addEventListener("resize", updateLimit);
     window.visualViewport?.addEventListener("resize", updateLimit);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateLimit);
       window.visualViewport?.removeEventListener("resize", updateLimit);
     };
@@ -306,7 +313,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
           Mostrando {rows.length} de {meta.total || 0} vehiculos segun la fecha de proximo mantenimiento.
         </p>
 
-        <div className="max-w-full overflow-x-auto rounded-lg border">
+        <div ref={tableContainerRef} className="max-w-full overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <thead className="bg-slate-100 text-xs font-bold text-slate-700">
               <tr>
@@ -410,7 +417,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
           </table>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div ref={paginationRef} className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
           <span className="font-medium text-slate-500">
             Pagina {meta.page || page} de {meta.pages || 1}
           </span>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { clientsApi } from "@/app/api/clients.api";
 
-export function useClients() {
+export function useClients(params = {}) {
   const [clients, setClients] = useState([]);
   const [options, setOptions] = useState({
     departamentos: [],
@@ -17,14 +17,17 @@ export function useClients() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [meta, setMeta] = useState({ total: 0, page: 1, limit: 0, paginated: false });
+  const listParams = useMemo(() => params, [params.page, params.limit, params.q]);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const data = await clientsApi.list();
+      const data = await clientsApi.list(listParams);
       setClients(data.clients || []);
+      setMeta(data.meta || { total: data.clients?.length || 0, page: 1, limit: data.clients?.length || 0, paginated: false });
       setOptions(data.options || {
         departamentos: [],
         provincias: [],
@@ -40,16 +43,17 @@ export function useClients() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listParams]);
 
   useEffect(() => {
     let mounted = true;
 
     Promise.resolve()
-      .then(() => clientsApi.list())
+      .then(() => clientsApi.list(listParams))
       .then((data) => {
         if (!mounted) return;
         setClients(data.clients || []);
+        setMeta(data.meta || { total: data.clients?.length || 0, page: 1, limit: data.clients?.length || 0, paginated: false });
         setOptions(data.options || {
           departamentos: [],
           provincias: [],
@@ -73,7 +77,7 @@ export function useClients() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [listParams]);
 
   const createClient = useCallback(async (payload) => {
     const result = await clientsApi.create(payload);
@@ -148,6 +152,7 @@ export function useClients() {
   return {
     clients,
     options,
+    meta,
     loading,
     error,
     stats,

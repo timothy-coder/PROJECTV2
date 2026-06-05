@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, CalendarDays, Edit3, Eye, Kanban, Loader2, Plus, RefreshCw, Send, Table2 } from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
@@ -21,10 +21,15 @@ function permissionKey(kind) {
 
 export default function OpportunitiesPage({ userPermissions, kind = "opportunity" }) {
   const data = useOpportunities(kind);
+  const clientsData = useClients();
   const [view, setView] = useState("general");
   const [timelineMode, setTimelineMode] = useState("timeline");
   const [filters, setFilters] = useState({ clienteId: "", origenId: "", etapaId: "", asignadoA: "", createdBy: "", time: "all" });
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(8);
+  const tableContainerRef = useRef(null);
+  const paginationRef = useRef(null);
   const [dialog, setDialog] = useState({ open: false, item: null, mode: "edit" });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
   const [conflict, setConflict] = useState(null);
@@ -54,15 +59,67 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   }), [data.opportunities, filters]);
 
   const sortedFiltered = useMemo(() => sortOpportunities(filtered, sortConfig), [filtered, sortConfig]);
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / limit));
+  const currentPage = Math.min(page, totalPages);
+  const pagedOpportunities = useMemo(() => {
+    const start = (currentPage - 1) * limit;
+    return sortedFiltered.slice(start, start + limit);
+  }, [currentPage, limit, sortedFiltered]);
+
+  useEffect(() => {
+    function updateLimit() {
+      if (view !== "general") return;
+      const height = window.visualViewport?.height || window.innerHeight || 800;
+      const tableTop = tableContainerRef.current?.getBoundingClientRect().top || 190;
+      const paginationHeight = paginationRef.current?.getBoundingClientRect().height || 42;
+      const tableHeaderHeight = 34;
+      const bottomGap = 18;
+      const rowHeight = 54;
+      const availableRowsHeight = height - tableTop - paginationHeight - tableHeaderHeight - bottomGap;
+      const nextLimit = Math.max(4, Math.min(100, Math.floor(availableRowsHeight / rowHeight)));
+      setLimit((current) => {
+        if (current === nextLimit) return current;
+        setPage(1);
+        return nextLimit;
+      });
+    }
+
+    const frame = window.requestAnimationFrame(updateLimit);
+    window.addEventListener("resize", updateLimit);
+    window.visualViewport?.addEventListener("resize", updateLimit);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateLimit);
+      window.visualViewport?.removeEventListener("resize", updateLimit);
+    };
+  }, [view]);
 
   const handleSort = (key) => {
+    setPage(1);
     setSortConfig((current) => ({
       key,
       direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
     }));
   };
 
-  const clientOptions = [{ value: "", label: "Todos" }, ...data.options.clients.map((item) => ({ value: item.id, label: [item.nombre, item.documento].filter(Boolean).join(" - ") }))];
+  const handleFilterChange = (key, value) => {
+    setPage(1);
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleViewChange = (nextView) => {
+    setPage(1);
+    setView(nextView);
+  };
+
+  const allClientOptionsSource = clientsData.clients.length
+    ? clientsData.clients.map((item) => ({
+        id: item.id,
+        nombre: [item.nombre, item.apellido].filter(Boolean).join(" ") || item.nombreComercial || item.celular || `Cliente ${item.id}`,
+        documento: item.identificacionFiscal || "",
+      }))
+    : data.options.clients;
+  const clientOptions = [{ value: "", label: "Todos" }, ...allClientOptionsSource.map((item) => ({ value: item.id, label: [item.nombre, item.documento].filter(Boolean).join(" - ") }))];
   const originOptions = [{ value: "", label: "Todos" }, ...data.options.origins.map((item) => ({ value: item.id, label: item.name }))];
   const stageOptions = [{ value: "", label: "Todos" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))];
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
@@ -90,20 +147,38 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
         </div>
         <section className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-violet-50/30 p-3">
           <div className="grid gap-2 md:grid-cols-6">
-            <Field label="Cliente"><SearchableSelect value={filters.clienteId} options={clientOptions} onChange={(value) => setFilters((current) => ({ ...current, clienteId: value }))} /></Field>
-            <Field label="Origen"><SearchableSelect value={filters.origenId} options={originOptions} onChange={(value) => setFilters((current) => ({ ...current, origenId: value }))} /></Field>
-            <Field label="Etapa"><SearchableSelect value={filters.etapaId} options={stageOptions} onChange={(value) => setFilters((current) => ({ ...current, etapaId: value }))} /></Field>
-            {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.asignadoA} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, asignadoA: value }))} /></Field> : null}
-            {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
-            <Field label="Fecha Agenda"><SearchableSelect value={filters.time} options={timeOptions} onChange={(value) => setFilters((current) => ({ ...current, time: value }))} /></Field>
+            <Field label="Cliente"><SearchableSelect value={filters.clienteId} options={clientOptions} onChange={(value) => handleFilterChange("clienteId", value)} /></Field>
+            <Field label="Origen"><SearchableSelect value={filters.origenId} options={originOptions} onChange={(value) => handleFilterChange("origenId", value)} /></Field>
+            <Field label="Etapa"><SearchableSelect value={filters.etapaId} options={stageOptions} onChange={(value) => handleFilterChange("etapaId", value)} /></Field>
+            {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.asignadoA} options={userOptions} onChange={(value) => handleFilterChange("asignadoA", value)} /></Field> : null}
+            {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => handleFilterChange("createdBy", value)} /></Field> : null}
+            <Field label="Fecha Agenda"><SearchableSelect value={filters.time} options={timeOptions} onChange={(value) => handleFilterChange("time", value)} /></Field>
           </div>
         </section>
         <div className="mb-3 flex shrink-0 flex-wrap gap-2">
-          <ViewButton active={view === "general"} onClick={() => setView("general")} icon={Table2} label="General" />
-          <ViewButton active={view === "timeline"} onClick={() => setView("timeline")} icon={CalendarDays} label="Tablero" />
-          <ViewButton active={view === "kanban"} onClick={() => setView("kanban")} icon={Kanban} label="Kanban" />
+          <ViewButton active={view === "general"} onClick={() => handleViewChange("general")} icon={Table2} label="General" />
+          <ViewButton active={view === "timeline"} onClick={() => handleViewChange("timeline")} icon={CalendarDays} label="Tablero" />
+          <ViewButton active={view === "kanban"} onClick={() => handleViewChange("kanban")} icon={Kanban} label="Kanban" />
         </div>
-        {view === "general" ? <GeneralView data={sortedFiltered} loading={data.loading} canEdit={canEdit} canViewAll={canViewAll} sortConfig={sortConfig} onSort={handleSort} onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }} onEdit={(item) => setDialog({ open: true, item, mode: "edit" })} onAssign={(item) => setAssignDialog({ open: true, item })} /> : null}
+        {view === "general" ? (
+          <GeneralView
+            data={pagedOpportunities}
+            loading={data.loading}
+            canEdit={canEdit}
+            canViewAll={canViewAll}
+            sortConfig={sortConfig}
+            onSort={handleSort}
+            onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }}
+            onEdit={(item) => setDialog({ open: true, item, mode: "edit" })}
+            onAssign={(item) => setAssignDialog({ open: true, item })}
+            tableContainerRef={tableContainerRef}
+            paginationRef={paginationRef}
+            page={currentPage}
+            totalPages={totalPages}
+            total={sortedFiltered.length}
+            onPageChange={setPage}
+          />
+        ) : null}
         {view === "timeline" ? <TimelineView data={filtered} mode={timelineMode} setMode={setTimelineMode} /> : null}
         {view === "kanban" ? <KanbanView data={filtered} stages={data.options.stages} /> : null}
         {dialog.open ? <OpportunityDialog state={dialog} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} canCreateClient={canCreateClient} onClose={() => setDialog({ open: false, item: null, mode: "edit" })} onSubmit={saveOpportunity} /> : null}
@@ -114,13 +189,102 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   );
 }
 
-function GeneralView({ data, loading, canEdit, canViewAll, sortConfig, onSort, onView, onEdit, onAssign }) {
-  return <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="min-h-0 flex-1 overflow-auto overscroll-contain"><table className="w-full min-w-[1080px] text-left text-xs"><thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold"><tr><SortableHeader sortKey="code" sortConfig={sortConfig} onSort={onSort}>Codigo</SortableHeader><SortableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={onSort}>Fecha creacion</SortableHeader><SortableHeader sortKey="clienteNombre" sortConfig={sortConfig} onSort={onSort}>Cliente</SortableHeader><SortableHeader sortKey="origenNombre" sortConfig={sortConfig} onSort={onSort}>Origen</SortableHeader><SortableHeader sortKey="etapaNombre" sortConfig={sortConfig} onSort={onSort}>Etapa</SortableHeader><SortableHeader sortKey="asignadoANombre" sortConfig={sortConfig} onSort={onSort}>Asignado</SortableHeader><SortableHeader sortKey="nextAgenda" sortConfig={sortConfig} onSort={onSort}>Proxima Agenda</SortableHeader><SortableHeader sortKey="timeStateNombre" sortConfig={sortConfig} onSort={onSort}>Tiempo</SortableHeader><SortableHeader sortKey="temperature" sortConfig={sortConfig} onSort={onSort}>Temp.</SortableHeader><SortableHeader sortKey="detail" sortConfig={sortConfig} onSort={onSort}>Detalle</SortableHeader><th className="px-2 py-2 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-200">{loading ? <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="inline size-4 animate-spin" /></td></tr> : data.map((item) => <tr key={item.id} style={rowTimeStyle(item)}><td className="px-2 py-2"><button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>{item.code}</button></td><td className="px-2 py-2"><DateTimeStack value={item.createdAt} /></td><td className="max-w-[170px] whitespace-normal px-2 py-2 leading-tight"><p className="font-semibold">{item.clienteNombre}</p>{item.clienteDocumento ? <p className="mt-0.5 text-[10px] font-medium text-slate-500">DNI: {item.clienteDocumento}</p> : null}</td><td className="px-2 py-2">{item.origenNombre}</td><td className="px-2 py-2"><StageBadge item={item} /></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.asignadoANombre}</td><td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td><td className="px-2 py-2"><TimeStateBadge item={item} /></td><td className="px-2 py-2"><TemperatureBadge item={item} /></td><td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td><td className="px-2 py-2"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" className="size-8" onClick={() => onView(item)}><Eye className="size-3.5" /></Button>{canEdit ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onEdit(item)}><Edit3 className="size-3.5" /></Button> : null}{canViewAll ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onAssign(item)}><Send className="size-3.5" /></Button> : null}</div></td></tr>)}</tbody></table></div></section>;
+function GeneralView({
+  data,
+  loading,
+  canEdit,
+  canViewAll,
+  sortConfig,
+  onSort,
+  onView,
+  onEdit,
+  onAssign,
+  tableContainerRef,
+  paginationRef,
+  page,
+  totalPages,
+  total,
+  onPageChange,
+}) {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div ref={tableContainerRef} className="max-w-full overflow-x-auto">
+        <table className="w-full min-w-[1080px] table-fixed text-left text-xs">
+          <thead className="bg-slate-50 text-[11px] font-bold">
+            <tr>
+              <SortableHeader sortKey="code" sortConfig={sortConfig} onSort={onSort}>Codigo</SortableHeader>
+              <SortableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={onSort}>Fecha creacion</SortableHeader>
+              <SortableHeader sortKey="clienteNombre" sortConfig={sortConfig} onSort={onSort}>Cliente</SortableHeader>
+              <SortableHeader sortKey="origenNombre" sortConfig={sortConfig} onSort={onSort}>Origen</SortableHeader>
+              <SortableHeader sortKey="etapaNombre" sortConfig={sortConfig} onSort={onSort}>Etapa</SortableHeader>
+              <SortableHeader sortKey="asignadoANombre" sortConfig={sortConfig} onSort={onSort}>Asignado</SortableHeader>
+              <SortableHeader sortKey="nextAgenda" sortConfig={sortConfig} onSort={onSort}>Proxima Agenda</SortableHeader>
+              <SortableHeader sortKey="timeStateNombre" sortConfig={sortConfig} onSort={onSort}>Tiempo</SortableHeader>
+              <SortableHeader sortKey="temperature" sortConfig={sortConfig} onSort={onSort}>Temp.</SortableHeader>
+              <SortableHeader sortKey="detail" sortConfig={sortConfig} onSort={onSort}>Detalle</SortableHeader>
+              <th className="px-2 py-2 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {loading ? (
+              <tr>
+                <td colSpan={11} className="py-10 text-center">
+                  <Loader2 className="inline size-4 animate-spin" />
+                </td>
+              </tr>
+            ) : data.length ? (
+              data.map((item) => (
+                <tr key={item.id} style={rowTimeStyle(item)}>
+                  <td className="px-2 py-2">
+                    <button className="font-bold text-blue-700 underline" onClick={() => onView(item)}>
+                      {item.code}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2"><DateTimeStack value={item.createdAt} /></td>
+                  <td className="max-w-[170px] whitespace-normal px-2 py-2 leading-tight">
+                    <p className="line-clamp-2 font-semibold">{item.clienteNombre}</p>
+                    {item.clienteDocumento ? <p className="mt-0.5 text-[10px] font-medium text-slate-500">DNI: {item.clienteDocumento}</p> : null}
+                  </td>
+                  <td className="px-2 py-2">{item.origenNombre}</td>
+                  <td className="px-2 py-2"><StageBadge item={item} /></td>
+                  <td className="max-w-[140px] px-2 py-2 leading-tight">{item.asignadoANombre}</td>
+                  <td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td>
+                  <td className="px-2 py-2"><TimeStateBadge item={item} /></td>
+                  <td className="px-2 py-2"><TemperatureBadge item={item} /></td>
+                  <td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td>
+                  <td className="px-2 py-2">
+                    <div className="flex justify-end gap-1">
+                      <Button size="icon" variant="ghost" className="size-8" onClick={() => onView(item)}><Eye className="size-3.5" /></Button>
+                      {canEdit ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onEdit(item)}><Edit3 className="size-3.5" /></Button> : null}
+                      {canViewAll ? <Button size="icon" variant="ghost" className="size-8" onClick={() => onAssign(item)}><Send className="size-3.5" /></Button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={11} className="py-10 text-center text-slate-500">No hay registros para mostrar</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div ref={paginationRef} className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-sm">
+        <span className="font-medium text-slate-500">
+          Mostrando {data.length} de {total} registros. Pagina {page} de {totalPages}
+        </span>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" disabled={loading || page <= 1} onClick={() => onPageChange((current) => Math.max(1, current - 1))}>Anterior</Button>
+          <Button type="button" variant="outline" disabled={loading || page >= totalPages} onClick={() => onPageChange((current) => current + 1)}>Siguiente</Button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function SortableHeader({ sortKey, sortConfig, onSort, children }) {
   const active = sortConfig.key === sortKey;
-  const direction = active ? (sortConfig.direction === "asc" ? "↑" : "↓") : "";
+  const direction = active ? (sortConfig.direction === "asc" ? "ASC" : "DESC") : "";
   return (
     <th className="px-2 py-2">
       <button type="button" onClick={() => onSort(sortKey)} className={`inline-flex items-center gap-1 font-bold transition hover:text-violet-700 ${active ? "text-violet-700" : ""}`}>

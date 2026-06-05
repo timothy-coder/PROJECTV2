@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Car,
   Download,
@@ -47,9 +47,13 @@ function todayInputDate() {
 }
 
 export default function ClientsPage({ userPermissions }) {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(8);
   const {
     clients,
     options,
+    meta,
     loading,
     error,
     createClient,
@@ -63,13 +67,14 @@ export default function ClientsPage({ userPermissions }) {
     updateVehicle,
     deleteVehicle,
     addVehicleMaintenance,
-  } = useClients();
+  } = useClients({ page, limit, q: query });
 
   const fileInputRef = useRef(null);
   const vehicleFileInputRef = useRef(null);
   const maintenanceFileInputRef = useRef(null);
+  const tableContainerRef = useRef(null);
+  const paginationRef = useRef(null);
 
-  const [query, setQuery] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [vehiclesClient, setVehiclesClient] = useState(null);
   const [clientDialog, setClientDialog] = useState({ mode: null, client: null });

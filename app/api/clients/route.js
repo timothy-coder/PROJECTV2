@@ -139,7 +139,7 @@ function normalizeClient(body) {
   };
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -148,9 +148,41 @@ export async function GET() {
 
     const userPermissions = user?.permissions || {};
     const canViewAll = hasPerm(userPermissions, ["clientes", "viewall"]);
+    const { searchParams } = new URL(request.url);
+    const requestedPage = Number(searchParams.get("page"));
+    const requestedLimit = Number(searchParams.get("limit"));
+    const isPaginated = Number.isFinite(requestedPage) && requestedPage > 0 && Number.isFinite(requestedLimit) && requestedLimit > 0;
+    const page = isPaginated ? Math.max(1, Math.floor(requestedPage)) : 1;
+    const limit = isPaginated ? Math.min(100, Math.max(1, Math.floor(requestedLimit))) : null;
+    const offset = isPaginated ? (page - 1) * limit : 0;
+    const q = String(searchParams.get("q") || "").trim();
 
-    const ownershipWhere = canViewAll ? "" : "WHERE c.created_by = ?";
-    const ownershipParams = canViewAll ? [] : [user.id];
+    const where = [];
+    const params = [];
+    if (!canViewAll) {
+      where.push("c.created_by = ?");
+      params.push(user.id);
+    }
+    if (q) {
+      const like = `%${q}%`;
+      where.push(`(
+        c.nombre LIKE ? OR c.apellido LIKE ? OR c.nombre_comercial LIKE ? OR
+        c.id_lead LIKE ? OR c.identificacion_fiscal LIKE ? OR c.celular LIKE ? OR
+        c.email LIKE ? OR COALESCE(u.fullname, u.username) LIKE ?
+      )`);
+      params.push(like, like, like, like, like, like, like, like);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const [[countRow]] = isPaginated
+      ? await pool.query(
+          `SELECT COUNT(*) AS total
+           FROM administracion_clientes c
+           LEFT JOIN administracion_usuarios u ON u.id = c.created_by
+           ${whereSql}`,
+          params
+        )
+      : [[{ total: 0 }]];
 
     const [clientRows] = await pool.query(
       `SELECT c.id, c.id_lead, c.nombre, c.apellido, c.email, c.celular, c.tipo_identificacion,
@@ -160,24 +192,29 @@ export async function GET() {
               COALESCE(u.fullname, u.username) AS created_by_name
        FROM administracion_clientes c
        LEFT JOIN administracion_usuarios u ON u.id = c.created_by
-       ${ownershipWhere}
-       ORDER BY c.id DESC`,
-      ownershipParams
-    );
-    const [vehicleRows] = await pool.query(
-      `SELECT v.id, v.cliente_id, v.placas, v.vin, v.marca_id, v.modelo_id,
-              v.anio, v.color, v.kilometraje, v.fecha_ultima_visita, v.created_at,
-              ma.name AS marca_name, mo.name AS modelo_name,
-              mo.clase_id, cl.name AS clase_name
-       FROM administracion_vehiculos v
-       LEFT JOIN administracion_marcas ma ON ma.id = v.marca_id
-       LEFT JOIN administracion_modelos mo ON mo.id = v.modelo_id
-       LEFT JOIN administracion_clases cl ON cl.id = mo.clase_id
-       WHERE v.deleted_at IS NULL
-       ORDER BY v.id DESC`
+       ${whereSql}
+       ORDER BY c.id DESC
+       ${isPaginated ? "LIMIT ? OFFSET ?" : ""}`,
+      isPaginated ? [...params, limit, offset] : params
     );
     const clients = clientRows.map(mapClient);
     const byId = new Map(clients.map((client) => [client.id, client]));
+    const clientIds = clients.map((client) => client.id);
+    const [vehicleRows] = clientIds.length
+      ? await pool.query(
+          `SELECT v.id, v.cliente_id, v.placas, v.vin, v.marca_id, v.modelo_id,
+                  v.anio, v.color, v.kilometraje, v.fecha_ultima_visita, v.created_at,
+                  ma.name AS marca_name, mo.name AS modelo_name,
+                  mo.clase_id, cl.name AS clase_name
+           FROM administracion_vehiculos v
+           LEFT JOIN administracion_marcas ma ON ma.id = v.marca_id
+           LEFT JOIN administracion_modelos mo ON mo.id = v.modelo_id
+           LEFT JOIN administracion_clases cl ON cl.id = mo.clase_id
+           WHERE v.deleted_at IS NULL AND v.cliente_id IN (?)
+           ORDER BY v.id DESC`,
+          [clientIds]
+        )
+      : [[]];
 
     vehicleRows.map(mapVehicle).forEach((vehicle) => {
       byId.get(vehicle.clienteId)?.vehicles.push(vehicle);
@@ -185,7 +222,16 @@ export async function GET() {
 
     const options = await loadOptions();
 
-    return NextResponse.json({ clients, options });
+    return NextResponse.json({
+      clients,
+      options,
+      meta: {
+        total: isPaginated ? Number(countRow.total || 0) : clients.length,
+        page,
+        limit: isPaginated ? limit : clients.length,
+        paginated: isPaginated,
+      },
+    });
   } catch (error) {
     console.error("Error loading clients:", error);
 
