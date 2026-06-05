@@ -355,6 +355,11 @@ function PdfItems({ title, rows }) {
 function ReservationStatusButtons({ reservation, currentUser, update }) {
   const status = reservation.estado || "borrador";
   const actions = currentUser.reservationStatusActions || {};
+  const observeButton = actions.observe && status !== "observado" ? (
+    <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>
+      Observar
+    </Button>
+  ) : null;
   const changeStatus = async (nextStatus, observaciones) => {
     try {
       await update({ status: nextStatus, observaciones });
@@ -363,18 +368,22 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
       toast.error(error?.message || "No se pudo actualizar el estado");
     }
   };
-  if (status === "firmado") return null;
   if (status === "borrador") {
-    return actions.sendSignature ? (
-      <Button className="h-7 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700" onClick={() => changeStatus("enviado_firma")}>
-        Enviar a firma
-      </Button>
-    ) : null;
+    return (
+      <>
+        {observeButton}
+        {actions.sendSignature ? (
+          <Button className="h-7 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700" onClick={() => changeStatus("enviado_firma")}>
+            Enviar a firma
+          </Button>
+        ) : null}
+      </>
+    );
   }
   if (status === "enviado_firma") {
     return (
       <>
-        {actions.observe ? <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
+        {observeButton}
         {actions.sign ? <Button className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
       </>
     );
@@ -390,12 +399,12 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
   if (status === "subsanado") {
     return (
       <>
-        {actions.observe ? <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>Observar</Button> : null}
+        {observeButton}
         {actions.sign ? <Button className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700" onClick={() => changeStatus("firmado")}>Firmar</Button> : null}
       </>
     );
   }
-  return null;
+  return observeButton;
 }
 
 function CarDataDialog({ open, onOpenChange, detail, update }) {

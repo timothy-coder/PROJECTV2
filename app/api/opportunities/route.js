@@ -103,7 +103,7 @@ export async function GET(request) {
        LEFT JOIN administracion_usuarios au ON au.id = o.asignado_a
        WHERE (${prefixWhere})
        ${canViewAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)"}
-       ORDER BY o.updated_at DESC`,
+       ORDER BY CASE WHEN LOWER(e.nombre) LIKE '%cerrad%' THEN 1 ELSE 0 END ASC, o.updated_at DESC`,
       canViewAll ? prefixFilters : [...prefixFilters, user.id, user.id]
     );
     const ids = opportunityRows.map((row) => row.id);
