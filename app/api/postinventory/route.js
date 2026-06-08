@@ -33,6 +33,18 @@ function mapCombo(row, items) {
   };
 }
 
+function mapSoldProduct(row) {
+  return {
+    id: row.id,
+    productoId: row.producto_id,
+    anio: Number(row.anio || 0),
+    mes: Number(row.mes || 0),
+    cantidad: Number(row.cantidad || 0),
+    numeroParte: row.numero_parte || "",
+    descripcion: row.descripcion || "",
+  };
+}
+
 export async function GET() {
   try {
     const [productRows] = await pool.query(
@@ -85,6 +97,13 @@ export async function GET() {
        INNER JOIN posventa_productos p ON p.id = ci.producto_id
        ORDER BY p.numero_parte ASC`
     );
+    const [soldProductRows] = await pool.query(
+      `SELECT v.id, v.producto_id, v.anio, v.mes, v.cantidad,
+              p.numero_parte, p.descripcion
+       FROM posventa_productos_ventames v
+       INNER JOIN posventa_productos p ON p.id = v.producto_id
+       ORDER BY v.anio DESC, v.mes DESC, p.numero_parte ASC`
+    );
 
     const stocks = stockRows.map(mapStock);
     const products = productRows.map((row) => ({
@@ -125,6 +144,7 @@ export async function GET() {
     return NextResponse.json({
       products,
       combos: comboRows.map((row) => mapCombo(row, comboItems)),
+      soldProducts: soldProductRows.map(mapSoldProduct),
       stocks,
       options: {
         types: typeRows.map((row) => ({ id: row.id, nombre: row.nombre })),

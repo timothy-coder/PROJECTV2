@@ -18,7 +18,7 @@ function createRow(index) {
   };
 }
 
-function initialRows() {
+function defaultRows() {
   return Array.from({ length: 6 }, (_, index) => createRow(index));
 }
 
@@ -51,8 +51,10 @@ function calculateRow(row) {
   return { tipo, respuestaFinal };
 }
 
-export default function SistemaLogisticoPage() {
-  const [rows, setRows] = useState(initialRows);
+export default function SistemaLogisticoPage({ initialRows = [] }) {
+  const fallbackRows = useMemo(() => defaultRows(), []);
+  const sourceRows = initialRows.length ? initialRows : fallbackRows;
+  const [rows, setRows] = useState(sourceRows);
 
   const totals = useMemo(() => {
     return rows.reduce(
@@ -74,7 +76,7 @@ export default function SistemaLogisticoPage() {
   }
 
   function resetRows() {
-    setRows(initialRows());
+    setRows(sourceRows);
   }
 
   return (

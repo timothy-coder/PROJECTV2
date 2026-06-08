@@ -21,6 +21,9 @@ const money = (value, currency = "$") =>
     maximumFractionDigits: 2,
   })}`;
 
+const depositCurrency = (deposit) => deposit?.monedaSimbolo || deposit?.moneda_simbolo || "$";
+const depositMoney = (deposit, value = deposit?.monto ?? deposit?.importe ?? 0) => money(value, depositCurrency(deposit));
+
 function discountAmount(discount, base) {
   if (String(discount?.tipo || "").toUpperCase() === "PORCENTAJE") {
     return Number(base || 0) * Number(discount?.valor || 0) / 100;
@@ -193,7 +196,7 @@ function ReservationPdfPreview({ reservation, detail, accessories, gifts, telefo
       <div className="px-1">{firstPresentValue(value)}</div>
     </>
   );
-  const amount = (value) => (Number(value || 0) ? money(value) : "");
+  const amount = (value, currency = "$") => (Number(value || 0) ? money(value, currency) : "");
   const depositos = detail.depositos || [];
   const discounts = [
     ["DESCUENTO DEALER", Number(detail.descuentoTienda || 0)],
@@ -289,7 +292,7 @@ function ReservationPdfPreview({ reservation, detail, accessories, gifts, telefo
               return (
                 <div key={index} className="contents">
                   <div className="bg-slate-100 px-1 font-bold">Monto de depósito</div>
-                  <div className="text-center">{amount(dep.monto)}</div>
+                  <div className="text-center">{amount(dep.monto, depositCurrency(dep))}</div>
                   <div className="text-center">{shortDate(dep.fechaDeposito)}</div>
                   <div className="text-center">{dep.entidadFinanciera || ""}</div>
                   <div className="text-center">{dep.numeroOperacion || ""}</div>
@@ -355,11 +358,6 @@ function PdfItems({ title, rows }) {
 function ReservationStatusButtons({ reservation, currentUser, update }) {
   const status = reservation.estado || "borrador";
   const actions = currentUser.reservationStatusActions || {};
-  const observeButton = actions.observe && status !== "observado" ? (
-    <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>
-      Observar
-    </Button>
-  ) : null;
   const changeStatus = async (nextStatus, observaciones) => {
     try {
       await update({ status: nextStatus, observaciones });
@@ -368,6 +366,11 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
       toast.error(error?.message || "No se pudo actualizar el estado");
     }
   };
+  const observeButton = actions.observe && status !== "observado" ? (
+    <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => changeStatus("observado", reservation.observaciones || "Observado")}>
+      Observar
+    </Button>
+  ) : null;
   if (status === "borrador") {
     return (
       <>
@@ -579,7 +582,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
       ...current,
       depositos: [
         ...(current.depositos || []),
-        { entidadFinanciera: "", numeroOperacion: "", monto: 0, fechaDeposito: "", observacion: "" },
+        { entidadFinanciera: "", numeroOperacion: "", monto: 0, monedaSimbolo: "$", fechaDeposito: "", observacion: "" },
       ],
     }));
   };
@@ -820,12 +823,21 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
           </div>
           <div className="space-y-2">
             {(form.depositos || []).map((deposit, index) => (
-              <div key={`${deposit.id || "new"}-${index}`} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_160px_140px_190px_1fr_auto]">
+              <div key={`${deposit.id || "new"}-${index}`} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_160px_90px_140px_190px_1fr_auto]">
                 <Field label="Entidad financiera">
                   <Input disabled={readOnly} value={deposit.entidadFinanciera || ""} onChange={(event) => updateDeposit(index, { entidadFinanciera: event.target.value })} />
                 </Field>
                 <Field label="Operacion">
                   <Input disabled={readOnly} value={deposit.numeroOperacion || ""} onChange={(event) => updateDeposit(index, { numeroOperacion: event.target.value })} />
+                </Field>
+                <Field label="Moneda">
+                  <SearchableSelect
+                    disabled={readOnly}
+                    value={deposit.monedaSimbolo || deposit.moneda_simbolo || "$"}
+                    options={[{ value: "$", label: "$" }, { value: "S/", label: "S/" }]}
+                    placeholder="$"
+                    onChange={(value) => updateDeposit(index, { monedaSimbolo: value })}
+                  />
                 </Field>
                 <Field label="Monto">
                   <Input disabled={readOnly} type="number" step="0.01" value={deposit.monto || ""} onChange={(event) => updateDeposit(index, { monto: event.target.value })} />
@@ -1084,7 +1096,17 @@ function EditableReservationFormat({
             {visibleDeposits.slice(0, 7).map((dep, index) => (
               <div key={dep?.id || index} className="contents">
                 <div className="bg-slate-100 px-1 font-bold">Monto de depósito</div>
-                <Input disabled={readOnly || !dep} type="number" value={dep?.monto || ""} onChange={(event) => updateDeposit(index, { monto: event.target.value })} className={editableCenteredInputClass} />
+                <div className="grid grid-cols-[42px_1fr] gap-1 px-1">
+                  <SearchableSelect
+                    disabled={readOnly || !dep}
+                    value={dep?.monedaSimbolo || dep?.moneda_simbolo || "$"}
+                    options={[{ value: "$", label: "$" }, { value: "S/", label: "S/" }]}
+                    placeholder="$"
+                    onChange={(value) => updateDeposit(index, { monedaSimbolo: value })}
+                    className={editableCenteredInputClass}
+                  />
+                  <Input disabled={readOnly || !dep} type="number" value={dep?.monto || ""} onChange={(event) => updateDeposit(index, { monto: event.target.value })} className={editableCenteredInputClass} />
+                </div>
                 <Input disabled={readOnly || !dep} type="date" value={dep?.fechaDeposito ? String(dep.fechaDeposito).slice(0, 10) : ""} onChange={(event) => updateDeposit(index, { fechaDeposito: event.target.value })} className={editableCenteredInputClass} />
                 <Input disabled={readOnly || !dep} value={dep?.entidadFinanciera || ""} onChange={(event) => updateDeposit(index, { entidadFinanciera: event.target.value })} className={editableCenteredInputClass} />
                 <div className="grid grid-cols-[1fr_18px]">
@@ -1831,7 +1853,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     [0, 1, 2, 3, 4, 5, 6].forEach((index) => {
       const dep = depositos[index];
       label("Monto de depósito", x + 2, y, col5 - 2);
-      putCentered(dep ? money(dep.monto || dep.importe || 0) : "", x + col5, y, col5, { size: 7, max: 16 });
+      putCentered(dep ? depositMoney(dep) : "", x + col5, y, col5, { size: 7, max: 16 });
       putCentered(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", x + (col5 * 2), y, col5, { size: 7, max: 14 });
       putCentered(firstValue(dep?.entidadFinanciera, dep?.banco), x + (col5 * 3), y, col5, { size: 7, max: 22 });
       putCentered(firstValue(dep?.numeroOperacion, dep?.operacion, dep?.op), x + (col5 * 4), y, col5, { size: 7, max: 18 });
@@ -2097,7 +2119,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
       const dep = depositos[index];
       rowBox(bottomPx);
       putLabel("Monto de depósito", formX + 2, yText(bottomPx), 28);
-      put(dep ? money(dep.monto || dep.importe || 0) : "", formX + 92, yText(bottomPx), { bold: true, max: 18 });
+      put(dep ? depositMoney(dep) : "", formX + 92, yText(bottomPx), { bold: true, max: 18 });
       put(dep ? formatDate(dep.fechaDeposito || dep.fecha_deposito || dep.fechaOperacion || dep.fecha || dep.createdAt) : "", formX + 168, yText(bottomPx), { bold: true, max: 14 });
       put(dep?.entidadFinanciera || dep?.banco || "", formX + 245, yText(bottomPx), { bold: true, max: 22 });
       put(dep?.numeroOperacion || dep?.operacion || dep?.op || "", formX + 360, yText(bottomPx), { bold: true, max: 22 });
@@ -2304,7 +2326,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     for (let index = 0; index < depRows; index += 1) {
       const dep = depositos[index];
       putLabel("Monto de deposito", lX, y, 28);
-      put(dep ? money(dep.monto) : "-", left + 43, y, { max: 18 });
+      put(dep ? depositMoney(dep) : "-", left + 43, y, { max: 18 });
       put(dep ? formatDate(dep.fechaDeposito) : "-", left + 78, y, { max: 18 });
       put(dep ? dep.entidadFinanciera : "-", left + 116, y, { max: 24 });
       put(dep ? dep.numeroOperacion : "-", right - 33, y, { max: 18 });
@@ -2613,7 +2635,7 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     rect(left + depLabelW + montoW + depFechaW + bancoW, currentY, opW, rowH);
 
     setFont("normal", 6.1);
-    text(dep ? money(dep.monto) : "-", left + depLabelW + 1.1, currentY + 2.95);
+    text(dep ? depositMoney(dep) : "-", left + depLabelW + 1.1, currentY + 2.95);
     text(dep ? formatDate(dep.fechaDeposito) : "-", left + depLabelW + montoW + 1.1, currentY + 2.95);
     text(dep ? clip(dep.entidadFinanciera, 16) : "-", left + depLabelW + montoW + depFechaW + 1.1, currentY + 2.95);
     text(dep ? clip(dep.numeroOperacion, 20) : "-", left + depLabelW + montoW + depFechaW + bancoW + 1.1, currentY + 2.95);

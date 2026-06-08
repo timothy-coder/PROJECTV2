@@ -54,6 +54,7 @@ function normalizeDeposits(deposits) {
       entidadFinanciera: String(deposit.entidadFinanciera || "").trim() || null,
       numeroOperacion: String(deposit.numeroOperacion || "").trim() || null,
       monto: Number(deposit.monto || 0),
+      monedaSimbolo: ["$", "S/"].includes(String(deposit.monedaSimbolo || deposit.moneda_simbolo || "").trim()) ? String(deposit.monedaSimbolo || deposit.moneda_simbolo).trim() : "$",
       fechaDeposito: deposit.fechaDeposito ? String(deposit.fechaDeposito).replace("T", " ").slice(0, 19) : null,
       observacion: String(deposit.observacion || "").trim() || null,
     }))
@@ -259,7 +260,7 @@ export async function GET(_request, { params }) {
       [detail.id]
     ) : [[]];
     const [depositRows] = detail ? await pool.query(
-      `SELECT id, detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion
+      `SELECT id, detalle_id, entidad_financiera, numero_operacion, monto, moneda_simbolo, fecha_deposito, observacion
        FROM ventas_reserva_depositos
        WHERE detalle_id=?
        ORDER BY COALESCE(fecha_deposito, created_at) ASC, id ASC`,
@@ -385,6 +386,8 @@ export async function GET(_request, { params }) {
           entidadFinanciera: row.entidad_financiera || "",
           numeroOperacion: row.numero_operacion || "",
           monto: Number(row.monto || 0),
+          monedaSimbolo: row.moneda_simbolo || "$",
+          moneda_simbolo: row.moneda_simbolo || "$",
           fechaDeposito: row.fecha_deposito,
           fecha_deposito: row.fecha_deposito,
           observacion: row.observacion || "",
@@ -798,9 +801,9 @@ export async function PUT(request, { params }) {
         await connection.query(`DELETE FROM ventas_reserva_depositos WHERE detalle_id=?`, [detailId]);
         if (deposits.length) {
           await connection.query(
-            `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion)
-             VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
-            deposits.flatMap((deposit) => [detailId, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.fechaDeposito, deposit.observacion])
+            `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, moneda_simbolo, fecha_deposito, observacion)
+             VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+            deposits.flatMap((deposit) => [detailId, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.monedaSimbolo, deposit.fechaDeposito, deposit.observacion])
           );
         }
       } else if (detailUpdate.affectedRows) {
@@ -817,9 +820,9 @@ export async function PUT(request, { params }) {
           await connection.query(`DELETE FROM ventas_reserva_depositos WHERE detalle_id=?`, [savedDetail.id]);
           if (deposits.length) {
             await connection.query(
-              `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, fecha_deposito, observacion)
-               VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
-              deposits.flatMap((deposit) => [savedDetail.id, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.fechaDeposito, deposit.observacion])
+              `INSERT INTO ventas_reserva_depositos (detalle_id, entidad_financiera, numero_operacion, monto, moneda_simbolo, fecha_deposito, observacion)
+               VALUES ${deposits.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ")}`,
+              deposits.flatMap((deposit) => [savedDetail.id, deposit.entidadFinanciera, deposit.numeroOperacion, deposit.monto, deposit.monedaSimbolo, deposit.fechaDeposito, deposit.observacion])
             );
           }
         }

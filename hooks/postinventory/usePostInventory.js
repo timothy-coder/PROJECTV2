@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
 export function usePostInventory() {
-  const [data, setData] = useState({ products: [], combos: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [] } });
+  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [] } });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -21,6 +21,7 @@ export function usePostInventory() {
     setData({
       products: next.products || [],
       combos: next.combos || [],
+      soldProducts: next.soldProducts || [],
       stocks: next.stocks || [],
       options: {
         types: next.options?.types || [],
@@ -49,6 +50,7 @@ export function usePostInventory() {
     return {
       products: data.products.length,
       combos: data.combos.length,
+      soldProducts: data.soldProducts.length,
       totalStock,
       lowStock: 0,
       totalValue,
@@ -59,10 +61,16 @@ export function usePostInventory() {
     createProduct: async (payload) => { await postInventoryApi.createProduct(payload); await reload(); },
     updateProduct: async (id, payload) => { await postInventoryApi.updateProduct(id, payload); await reload(); },
     deleteProduct: async (id) => { await postInventoryApi.deleteProduct(id); await reload(); },
+    importProducts: async (rows) => { const result = await postInventoryApi.importProducts(rows); await reload(); return result; },
+    createSoldProduct: async (payload) => { await postInventoryApi.createSoldProduct(payload); await reload(); },
+    updateSoldProduct: async (id, payload) => { await postInventoryApi.updateSoldProduct(id, payload); await reload(); },
+    deleteSoldProduct: async (id) => { await postInventoryApi.deleteSoldProduct(id); await reload(); },
+    importSoldProducts: async (rows) => { const result = await postInventoryApi.importSoldProducts(rows); await reload(); return result; },
     createCombo: async (payload) => { await postInventoryApi.createCombo(payload); await reload(); },
     updateCombo: async (id, payload) => { await postInventoryApi.updateCombo(id, payload); await reload(); },
     deleteCombo: async (id) => { await postInventoryApi.deleteCombo(id); await reload(); },
     createStock: async (payload) => { await postInventoryApi.createStock(payload); await reload(); },
+    importStock: async (rows) => { const result = await postInventoryApi.importStock(rows); await reload(); return result; },
     updateStock: async (id, payload) => { await postInventoryApi.updateStock(id, payload); await reload(); },
     deleteStock: async (id) => { await postInventoryApi.deleteStock(id); await reload(); },
   }), [reload]);
