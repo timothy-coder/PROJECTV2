@@ -146,9 +146,6 @@ async function recalcReservationTotal(connection, reservationId, override = {}) 
     - Number(merged.dsctobonoretoma || 0)
     - Number(merged.dsctonper || 0)
     - extraDiscountTotal
-    + (String(merged.glp_sn || "").toUpperCase() === "SI" ? Number(merged.glp || 0) : 0)
-    + (String(merged.tarjeta_sn || "").toUpperCase() === "SI" ? Number(merged.tarjetaplaca || 0) : 0)
-    + (String(merged.flete_sn || "").toUpperCase() === "SI" ? Number(merged.flete || 0) : 0)
     - Number(merged.cuota_inicial || 0)
     + itemsTotal;
   await connection.query(`UPDATE ventas_reserva_detalles SET total=? WHERE id=?`, [total, detail.id]);
@@ -729,9 +726,6 @@ export async function PUT(request, { params }) {
         - Number(d.bonoRetoma || 0)
         - Number(d.descuentoNper || 0)
         - extraDiscountTotal
-        + (glpSn === "SI" ? Number(d.glp || 0) : 0)
-        + (tarjetaSn === "SI" ? Number(d.tarjetaPlaca || 0) : 0)
-        + (fleteSn === "SI" ? Number(d.flete || 0) : 0)
         - Number(d.cuotaInicial || 0)
         + itemsTotal;
       const [detailUpdate] = await connection.query(
