@@ -54,6 +54,7 @@ const isPresentValue = (value) => value !== undefined && value !== null && Strin
 const firstPresentValue = (...values) => values.find((value) => isPresentValue(value)) || "";
 const RESERVATION_BRAND_LOGO_DEFAULT = "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png";
 const RESERVATION_BRAND_LOGO_FORD = "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg";
+const RESERVATION_BRAND_LOGO_MG = "/uploads/ventas-plantillas/mglogo.jpeg";
 const RESERVATION_OBSERVATION_TEXT =
   "Se deja constancia que si desiste de la compra y desea la devolucion, estara afecta a un % de retencion por concepto de gastos administrativos y que el motivo en materia de devolucion esta afecta a 20 dias habiles, cualquier cambio adicional que no conste en la presente no sera responsabilidad de la empresa. La entrega esta sujeta a stock, los plazos de entrega pueden sufrir variacion por posibles demoras en la entrega del vehiculo por parte de la marca, por tal caso no sera imputable al vendedor o a Wankamotors, cabe resaltar que el precio puede sufrir variacion por factores externos ajenos a Wankamotors y estipulados por la marca. Una vez emitido el mismo no se aceptara su cambio ni canje. Por tal motivo agradecemos verificar la informacion registrada, en senal de conformidad el cliente deja como constancia su firma.";
 
@@ -62,7 +63,10 @@ function normalizeBrandName(value) {
 }
 
 function reservationBrandLogoPath(marca) {
-  return normalizeBrandName(marca).includes("FORD") ? RESERVATION_BRAND_LOGO_FORD : RESERVATION_BRAND_LOGO_DEFAULT;
+  const brand = normalizeBrandName(marca);
+  if (brand.includes("FORD")) return RESERVATION_BRAND_LOGO_FORD;
+  if (brand === "MG" || brand.startsWith("MG ")) return RESERVATION_BRAND_LOGO_MG;
+  return RESERVATION_BRAND_LOGO_DEFAULT;
 }
 
 export default function ReservationDetailPage({ id }) {

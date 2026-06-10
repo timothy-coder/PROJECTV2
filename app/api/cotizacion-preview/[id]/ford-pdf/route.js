@@ -961,6 +961,7 @@ function getStaticQuoteImageSources() {
   return [
     "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png",
     "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg",
+    "/uploads/ventas-plantillas/mglogo.jpeg",
     "/whatsapp.png",
   ];
 }
@@ -968,6 +969,7 @@ function getStaticQuoteImageSources() {
 function getBrandLogoPath(brand) {
   const name = normalizeSpecName(brand);
   if (name.includes("FORD")) return "/uploads/ventas-plantillas/1778903789437-5f2f7cf4-dd3b-400f-a932-668a17fd3ad1.jpg";
+  if (name === "MG" || name.startsWith("MG ")) return "/uploads/ventas-plantillas/mglogo.jpeg";
   return "/uploads/ventas-plantillas/1778903910517-dbde795c-2743-4130-b988-fb087a3aa1ad.png";
 }
 
