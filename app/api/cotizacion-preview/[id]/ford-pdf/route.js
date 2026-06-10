@@ -893,6 +893,9 @@ function drawSmallInfoSection(doc, x, y, w, title, body) {
 function getQuoteWarrantyText(quote = {}) {
   const brand = normalizeSpecName(quote.marca);
   const model = normalizeSpecName(quote.modelo);
+  if (brand === "MG" || brand.startsWith("MG ")) {
+    return "Garantía MG de 8 años o 150,000 Km, lo que ocurra primero";
+  }
   if (brand.includes("FORD") && model.includes("RANGER")) {
     return "Garantía Ford de 5 años o 150,000 km /ranger";
   }
