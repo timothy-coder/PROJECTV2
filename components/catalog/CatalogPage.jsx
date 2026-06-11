@@ -247,7 +247,7 @@ function ItemDialog({ state, data, onClose, onSubmit }) {
     if (!file) return;
     setUploading(true);
     try {
-      const uploaded = await data.upload(file);
+      const uploaded = await data.upload(file, form.valorTipo);
       setForm((current) => ({ ...current, valorPath: uploaded.path, valor: current.valor || file.name }));
       toast.success("Archivo subido");
     } catch (error) {
@@ -275,7 +275,7 @@ function ItemDialog({ state, data, onClose, onSubmit }) {
       {form.valorTipo === "LINK" ? <Field label="URL"><Input value={form.valorUrl} placeholder="https://" onChange={(event) => setForm((current) => ({ ...current, valorUrl: event.target.value }))} /></Field> : null}
       {["IMAGEN", "VIDEO"].includes(form.valorTipo) ? (
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <Field label={form.valorTipo === "IMAGEN" ? "Imagen" : "Video"}><Input type="file" accept={form.valorTipo === "IMAGEN" ? "image/*" : "video/*"} onChange={handleUpload} disabled={uploading} /></Field>
+          <Field label={form.valorTipo === "IMAGEN" ? "Imagen" : "Video"}><Input type="file" accept={form.valorTipo === "IMAGEN" ? ".jpg,.jpeg,.png,image/jpeg,image/png" : "video/*"} onChange={handleUpload} disabled={uploading} /></Field>
           {form.valorPath ? <SpecValuePreview item={form} large /> : <p className="text-xs font-medium text-slate-500">{uploading ? "Subiendo..." : "Selecciona un archivo para guardarlo en el sistema."}</p>}
         </div>
       ) : null}

@@ -1,8 +1,9 @@
 import { apiFetch } from "./client";
 
-async function upload(file) {
+async function upload(file, kind = "") {
   const formData = new FormData();
   formData.append("file", file);
+  if (kind) formData.append("kind", kind);
   const res = await fetch("/api/catalog/upload", {
     method: "POST",
     body: formData,
