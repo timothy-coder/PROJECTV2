@@ -470,7 +470,10 @@ async function buildPdfImages(values) {
 }
 
 function getItemHref(item, origin = "") {
-  return absoluteLocalUrl(item?.valorPath || item?.valorUrl || item?.valor || "", origin);
+  const rawHref = item?.valorTipo === "LINK"
+    ? item?.valorPath || item?.valorUrl || item?.valor || ""
+    : item?.valorPath || item?.valorUrl || "";
+  return absoluteLocalUrl(rawHref, origin);
 }
 
 function isImageHref(value) {

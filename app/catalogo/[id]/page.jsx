@@ -184,7 +184,8 @@ function normalizeCatalogItem(item, origin) {
 }
 
 function getItemHref(item) {
-  return item.valorPath || item.valorUrl || item.valor;
+  if (item.valorTipo === "LINK") return item.valorPath || item.valorUrl || item.valor;
+  return item.valorPath || item.valorUrl || "";
 }
 
 function absoluteLocalUrl(value, origin) {

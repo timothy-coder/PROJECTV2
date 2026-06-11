@@ -286,11 +286,16 @@ function ItemDialog({ state, data, onClose, onSubmit }) {
 }
 
 function SpecValuePreview({ item, large = false }) {
-  const href = item.valorPath || item.valorUrl || item.valor;
+  const href = getSpecMediaHref(item);
   if (item.valorTipo === "LINK") return <a href={href} onClick={(event) => event.stopPropagation()} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 underline">{item.valor || href}</a>;
   if (item.valorTipo === "IMAGEN") return href ? <img src={href} alt={item.valor || "Imagen"} className={large ? "max-h-48 rounded-md border object-contain" : "ml-2 inline-block max-h-12 max-w-24 rounded border object-contain align-middle"} /> : <span className="font-normal text-slate-500">Imagen sin archivo</span>;
   if (item.valorTipo === "VIDEO") return href ? <video src={href} controls={large} className={large ? "max-h-48 w-full rounded-md border" : "ml-2 inline-block h-12 w-24 rounded border align-middle"} /> : <span className="font-normal text-slate-500">Video sin archivo</span>;
   return <span className="font-normal text-slate-600">{item.valor}</span>;
+}
+
+function getSpecMediaHref(item) {
+  if (item.valorTipo === "LINK") return item.valorUrl || item.valorPath || item.valor;
+  return item.valorPath || item.valorUrl || "";
 }
 
 function EntityDialog({ title, children, onClose, onSubmit }) {
