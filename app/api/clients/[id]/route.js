@@ -56,10 +56,10 @@ function duplicateReasons(payload, row) {
 
 async function findDuplicateClient(payload, excludeId) {
   const checks = [
-    ["identificacion_fiscal = ?", payload.identificacionFiscal],
-    ["id_lead = ?", payload.idLead],
-    ["celular = ?", payload.celular],
-    ["LOWER(email) = LOWER(?)", payload.email],
+    ["c.identificacion_fiscal = ?", payload.identificacionFiscal],
+    ["c.id_lead = ?", payload.idLead],
+    ["c.celular = ?", payload.celular],
+    ["LOWER(c.email) = LOWER(?)", payload.email],
   ].filter(([, value]) => value);
   if (!checks.length) return null;
 
