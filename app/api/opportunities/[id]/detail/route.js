@@ -147,6 +147,7 @@ export async function POST(request, { params }) {
     const { id: rawId } = await params;
     const id = Number(rawId);
     const body = await request.json();
+    let responsePayload = { ok: true };
     await connection.beginTransaction();
     if (body.action === "stage") {
       await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [Number(body.etapaId), id]);
@@ -268,6 +269,7 @@ export async function POST(request, { params }) {
       );
       const reservaId = await stageId(connection, "Reserva");
       if (reservaId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [reservaId, id]);
+      responsePayload = { ok: true, reservaId: res.insertId };
     }
     if (body.action === "reservation-delete") {
       await connection.query(`DELETE FROM ventas_reservas WHERE id=? AND oportunidad_id=?`, [Number(body.reservaId), id]);
@@ -284,7 +286,7 @@ export async function POST(request, { params }) {
       if (closeId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [closeId, id]);
     }
     await connection.commit();
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(responsePayload);
   } catch (error) {
     await connection.rollback();
     console.error("Error saving opportunity detail:", error);

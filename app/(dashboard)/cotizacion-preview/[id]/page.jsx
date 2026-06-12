@@ -7,6 +7,7 @@ import { hasPerm } from "@/lib/permissions";
 import { decodeSpecValue } from "@/app/api/catalog/valueUtils";
 import { QuotePreviewItems, QuoteVehicleColorEditor, QuoteVehicleDiscountEditor, QuoteVehiclePricingEditor } from "@/components/quotes/QuotePreviewItems";
 import { QuotePreviewActions } from "@/components/quotes/QuotePreviewActions";
+import { CreateReservationButton } from "@/components/quotes/CreateReservationButton";
 
 function money(value) {
   return `$${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -92,6 +93,7 @@ export default async function Page({ params }) {
             <div className="flex gap-2">
               <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-bold shadow-sm" href={`/oportunidades/${quote.oportunidad_pk}`}><ArrowRight className="size-4" />Ir a Oportunidad</Link>
               <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-bold text-white shadow-sm" href={`/reservas`}><ArrowRight className="size-4" />Llevar a Reserva</Link>
+              <CreateReservationButton opportunityId={quote.oportunidad_pk} quoteId={quote.id} />
             </div>
           </header>
           <section className="rounded-xl border border-violet-200 bg-violet-50 p-5">
