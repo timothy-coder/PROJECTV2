@@ -64,6 +64,15 @@ async function findDuplicateClient(payload, excludeId) {
   };
 }
 
+function changedDuplicatePayload(payload, current) {
+  return {
+    identificacionFiscal: payload.identificacionFiscal !== (current.identificacion_fiscal || null) ? payload.identificacionFiscal : null,
+    idLead: payload.idLead !== (current.id_lead || null) ? payload.idLead : null,
+    celular: payload.celular !== (current.celular || null) ? payload.celular : null,
+    email: payload.email && payload.email.toLowerCase() !== String(current.email || "").toLowerCase() ? payload.email : null,
+  };
+}
+
 export async function PUT(request, { params }) {
   try {
     const { id: rawId } = await params;
@@ -74,7 +83,23 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ message: "Cliente invalido." }, { status: 400 });
     }
 
-    const duplicate = await findDuplicateClient(payload, id);
+    const [[current]] = await pool.query(
+      `SELECT id, id_lead, email, celular, identificacion_fiscal
+       FROM administracion_clientes
+       WHERE id = ?
+       LIMIT 1`,
+      [id]
+    );
+    if (!current) {
+      return NextResponse.json({ message: "Cliente no encontrado." }, { status: 404 });
+    }
+
+    if (payload.createdBy) {
+      const [[owner]] = await pool.query(`SELECT id FROM administracion_usuarios WHERE id=? LIMIT 1`, [payload.createdBy]);
+      if (!owner) return NextResponse.json({ message: "El propietario seleccionado no existe." }, { status: 400 });
+    }
+
+    const duplicate = await findDuplicateClient(changedDuplicatePayload(payload, current), id);
     if (duplicate) {
       return NextResponse.json(
         {
