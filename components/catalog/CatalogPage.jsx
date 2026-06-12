@@ -18,6 +18,7 @@ export default function CatalogPage({ userPermissions }) {
   const fileInputRef = useRef(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState({});
+  const [expandedGroups, setExpandedGroups] = useState({});
   const [groupDialog, setGroupDialog] = useState({ open: false, price: null, item: null });
   const [itemDialog, setItemDialog] = useState({ open: false, group: null, item: null });
   const [sendDialog, setSendDialog] = useState({ open: false, price: null });
@@ -146,7 +147,25 @@ export default function CatalogPage({ userPermissions }) {
                     <Button size="sm" variant="outline" className="h-8" onClick={() => setSendDialog({ open: true, price })}><Send className="size-4" />Enviar a</Button>
                     {canCreate ? <Button size="sm" className="h-8" onClick={() => setGroupDialog({ open: true, price, item: null })}><Plus className="size-4" />Nuevo Grupo</Button> : null}
                   </div>
-                  {price.groups.map((group) => <GroupCard key={group.id} group={group} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} onEditGroup={() => setGroupDialog({ open: true, price, item: group })} onDeleteGroup={async () => { await data.deleteGroup(group.id); toast.success("Grupo eliminado"); }} onNewItem={() => setItemDialog({ open: true, group, item: null })} onEditItem={(item) => setItemDialog({ open: true, group, item })} onDeleteItem={async (item) => { await data.deleteItem(item.id); toast.success("Spec eliminada"); }} />)}
+                  {price.groups.map((group) => {
+                    const groupOpen = expandedGroups[group.id] ?? false;
+                    return (
+                      <GroupCard
+                        key={group.id}
+                        group={group}
+                        isOpen={groupOpen}
+                        onToggle={() => setExpandedGroups((current) => ({ ...current, [group.id]: !groupOpen }))}
+                        canCreate={canCreate}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
+                        onEditGroup={() => setGroupDialog({ open: true, price, item: group })}
+                        onDeleteGroup={async () => { await data.deleteGroup(group.id); toast.success("Grupo eliminado"); }}
+                        onNewItem={() => setItemDialog({ open: true, group, item: null })}
+                        onEditItem={(item) => setItemDialog({ open: true, group, item })}
+                        onDeleteItem={async (item) => { await data.deleteItem(item.id); toast.success("Spec eliminada"); }}
+                      />
+                    );
+                  })}
                   {!price.groups.length ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Sin grupos de especificaciones.</p> : null}
                 </div>
               ) : null}
@@ -205,21 +224,25 @@ function SendTechnicalSheetDialog({ state, onClose }) {
   );
 }
 
-function GroupCard({ group, canCreate, canEdit, canDelete, onEditGroup, onDeleteGroup, onNewItem, onEditItem, onDeleteItem }) {
+function GroupCard({ group, isOpen, onToggle, canCreate, canEdit, canDelete, onEditGroup, onDeleteGroup, onNewItem, onEditItem, onDeleteItem }) {
   return (
     <div className="rounded-lg border border-blue-100">
       <div className="flex items-center justify-between gap-2 bg-blue-50 px-3 py-2">
-        <div><h3 className="font-bold text-slate-950">{group.nombre}</h3><p className="text-xs text-slate-500">Orden {group.orden} - {group.isActive ? "Activo" : "Inactivo"}</p></div>
+        <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left" onClick={onToggle}>
+          <div className="min-w-0"><h3 className="truncate font-bold text-slate-950">{group.nombre}</h3><p className="text-xs text-slate-500">Orden {group.orden} - {group.isActive ? "Activo" : "Inactivo"} - {group.items.length} specs</p></div>
+          <ChevronDown className={`size-4 shrink-0 text-blue-700 transition ${isOpen ? "rotate-180" : ""}`} />
+        </button>
         <div className="flex shrink-0 gap-2">{canCreate ? <Button size="sm" variant="outline" className="h-8" onClick={onNewItem}><Plus className="size-4" />Spec</Button> : null}{canEdit ? <Button size="icon" variant="outline" className="size-8" onClick={onEditGroup}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" className="size-8" onClick={onDeleteGroup}><Trash2 className="size-4" /></Button> : null}</div>
       </div>
-      <div className="divide-y divide-slate-200">
+      {isOpen ? <div className="divide-y divide-slate-200">
         {group.items.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-2 px-3 py-2">
             <div className="min-w-0"><p className="font-semibold">{item.clave}: <SpecValuePreview item={item} /></p><p className="text-xs text-slate-500">Orden {item.orden} - {item.isActive ? "Activo" : "Inactivo"}</p></div>
             <div className="flex shrink-0 gap-2">{canEdit ? <Button size="icon" variant="outline" className="size-8" onClick={() => onEditItem(item)}><Edit3 className="size-4" /></Button> : null}{canDelete ? <Button size="icon" variant="destructive" className="size-8" onClick={() => onDeleteItem(item)}><Trash2 className="size-4" /></Button> : null}</div>
           </div>
         ))}
-      </div>
+        {!group.items.length ? <div className="px-3 py-4 text-sm text-slate-500">Sin specs en este grupo.</div> : null}
+      </div> : null}
     </div>
   );
 }

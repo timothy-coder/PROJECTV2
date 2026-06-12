@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -171,7 +172,9 @@ function ClientDialogBody({ mode, client, options, onClose, onSubmit }) {
       });
       onClose();
     } catch (err) {
-      setError(err.message || "No se pudo guardar el cliente.");
+      const message = err.message || "No se pudo guardar el cliente.";
+      setError(message);
+      toast.error("No se pudo guardar el cliente", { description: message });
     } finally {
       setSaving(false);
     }

@@ -24,6 +24,46 @@ function normalizeClient(body) {
   };
 }
 
+function duplicateReasons(payload, row) {
+  const reasons = [];
+  if (payload.identificacionFiscal && payload.identificacionFiscal === row.identificacion_fiscal) reasons.push(`documento ${payload.identificacionFiscal}`);
+  if (payload.idLead && payload.idLead === row.id_lead) reasons.push(`ID Lead ${payload.idLead}`);
+  if (payload.celular && payload.celular === row.celular) reasons.push(`celular ${payload.celular}`);
+  if (payload.email && payload.email.toLowerCase() === String(row.email || "").toLowerCase()) reasons.push(`email ${payload.email}`);
+  return reasons;
+}
+
+async function findDuplicateClient(payload, excludeId) {
+  const checks = [
+    ["identificacion_fiscal = ?", payload.identificacionFiscal],
+    ["id_lead = ?", payload.idLead],
+    ["celular = ?", payload.celular],
+    ["LOWER(email) = LOWER(?)", payload.email],
+  ].filter(([, value]) => value);
+  if (!checks.length) return null;
+
+  const [rows] = await pool.query(
+    `SELECT c.id, c.id_lead, c.nombre, c.apellido, c.email, c.celular, c.identificacion_fiscal,
+            COALESCE(u.fullname, u.username, CONCAT('Usuario ', c.created_by)) AS created_by_name
+     FROM administracion_clientes c
+     LEFT JOIN administracion_usuarios u ON u.id = c.created_by
+     WHERE (${checks.map(([clause]) => clause).join(" OR ")}) AND c.id <> ?
+     ORDER BY c.id DESC
+     LIMIT 1`,
+    [...checks.map(([, value]) => value), excludeId]
+  );
+  const duplicate = rows[0];
+  if (!duplicate) return null;
+  const reasons = duplicateReasons(payload, duplicate);
+  const owner = duplicate.created_by_name || "usuario no identificado";
+  const clientName = [duplicate.nombre, duplicate.apellido].filter(Boolean).join(" ") || `cliente #${duplicate.id}`;
+  return {
+    duplicate,
+    reasons,
+    message: `El cliente ya esta registrado por ${owner}. Motivo: ${reasons.join(", ") || "datos duplicados"}. Cliente: ${clientName}.`,
+  };
+}
+
 export async function PUT(request, { params }) {
   try {
     const { id: rawId } = await params;
@@ -32,6 +72,19 @@ export async function PUT(request, { params }) {
 
     if (!Number.isInteger(id) || id <= 0) {
       return NextResponse.json({ message: "Cliente invalido." }, { status: 400 });
+    }
+
+    const duplicate = await findDuplicateClient(payload, id);
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          message: duplicate.message,
+          reason: duplicate.reasons.join(", "),
+          createdByName: duplicate.duplicate.created_by_name || "",
+          clientId: duplicate.duplicate.id,
+        },
+        { status: 409 }
+      );
     }
 
     const [result] = await pool.query(
