@@ -318,7 +318,7 @@ function HistoryDialog({ item, prices, onClose, onSubmit }) {
   const isEdit = Boolean(item);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white text-slate-950">
+      <DialogContent className="max-h-[94svh] max-w-[min(96vw,760px)] overflow-y-auto bg-white text-slate-950">
         <form onSubmit={(event) => { event.preventDefault(); onSubmit(form); }} className="space-y-4">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-violet-700">{isEdit ? "Editar carro en inventario" : "Crear carro en inventario"}</DialogTitle>
@@ -327,10 +327,10 @@ function HistoryDialog({ item, prices, onClose, onSubmit }) {
           <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="VIN *"><Input value={form.vin} onChange={(event) => setForm((current) => ({ ...current, vin: event.target.value }))} disabled={isEdit} required /></Field>
-              <Field label="Vehiculo *"><SearchableSelect value={form.precioId} options={priceOptions} placeholder="Seleccionar vehiculo" onChange={(value) => {
+              <Field label="Vehiculo *" className="sm:col-span-2"><SearchableSelect value={form.precioId} options={priceOptions} placeholder="Seleccionar vehiculo" onChange={(value) => {
                 const selected = prices.find((price) => Number(price.id) === Number(value));
                 setForm((current) => ({ ...current, precioId: value, precioVenta: selected?.precioBase ?? current.precioVenta }));
-              }} /></Field>
+              }} className="min-h-9 whitespace-normal py-2" /></Field>
               <Field label="Color externo"><Input value={form.colorExterno} onChange={(event) => setForm((current) => ({ ...current, colorExterno: event.target.value }))} placeholder="Ej: Blanco" /></Field>
               <Field label="Color interno"><Input value={form.colorInterno} onChange={(event) => setForm((current) => ({ ...current, colorInterno: event.target.value }))} placeholder="Ej: Negro" /></Field>
               <Field label="Numero de motor"><Input value={form.numeroMotor} onChange={(event) => setForm((current) => ({ ...current, numeroMotor: event.target.value }))} placeholder="Numero de motor" /></Field>
@@ -603,8 +603,8 @@ function Stat({ label, value, icon: Icon, tone = "purple" }) {
   );
 }
 
-function Field({ label, children }) {
-  return <div className="space-y-1"><Label className="text-[11px] font-bold text-slate-600">{label}</Label>{children}</div>;
+function Field({ label, children, className = "" }) {
+  return <div className={`space-y-1 ${className}`}><Label className="text-[11px] font-bold text-slate-600">{label}</Label>{children}</div>;
 }
 
 function Toggle({ label, description, checked, onCheckedChange }) {

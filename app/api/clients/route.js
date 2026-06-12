@@ -127,7 +127,7 @@ function normalizeClient(body) {
     celular: String(body.celular || "").trim() || null,
     tipoIdentificacion: body.tipoIdentificacion || null,
     identificacionFiscal: String(body.identificacionFiscal || "").trim() || null,
-    fechaNacimiento: body.fechaNacimiento || null,
+    fechaNacimiento: normalizeDateValue(body.fechaNacimiento),
     ocupacion: String(body.ocupacion || "").trim() || null,
     domicilio: String(body.domicilio || "").trim() || null,
     departamentoId: body.departamentoId ? Number(body.departamentoId) : null,
@@ -137,6 +137,27 @@ function normalizeClient(body) {
     dniConyugue: String(body.dniConyugue || "").trim() || null,
     nombreComercial: String(body.nombreComercial || "").trim() || null,
   };
+}
+
+function normalizeDateValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  return text;
+}
+
+function clientCreateErrorMessage(error) {
+  if (error?.code === "ER_DUP_ENTRY") return "El cliente ya existe. Hay un dato unico duplicado en la base de datos.";
+  if (error?.code === "ER_DATA_TOO_LONG") return "Uno de los campos supera el largo permitido.";
+  if (error?.code === "ER_TRUNCATED_WRONG_VALUE" || error?.code === "ER_TRUNCATED_WRONG_VALUE_FOR_FIELD") return "Hay un valor con formato invalido. Revisa la fecha de nacimiento.";
+  if (error?.code === "ER_NO_REFERENCED_ROW_2") return "Departamento, provincia o distrito no existe en la base de datos.";
+  if (error?.sqlMessage) return `No se pudo crear el cliente: ${error.sqlMessage}`;
+  return "No se pudo crear el cliente.";
 }
 
 function duplicateReasons(payload, row) {
@@ -347,8 +368,8 @@ export async function POST(request) {
     console.error("Error creating client:", error);
 
     return NextResponse.json(
-      { message: "No se pudo crear el cliente." },
-      { status: 500 }
+      { message: clientCreateErrorMessage(error) },
+      { status: error?.code === "ER_DUP_ENTRY" ? 409 : 500 }
     );
   }
 }
