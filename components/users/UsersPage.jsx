@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Edit3, Eye, Loader2, Plus, Search, Shield, Trash2, Users } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown, Edit3, Eye, Loader2, Plus, Search, Shield, Trash2, Users } from "lucide-react";
 
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
 import { UserDialog } from "@/components/users/UserDialog";
@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useUsers } from "@/hooks/users/useUsers";
 import { hasPerm } from "@/lib/permissions";
 
-function StatCard({ label, value, tone, icon: Icon }) {
+function StatCard({ label, shortLabel, value, tone, icon: Icon }) {
   const tones = {
     blue: "border-blue-200 bg-blue-50 text-blue-700",
     green: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -19,12 +19,15 @@ function StatCard({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+    <div className={`flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3 ${tones[tone]}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="text-[10px] font-semibold leading-4 sm:text-[11px]">
+          <span className="sm:hidden">{shortLabel || label}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }
@@ -35,6 +38,7 @@ export default function UsersPage({ userPermissions }) {
   const [query, setQuery] = useState("");
   const [dialogMode, setDialogMode] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [expandedUserId, setExpandedUserId] = useState(null);
 
   const canCreate = hasPerm(userPermissions, ["usuarios", "create"]);
   const canEdit = hasPerm(userPermissions, ["usuarios", "edit"]);
@@ -92,16 +96,16 @@ export default function UsersPage({ userPermissions }) {
           <Users className="size-5" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-base font-bold leading-tight text-slate-950">Gestion de Usuarios</h1>
-          <p className="mt-0.5 text-xs font-medium text-slate-500">Administra todos los usuarios del sistema</p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">Gestión de Usuarios</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">Administra todos los usuarios del sistema</p>
         </div>
       </div>
 
       {/* Stats compactos */}
-      <div className="grid shrink-0 gap-2 lg:grid-cols-3">
-        <StatCard label="Total de Usuarios" value={stats.total} tone="blue" icon={Users} />
-        <StatCard label="Usuarios Activos" value={stats.active} tone="green" icon={Shield} />
-        <StatCard label="Usuarios Inactivos" value={stats.inactive} tone="orange" icon={Shield} />
+      <div className="grid grid-cols-3 shrink-0 gap-2">
+        <StatCard label="Total de Usuarios" shortLabel="Total" value={stats.total} tone="blue" icon={Users} />
+        <StatCard label="Usuarios Activos" shortLabel="Activos" value={stats.active} tone="green" icon={Shield} />
+        <StatCard label="Usuarios Inactivos" shortLabel="Inactivos" value={stats.inactive} tone="orange" icon={Shield} />
       </div>
 
       {/* ✅ Card principal ocupa el resto con flex */}
@@ -137,13 +141,13 @@ export default function UsersPage({ userPermissions }) {
 
         {/* ✅ Tabla scrolleable: ocupa el espacio disponible */}
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain border-t border-slate-200">
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <table className="w-full border-collapse text-left text-sm sm:min-w-[760px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-2.5">Usuario</th>
-                <th className="px-3 py-2.5">Nombre completo</th>
-                <th className="px-3 py-2.5">Rol</th>
-                <th className="px-3 py-2.5">Activo</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Nombre completo</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Rol</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Activo</th>
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
@@ -159,48 +163,124 @@ export default function UsersPage({ userPermissions }) {
                   </td>
                 </tr>
               ) : filteredUsers.length ? (
-                filteredUsers.map((user) => (
-                  <tr key={user.id} className="text-slate-800">
-                    <td className="px-3 py-2.5 font-semibold">{user.username}</td>
-                    <td className="px-3 py-2.5">{user.fullname}</td>
-                    <td className="px-3 py-2.5 text-slate-500">{user.roleName || "-"}</td>
-                    <td className="px-3 py-2.5">
-                      <Switch
-                        checked={user.isActive}
-                        disabled={!canEdit}
-                        onCheckedChange={() => toggleUserActive(user)}
-                        className="data-checked:bg-violet-700"
-                      />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setDialogMode("view");
-                          }}
-                          title="Ver usuario"
-                        >
-                          <Eye className="size-4" />
-                        </Button>
+                filteredUsers.map((user) => {
+                  const expanded = expandedUserId === user.id;
 
-                        {canEdit ? (
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(user)} title="Editar usuario">
-                            <Edit3 className="size-4" />
+                  return (
+                    <Fragment key={user.id}>
+                      <tr className="text-slate-800">
+                        <td className="px-3 py-2.5">
+                          <p className="font-semibold">{user.username}</p>
+                          <div className="mt-1 space-y-0.5 text-xs text-slate-500 sm:hidden">
+                            <p className="font-medium text-slate-700">{user.fullname || "-"}</p>
+                            <p>{user.roleName || "-"}</p>
+                          </div>
+                        </td>
+                        <td className="hidden px-3 py-2.5 sm:table-cell">{user.fullname}</td>
+                        <td className="hidden px-3 py-2.5 text-slate-500 sm:table-cell">{user.roleName || "-"}</td>
+                        <td className="hidden px-3 py-2.5 sm:table-cell">
+                          <Switch
+                            checked={user.isActive}
+                            disabled={!canEdit}
+                            onCheckedChange={() => toggleUserActive(user)}
+                            className="data-checked:bg-violet-700"
+                          />
+                        </td>
+                        <td className="relative px-3 py-2.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setExpandedUserId(expanded ? null : user.id)}
+                            className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+                          >
+                            Acciones
+                            <ChevronDown className={`size-4 transition ${expanded ? "rotate-180" : ""}`} />
                           </Button>
-                        ) : null}
 
-                        {canDelete ? (
-                          <Button variant="destructive" size="icon" onClick={() => openDelete(user)} title="Eliminar usuario">
-                            <Trash2 className="size-4" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {expanded ? (
+                            <div className="absolute right-3 top-11 z-20 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+                              <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-600">
+                                <span>Activo</span>
+                                <Switch
+                                  checked={user.isActive}
+                                  disabled={!canEdit}
+                                  onCheckedChange={() => toggleUserActive(user)}
+                                  className="data-checked:bg-violet-700"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setDialogMode("view");
+                                  setExpandedUserId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                              >
+                                <Eye className="size-4" />
+                                Ver
+                              </button>
+
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    openEdit(user);
+                                    setExpandedUserId(null);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                                >
+                                  <Edit3 className="size-4" />
+                                  Editar
+                                </button>
+                              ) : null}
+
+                              {canDelete ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    openDelete(user);
+                                    setExpandedUserId(null);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                                >
+                                  <Trash2 className="size-4" />
+                                  Borrar
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+
+                          <div className="hidden justify-end gap-2 sm:flex">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setDialogMode("view");
+                              }}
+                              title="Ver usuario"
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+
+                            {canEdit ? (
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(user)} title="Editar usuario">
+                                <Edit3 className="size-4" />
+                              </Button>
+                            ) : null}
+
+                            {canDelete ? (
+                              <Button variant="destructive" size="icon" onClick={() => openDelete(user)} title="Eliminar usuario">
+                                <Trash2 className="size-4" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    </Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={5} className="px-3 py-10 text-center text-slate-500">
@@ -213,9 +293,10 @@ export default function UsersPage({ userPermissions }) {
         </div>
 
         {/* Footer paginación (fijo, no se va con el scroll) */}
-        <div className="flex shrink-0 items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
-          <span>Pagina 1 de 1</span>
-          <div className="flex gap-2">
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+          <span className="font-medium">Pagina 1 de 1</span>
+          <span className="text-center font-medium">{filteredUsers.length} de {filteredUsers.length} registros</span>
+          <div className="flex justify-end gap-2">
             <Button variant="outline" disabled className="h-9">
               Anterior
             </Button>

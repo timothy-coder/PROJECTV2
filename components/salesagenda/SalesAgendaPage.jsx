@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calendar, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -24,6 +24,8 @@ export default function SalesAgendaPage({ userPermissions }) {
   const [baseDate, setBaseDate] = useState(new Date());
   const [mode, setMode] = useState("week");
   const [filters, setFilters] = useState({ createdBy: "", assignedTo: "", client: "", kind: "all", centerId: "" });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [dialog, setDialog] = useState(null);
   const centerId = filters.centerId || (data.centers[0]?.id ? String(data.centers[0].id) : "");
   const schedule = data.schedules.find((item) => String(item.centroId) === String(centerId)) || data.schedules[0] || { slotMinutes: 30, week: {} };
@@ -50,37 +52,50 @@ export default function SalesAgendaPage({ userPermissions }) {
   }), [data.items, filters, activeKind]);
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
   const centerOptions = data.centers.map((item) => ({ value: item.id, label: item.nombre }));
+  const mobileDays = mode === "month" ? monthDays(baseDate) : days;
   return (
     <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <header className="mb-3 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:mb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white"><Calendar className="size-5" /></div>
-          <div><h1 className="text-2xl font-bold">Agenda</h1><p className="text-xs text-slate-500">{dateRangeLabel(days)}</p></div>
+          <div className="flex size-9 items-center justify-center rounded-lg bg-violet-700 text-white sm:size-10"><Calendar className="size-5" /></div>
+          <div><h1 className="text-lg font-bold sm:text-2xl">Agenda</h1><p className="text-xs text-slate-500">{dateRangeLabel(days)}</p></div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setBaseDate(addDays(baseDate, mode === "month" ? -30 : -7))}><ChevronLeft className="size-4" /></Button>
-          <Button variant="outline" size="icon" onClick={() => setBaseDate(addDays(baseDate, mode === "month" ? 30 : 7))}><ChevronRight className="size-4" /></Button>
-          <Button variant="outline" onClick={() => setBaseDate(new Date())}>Hoy</Button>
+        <div className="grid grid-cols-[auto_auto_1fr_auto] gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? -30 : -7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronLeft className="size-4" /></Button>
+          <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? 30 : 7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronRight className="size-4" /></Button>
+          <Button variant="outline" onClick={() => { const today = new Date(); setBaseDate(today); setSelectedDate(formatDate(today)); }}>Hoy</Button>
           <SearchableSelect value={mode} options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]} onChange={setMode} />
-          <div className="w-48"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></div>
-          {canCreate ? <Button onClick={() => setDialog({ date: formatDate(new Date()), time: "" })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nueva</Button> : null}
+          <div className="hidden w-48 sm:block"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></div>
+          {canCreate ? <Button onClick={() => setDialog({ date: selectedDate || formatDate(new Date()), time: "" })} className="col-span-2 bg-violet-700 text-white hover:bg-violet-800 sm:col-span-1"><Plus className="size-4" />Nueva</Button> : null}
           <Button variant="outline" size="icon" onClick={data.reload}><RefreshCw className="size-4" /></Button>
         </div>
       </header>
-      <section className="mb-3 flex flex-wrap items-end gap-2">
-        {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
-        {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
-        <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
-        {kindOptions.length > 1 ? (
-          <div className="flex rounded-lg border bg-white p-1">
-            {kindOptions.map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${activeKind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
-          </div>
-        ) : null}
+      <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2 sm:flex sm:flex-wrap sm:items-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
+        <button type="button" className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 px-3 text-xs font-bold text-slate-700 sm:hidden" onClick={() => setFiltersOpen((current) => !current)}>
+          Filtros
+          <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:contents`}>
+          <Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field>
+          {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
+          {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
+          <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
+          {kindOptions.length > 1 ? (
+            <div className="flex rounded-lg border bg-white p-1">
+              {kindOptions.map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${activeKind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
+            </div>
+          ) : null}
+        </div>
       </section>
+      <div className="sm:hidden">
+        <MobileAgenda days={mobileDays} selectedDate={selectedDate} setSelectedDate={setSelectedDate} items={filteredItems} canCreate={canCreate} onNew={(date) => setDialog({ date, time: "" })} />
+      </div>
       {mode === "month" ? (
-        <MonthCalendar days={monthCalendarDays(baseDate)} week={schedule.week} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: "" })} />
+        <div className="hidden sm:block">
+          <MonthCalendar days={monthCalendarDays(baseDate)} week={schedule.week} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: "" })} />
+        </div>
       ) : (
-        <div className="overflow-auto rounded-lg border border-slate-200 bg-white">
+        <div className="hidden overflow-auto rounded-lg border border-slate-200 bg-white sm:block">
           <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
             <div className="border-b border-r bg-slate-50" />
             {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}
@@ -156,6 +171,92 @@ function agendaKindLabel(kind) {
 
 function agendaDetailPath(item) {
   return item.kind === "lead" ? `/leads/${item.id}` : `/oportunidades/${item.id}`;
+}
+
+function MobileAgenda({ days, selectedDate, setSelectedDate, items, canCreate, onNew }) {
+  const selected = days.find((day) => day.date === selectedDate) || days[0] || dayObj(new Date());
+  const dayItems = items
+    .filter((item) => item.agendaDate === selected.date)
+    .sort((a, b) => String(a.agendaTime || "").localeCompare(String(b.agendaTime || "")));
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-white px-3 py-3">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {days.map((day) => {
+            const active = day.date === selected.date;
+            const count = items.filter((item) => item.agendaDate === day.date).length;
+            return (
+              <button
+                key={day.date}
+                type="button"
+                className={`min-w-14 rounded-xl px-2.5 py-2 text-center transition ${active ? "bg-blue-600 text-white shadow" : "bg-slate-50 text-slate-700"}`}
+                onClick={() => setSelectedDate(day.date)}
+              >
+                <span className="block text-[10px] font-bold uppercase">{day.label}</span>
+                <span className={`mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-sm font-bold ${active ? "bg-white text-blue-700" : day.today ? "bg-violet-700 text-white" : "bg-white text-slate-950"}`}>
+                  {day.day}
+                </span>
+                <span className={`mt-1 block text-[10px] font-bold ${active ? "text-blue-50" : "text-slate-400"}`}>{count || "-"}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase text-slate-500">{selected.label}</p>
+          <h2 className="truncate text-base font-bold text-slate-950">{selected.date}</h2>
+        </div>
+        {canCreate ? (
+          <Button size="sm" className="shrink-0 bg-violet-700 text-white hover:bg-violet-800" onClick={() => onNew(selected.date)}>
+            <Plus className="size-4" />Nueva
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="max-h-[calc(100svh-17rem)] min-h-80 overflow-y-auto bg-slate-50 px-3 py-3">
+        {dayItems.length ? (
+          <div className="space-y-2">
+            {dayItems.map((item) => <MobileAgendaCard key={`${item.kind}-${item.id}`} item={item} />)}
+          </div>
+        ) : (
+          <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 text-center text-sm text-slate-500">
+            <Calendar className="mb-2 size-8 text-slate-300" />
+            No hay oportunidades agendadas para este dia.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MobileAgendaCard({ item }) {
+  const href = agendaDetailPath(item);
+  return (
+    <button
+      type="button"
+      className="w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm"
+      style={{ borderLeft: `4px solid ${item.etapaColor}` }}
+      onClick={() => window.location.assign(href)}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-slate-950">{item.code}</p>
+          <p className="mt-0.5 truncate text-xs font-semibold text-slate-700">{item.clienteNombre}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">{agendaKindLabel(item.kind)}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs text-slate-600">
+        <span className="font-bold text-slate-500">Hora</span>
+        <span className="font-semibold text-slate-950">{String(item.agendaTime || "").slice(0, 5) || "-"}</span>
+        <span className="font-bold text-slate-500">Asesor</span>
+        <span className="truncate">{item.asignadoNombre || "-"}</span>
+      </div>
+      {item.detail ? <p className="mt-2 line-clamp-2 rounded-lg bg-red-50 px-2 py-1 text-xs italic text-red-700">{item.detail}</p> : null}
+    </button>
+  );
 }
 
 function MonthCalendar({ days, week, items, canCreate, nowTime, onCell }) {

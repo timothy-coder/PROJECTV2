@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Car,
+  ChevronDown,
   Download,
   Edit3,
   Loader2,
@@ -82,6 +83,8 @@ export default function ClientsPage({ userPermissions }) {
   const [maintenanceDialog, setMaintenanceDialog] = useState({ client: null, vehicle: null });
   const [deleteDialog, setDeleteDialog] = useState({ type: null, client: null, vehicle: null });
   const [recalculatingMaintenance, setRecalculatingMaintenance] = useState(false);
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
+  const [clientActionsOpenId, setClientActionsOpenId] = useState(null);
 
   const canCreate = hasPerm(userPermissions, ["clientes", "create"]);
   const canEdit = hasPerm(userPermissions, ["clientes", "edit"]);
@@ -269,68 +272,57 @@ export default function ClientsPage({ userPermissions }) {
       {/* ✅ Header + botones import/export siempre arriba */}
       <div className="mb-3 flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
             <UserRound className="size-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold leading-tight text-slate-950">Gestión de Clientes</h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">Administra clientes y vehículos</p>
+            <h1 className="text-base font-bold leading-tight text-violet-700">Gestión de Clientes</h1>
+            <p className="mt-0.5 text-xs font-medium text-violet-400">Administra clientes y vehículos</p>
           </div>
         </div>
 
-        <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto lg:grid-flow-col lg:auto-cols-max lg:justify-end">
-          {canExport ? (
-            <Button variant="outline" onClick={exportClients} className="h-10 justify-center whitespace-nowrap">
-              <Download className="size-4" />
-              Formato Clientes
-            </Button>
-          ) : null}
-          {canImport ? (
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="h-10 justify-center whitespace-nowrap">
-              <Upload className="size-4" />
-              Importar Clientes
-            </Button>
-          ) : null}
+        <div className="relative w-full shrink-0 lg:w-64">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setToolbarMenuOpen((value) => !value)}
+            className="h-10 w-full justify-center"
+          >
+            Opciones
+            <ChevronDown className={`size-4 transition ${toolbarMenuOpen ? "rotate-180" : ""}`} />
+          </Button>
 
-          {canExportVehicles ? (
-            <Button variant="outline" onClick={exportVehicles} className="h-10 justify-center whitespace-nowrap">
-              <Download className="size-4" />
-              Formato vehiculos
-            </Button>
-          ) : null}
-          {canImportVehicles ? (
-            <Button variant="outline" onClick={() => vehicleFileInputRef.current?.click()} className="h-10 justify-center whitespace-nowrap">
-              <Upload className="size-4" />
-              Importar vehiculos
-            </Button>
-          ) : null}
-
-          {canExportMaintenance ? (
-            <Button variant="outline" onClick={exportMaintenance} className="h-10 justify-center whitespace-nowrap">
-              <Download className="size-4" />
-              Formato mantenimientos
-            </Button>
-          ) : null}
-          {canImportMaintenance ? (
-            <Button variant="outline" onClick={() => maintenanceFileInputRef.current?.click()} className="h-10 justify-center whitespace-nowrap">
-              <Upload className="size-4" />
-              Importar mantenimientos
-            </Button>
-          ) : null}
-          {canImportMaintenance || canViewVehicles ? (
-            <Button
-              variant="outline"
-              onClick={handleRecalculateMaintenance}
-              disabled={recalculatingMaintenance}
-              className="h-10 justify-center whitespace-nowrap"
-            >
-              {recalculatingMaintenance ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              Recalcular proximos
-            </Button>
+          {toolbarMenuOpen ? (
+            <div className="absolute right-0 top-11 z-30 w-full overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+              {canExport ? (
+                <MobileMenuItem icon={Download} label="Formato Clientes" onClick={exportClients} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canImport ? (
+                <MobileMenuItem icon={Upload} label="Importar Clientes" onClick={() => fileInputRef.current?.click()} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canExportVehicles ? (
+                <MobileMenuItem icon={Download} label="Formato vehiculos" onClick={exportVehicles} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canImportVehicles ? (
+                <MobileMenuItem icon={Upload} label="Importar vehiculos" onClick={() => vehicleFileInputRef.current?.click()} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canExportMaintenance ? (
+                <MobileMenuItem icon={Download} label="Formato mantenimientos" onClick={exportMaintenance} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canImportMaintenance ? (
+                <MobileMenuItem icon={Upload} label="Importar mantenimientos" onClick={() => maintenanceFileInputRef.current?.click()} close={() => setToolbarMenuOpen(false)} />
+              ) : null}
+              {canImportMaintenance || canViewVehicles ? (
+                <MobileMenuItem
+                  icon={recalculatingMaintenance ? Loader2 : RefreshCw}
+                  label="Recalcular proximos"
+                  onClick={handleRecalculateMaintenance}
+                  close={() => setToolbarMenuOpen(false)}
+                  disabled={recalculatingMaintenance}
+                  iconClassName={recalculatingMaintenance ? "animate-spin" : ""}
+                />
+              ) : null}
+            </div>
           ) : null}
 
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importClientRows} />
@@ -382,15 +374,15 @@ export default function ClientsPage({ userPermissions }) {
         ) : null}
 
         <div ref={tableContainerRef} className="min-h-0 flex-1 overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+          <table className="w-full border-collapse text-left text-sm sm:min-w-[980px]">
             <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
-                <th className="px-3 py-2.5">Nombre</th>
-                <th className="px-3 py-2.5">Apellido</th>
-                <th className="px-3 py-2.5">ID Lead</th>
-                <th className="px-3 py-2.5">Celular</th>
-                <th className="px-3 py-2.5">DNI</th>
-                <th className="px-3 py-2.5">Creado por / propietario</th>
+                <th className="px-3 py-2.5">Cliente</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Apellido</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">ID Lead</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Celular</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">DNI</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Creado por / propietario</th>
                 {canViewVehicles ? <th className="px-3 py-2.5">Vehículos</th> : null}
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
@@ -407,20 +399,30 @@ export default function ClientsPage({ userPermissions }) {
                   </td>
                 </tr>
               ) : clients.length ? (
-                clients.map((client) => (
-                    <tr key={client.id} className="text-slate-800">
-                      <td className="px-3 py-3 font-semibold">{client.nombre || client.nombreComercial || "-"}</td>
-                      <td className="px-3 py-3">{client.apellido || "-"}</td>
-                      <td className="px-3 py-3">{client.idLead || "-"}</td>
-                      <td className="px-3 py-3">{client.celular || "-"}</td>
-                      <td className="px-3 py-3">{client.identificacionFiscal || "-"}</td>
+                clients.map((client) => {
+                  const actionsOpen = clientActionsOpenId === client.id;
+
+                  return (
+                    <Fragment key={client.id}>
+                    <tr className="text-slate-800">
                       <td className="px-3 py-3">
+                        <div className="font-semibold">{client.nombre || client.nombreComercial || "-"}</div>
+                        <div className="text-xs text-slate-500 sm:hidden">{client.apellido || "-"}</div>
+                        <div className="mt-1 text-xs font-medium text-slate-600 sm:hidden">
+                          DNI: {client.identificacionFiscal || "-"}
+                        </div>
+                      </td>
+                      <td className="hidden px-3 py-3 sm:table-cell">{client.apellido || "-"}</td>
+                      <td className="hidden px-3 py-3 sm:table-cell">{client.idLead || "-"}</td>
+                      <td className="hidden px-3 py-3 sm:table-cell">{client.celular || "-"}</td>
+                      <td className="hidden px-3 py-3 sm:table-cell">{client.identificacionFiscal || "-"}</td>
+                      <td className="hidden px-3 py-3 sm:table-cell">
                         <div className="font-semibold">{client.createdByName || "-"}</div>
                         <div className="text-xs text-slate-500">{formatDate(client.createdAt)}</div>
                       </td>
 
                       {canViewVehicles ? (
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-center sm:text-left">
                           <button
                             type="button"
                             onClick={() => setVehiclesClient(client)}
@@ -431,8 +433,49 @@ export default function ClientsPage({ userPermissions }) {
                         </td>
                       ) : null}
 
-                      <td className="px-3 py-3">
-                        <div className="flex justify-end gap-2">
+                      <td className="relative px-3 py-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setClientActionsOpenId(actionsOpen ? null : client.id)}
+                          className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+                        >
+                          Acciones
+                          <ChevronDown className={`size-4 transition ${actionsOpen ? "rotate-180" : ""}`} />
+                        </Button>
+
+                        {actionsOpen ? (
+                          <div className="absolute right-3 top-12 z-20 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+                            {canViewVehicles ? (
+                              <MobileMenuItem
+                                icon={Car}
+                                label="Ver vehiculos"
+                                onClick={() => setVehiclesClient(client)}
+                                close={() => setClientActionsOpenId(null)}
+                              />
+                            ) : null}
+                            {canEdit ? (
+                              <MobileMenuItem
+                                icon={Edit3}
+                                label="Editar cliente"
+                                onClick={() => setClientDialog({ mode: "edit", client })}
+                                close={() => setClientActionsOpenId(null)}
+                              />
+                            ) : null}
+                            {canDelete ? (
+                              <MobileMenuItem
+                                icon={Trash2}
+                                label="Eliminar cliente"
+                                onClick={() => setDeleteDialog({ type: "client", client, vehicle: null })}
+                                close={() => setClientActionsOpenId(null)}
+                                className="text-red-600 hover:bg-red-50"
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="hidden justify-end gap-2 sm:flex">
                           {canViewVehicles ? (
                             <Button
                               variant="ghost"
@@ -468,8 +511,9 @@ export default function ClientsPage({ userPermissions }) {
                         </div>
                       </td>
                     </tr>
-
-                ))
+                    </Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={tableColSpan} className="px-3 py-10 text-center text-slate-500">
@@ -480,11 +524,16 @@ export default function ClientsPage({ userPermissions }) {
             </tbody>
           </table>
         </div>
-        <div ref={paginationRef} className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-2 text-sm">
+        <div ref={paginationRef} className="mt-auto grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs">
           <span className="font-medium text-slate-500">
-            Mostrando {clients.length} de {total} clientes. Pagina {currentPage} de {totalPages}
+            Pagina {currentPage} de {totalPages}
           </span>
-          <PaginationControls loading={loading} page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+          <span className="text-center font-medium text-slate-500">
+            {clients.length} de {total} registros
+          </span>
+          <div className="flex justify-end">
+            <PaginationControls loading={loading} page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+          </div>
         </div>
       </section>
 
@@ -548,6 +597,27 @@ export default function ClientsPage({ userPermissions }) {
   );
 }
 
+function MobileMenuItem({ icon: Icon, label, onClick, close, disabled = false, className = "", iconClassName = "" }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => {
+        if (disabled) return;
+        onClick?.();
+        close?.();
+      }}
+      className={[
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60",
+        className,
+      ].join(" ")}
+    >
+      {Icon ? <Icon className={["size-4", iconClassName].filter(Boolean).join(" ")} /> : null}
+      {label}
+    </button>
+  );
+}
+
 function PaginationControls({ loading, page, totalPages, onPageChange, compact = false }) {
   return (
     <div className="flex shrink-0 items-center gap-2">
@@ -560,9 +630,6 @@ function PaginationControls({ loading, page, totalPages, onPageChange, compact =
       >
         Anterior
       </Button>
-      <span className="min-w-16 text-center text-xs font-bold text-slate-600">
-        {page}/{totalPages}
-      </span>
       <Button
         type="button"
         variant="outline"

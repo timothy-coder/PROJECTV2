@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Box, Car, Coins, Edit3, Filter, Loader2, Plus, Search, Tags, Trash2 } from "lucide-react";
+import { Box, ChevronDown, Edit3, Filter, Loader2, Plus, Search, Trash2 } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,8 @@ import { hasPerm } from "@/lib/permissions";
 
 export default function AccessoriesPage({ userPermissions }) {
   const data = useAccessories();
-  const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", monedaId: "" });
+  const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "" });
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   const canView = hasPerm(userPermissions, ["accesoriosventa", "view"]);
@@ -34,8 +35,7 @@ export default function AccessoriesPage({ userPermissions }) {
       const matchesQuery = !query || `${item.detalle} ${item.numeroParte}`.toLowerCase().includes(query);
       const matchesBrand = !filters.marcaId || Number(filters.marcaId) === item.marcaId;
       const matchesModel = !filters.modeloId || Number(filters.modeloId) === item.modeloId;
-      const matchesCurrency = !filters.monedaId || Number(filters.monedaId) === item.monedaId;
-      return matchesQuery && matchesBrand && matchesModel && matchesCurrency;
+      return matchesQuery && matchesBrand && matchesModel;
     });
   }, [data.accessories, filters]);
 
@@ -46,7 +46,6 @@ export default function AccessoriesPage({ userPermissions }) {
       .filter((item) => !filters.marcaId || Number(item.marcaId) === Number(filters.marcaId))
       .map((item) => ({ value: item.id, label: item.name })),
   ];
-  const currencyOptions = [{ value: "", label: "Todas" }, ...data.options.currencies.map((item) => ({ value: item.id, label: item.codigo }))];
 
   if (!canView) {
     return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver accesorios.</div>;
@@ -56,25 +55,24 @@ export default function AccessoriesPage({ userPermissions }) {
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Box className="size-8 text-violet-700" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
+            <Box className="size-5" />
+          </div>
           <div>
-            <h1 className="text-3xl font-bold leading-none text-violet-700">Accesorios</h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">Gestiona todos los accesorios disponibles</p>
+            <h1 className="text-base font-bold leading-tight text-violet-700">Accesorios</h1>
+            <p className="mt-0.5 text-xs font-medium text-violet-400">Gestiona todos los accesorios disponibles</p>
           </div>
         </div>
       </div>
 
-      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-5">
+      <div className="mb-3 grid grid-cols-2 shrink-0 gap-2">
         <Stat label="Total" value={data.stats.total} icon={Box} />
-        <Stat label="Marcas" value={data.stats.brands} icon={Tags} />
-        <Stat label="Modelos" value={data.stats.models} icon={Car} tone="green" />
-        <Stat label="Monedas" value={data.stats.currencies} icon={Coins} tone="orange" />
         <Stat label="Impuestos" value={data.stats.taxes} icon={Filter} tone="orange" />
       </div>
 
-      <section className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-white shadow-sm">
+      <section className="shrink-0 rounded-t-lg border border-b-0 border-violet-200 bg-white shadow-sm">
         <div className="space-y-2 px-3 py-2">
-          <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_130px_auto_auto] lg:items-end">
+          <div className="grid gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(240px,300px)_minmax(280px,360px)_auto_auto] lg:items-end">
             <div className="space-y-1">
               <Label className="text-[11px] font-bold text-slate-600">Buscar</Label>
               <div className="relative">
@@ -82,10 +80,20 @@ export default function AccessoriesPage({ userPermissions }) {
                 <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Detalle, numero de parte..." className="h-9 bg-white pl-9" />
               </div>
             </div>
-            <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
-            <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
-            <Field label="Moneda"><SearchableSelect value={filters.monedaId} options={currencyOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, monedaId: value }))} /></Field>
-            <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "" })}>Limpiar</Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 lg:hidden"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              Filtros
+              <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+            </Button>
+            <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 lg:contents`}>
+              <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
+              <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
+              <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "" })}>Limpiar</Button>
+            </div>
             {canCreate ? (
               <Button onClick={() => setDialog({ open: true, item: null })} className="h-9 bg-violet-700 text-white hover:bg-violet-800">
                 <Plus className="size-4" />
@@ -93,16 +101,14 @@ export default function AccessoriesPage({ userPermissions }) {
               </Button>
             ) : null}
           </div>
-          <p className="text-xs font-medium text-slate-500">Mostrando {filteredAccessories.length} de {data.accessories.length} accesorios</p>
         </div>
       </section>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-lg border border-violet-200 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
               <tr>
-                <th className="px-3 py-3">ID</th>
                 <th className="px-3 py-3">Detalle / N Parte</th>
                 <th className="px-3 py-3">Marca / Modelo</th>
                 <th className="px-3 py-3">Precios</th>
@@ -112,10 +118,9 @@ export default function AccessoriesPage({ userPermissions }) {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {data.loading ? (
-                <tr><td colSpan={6} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={5} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : filteredAccessories.map((item) => (
                 <tr key={item.id}>
-                  <td className="px-3 py-3 font-bold text-violet-700">#{item.id}</td>
                   <td className="px-3 py-3">
                     <div className="font-semibold text-slate-950">{item.detalle}</div>
                     <div className="mt-1 text-xs font-medium text-slate-500">N Parte: {item.numeroParte}</div>
@@ -139,6 +144,18 @@ export default function AccessoriesPage({ userPermissions }) {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+          <span className="font-medium">Pagina 1 de 1</span>
+          <span className="text-center font-medium">{filteredAccessories.length} de {data.accessories.length} registros</span>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled className="h-9">
+              Anterior
+            </Button>
+            <Button variant="outline" disabled className="h-9">
+              Siguiente
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -229,12 +246,14 @@ function DeleteDialog({ state, onClose, onConfirm }) {
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-sm bg-white text-slate-950">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-red-600">Eliminar accesorio</DialogTitle>
-          <DialogDescription>Se eliminara {state.item?.detalle}.</DialogDescription>
+          <DialogTitle className="text-lg font-bold text-red-600">Confirmar eliminacion</DialogTitle>
+          <DialogDescription>
+            ¿Seguro que deseas eliminar {state.item?.detalle}? Esta accion no se puede deshacer.
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button variant="destructive" onClick={onConfirm}>Eliminar</Button>
+          <Button variant="destructive" onClick={onConfirm}>Si, eliminar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -248,12 +267,12 @@ function Stat({ label, value, icon: Icon, tone = "purple" }) {
     orange: "border-orange-200 bg-orange-50 text-orange-700",
   };
   return (
-    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+    <div className={`flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3 ${tones[tone]}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="truncate text-[10px] font-semibold leading-4 sm:text-[11px]">{label}</p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-violet-700">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }

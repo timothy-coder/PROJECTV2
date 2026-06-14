@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Boxes, Download, Edit3, Eye, Layers3, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, Upload, X } from "lucide-react";
+import { Boxes, ChevronDown, Download, Edit3, Eye, Layers3, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -60,6 +60,7 @@ export default function PostInventoryPage({ userPermissions }) {
   const [soldDialog, setSoldDialog] = useState({ open: false, item: null, readonly: false });
   const [stockDialog, setStockDialog] = useState({ open: false, product: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, title: "", onConfirm: null });
+  const [formatsMenuOpen, setFormatsMenuOpen] = useState(false);
   const canView = hasPerm(userPermissions, ["inventario", "view"]);
   const canCreate = hasPerm(userPermissions, ["inventario", "create"]);
   const canEdit = hasPerm(userPermissions, ["inventario", "edit"]);
@@ -174,18 +175,31 @@ export default function PostInventoryPage({ userPermissions }) {
             <Package className="size-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-950">Inventario</h1>
+            <h1 className="text-base font-bold leading-tight text-slate-950">Inventario</h1>
             <p className="text-xs font-medium text-slate-500">Gestion de productos y stock</p>
           </div>
         </div>
         {canCreate ? (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={exportProductsFormat} className="h-10"><Download className="size-4" />Formato productos</Button>
-            <Button variant="outline" onClick={() => productImportRef.current?.click()} className="h-10"><Upload className="size-4" />Ingreso masivo productos</Button>
-            <Button variant="outline" onClick={exportStockFormat} className="h-10"><Download className="size-4" />Formato stock</Button>
-            <Button variant="outline" onClick={() => stockImportRef.current?.click()} className="h-10"><Upload className="size-4" />Ingreso masivo stock</Button>
-            <Button variant="outline" onClick={exportSoldProductsFormat} className="h-10"><Download className="size-4" />Formato vendidos</Button>
-            <Button variant="outline" onClick={() => soldImportRef.current?.click()} className="h-10"><Upload className="size-4" />Importar vendidos</Button>
+          <div className="relative w-full sm:w-64">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFormatsMenuOpen((current) => !current)}
+              className="h-10 w-full justify-center"
+            >
+              Opciones
+              <ChevronDown className={`size-4 transition ${formatsMenuOpen ? "rotate-180" : ""}`} />
+            </Button>
+            {formatsMenuOpen ? (
+              <div className="absolute right-0 top-11 z-30 w-full overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                <MenuItem icon={Download} label="Formato productos" onClick={exportProductsFormat} close={() => setFormatsMenuOpen(false)} />
+                <MenuItem icon={Upload} label="Ingreso masivo productos" onClick={() => productImportRef.current?.click()} close={() => setFormatsMenuOpen(false)} />
+                <MenuItem icon={Download} label="Formato stock" onClick={exportStockFormat} close={() => setFormatsMenuOpen(false)} />
+                <MenuItem icon={Upload} label="Ingreso masivo stock" onClick={() => stockImportRef.current?.click()} close={() => setFormatsMenuOpen(false)} />
+                <MenuItem icon={Download} label="Formato vendidos" onClick={exportSoldProductsFormat} close={() => setFormatsMenuOpen(false)} />
+                <MenuItem icon={Upload} label="Importar vendidos" onClick={() => soldImportRef.current?.click()} close={() => setFormatsMenuOpen(false)} />
+              </div>
+            ) : null}
             <input ref={productImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importProducts, "Productos importados")} />
             <input ref={stockImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importStock, "Stock importado")} />
             <input ref={soldImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importSoldProducts, "Productos vendidos importados")} />
@@ -193,7 +207,7 @@ export default function PostInventoryPage({ userPermissions }) {
         ) : null}
       </div>
 
-      <div className="mb-3 grid shrink-0 gap-2 lg:grid-cols-4">
+      <div className="mb-3 grid grid-cols-4 shrink-0 gap-2">
         <Stat label="Total Productos" value={data.stats.products} tone="blue" icon={Package} />
         <Stat label="Stock Total" value={data.stats.totalStock} tone="green" icon={TrendingUp} />
         <Stat label="Stock Bajo" value={lowStock} tone="red" icon={TriangleAlert} />
@@ -213,7 +227,7 @@ export default function PostInventoryPage({ userPermissions }) {
       </div>
 
       <section className="mb-3 shrink-0 rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+        <div className="grid gap-3 px-4 py-3 md:grid-cols-[1fr_auto] md:items-end">
           <div className="min-w-0 space-y-1.5">
             <Label>{searchLabel}</Label>
             <div className="relative">
@@ -221,13 +235,13 @@ export default function PostInventoryPage({ userPermissions }) {
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} className="h-10 bg-white pl-9" />
             </div>
           </div>
-          {view === "products" ? <div className="space-y-1.5">
-            <Label>Minimo stock</Label>
-            <Input type="number" value={minStock} onChange={(event) => setMinStock(event.target.value)} className="h-10 bg-white" />
-          </div> : null}
-          <div className="flex flex-col gap-2 sm:flex-row md:justify-end">
-            <Button variant="outline" onClick={data.reload} className="h-10"><RefreshCw className="size-4" />Recargar</Button>
-            {canCreate && view === "products" ? <Button onClick={() => setProductDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Producto</Button> : null}
+          <div className={view === "products" ? "grid grid-cols-[84px_1fr_1fr] items-end gap-2 md:grid-cols-[120px_auto_auto] md:justify-end" : "grid grid-cols-2 gap-2 sm:flex sm:flex-row md:justify-end"}>
+            {view === "products" ? <div className="space-y-1.5">
+              <Label className="text-[11px] sm:text-xs">Min. stock</Label>
+              <Input type="number" value={minStock} onChange={(event) => setMinStock(event.target.value)} className="h-10 bg-white" />
+            </div> : null}
+            <Button variant="outline" onClick={data.reload} className="h-10 px-2 text-xs sm:px-4 sm:text-sm"><RefreshCw className="size-4" />Recargar</Button>
+            {canCreate && view === "products" ? <Button onClick={() => setProductDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 px-2 text-xs text-white hover:bg-violet-800 sm:px-4 sm:text-sm"><Plus className="size-4" />Nuevo Producto</Button> : null}
             {canCreate && view === "combos" ? <Button onClick={() => setComboDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Combo</Button> : null}
             {canCreate && view === "soldProducts" ? <Button onClick={() => setSoldDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo vendido</Button> : null}
           </div>
@@ -930,6 +944,25 @@ function Field({ label, children }) {
   return <div className="space-y-1.5"><Label className="text-xs font-bold text-violet-700">{label}</Label>{children}</div>;
 }
 
+function MenuItem({ icon: Icon, label, onClick, close, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onClick?.();
+        close?.();
+      }}
+      className={[
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50",
+        className,
+      ].join(" ")}
+    >
+      {Icon ? <Icon className="size-4" /> : null}
+      {label}
+    </button>
+  );
+}
+
 function Stat({ label, value, tone, icon: Icon }) {
   const tones = {
     blue: "border-blue-200 bg-blue-50 text-blue-700",
@@ -938,12 +971,12 @@ function Stat({ label, value, tone, icon: Icon }) {
     purple: "border-violet-200 bg-violet-50 text-violet-700",
   };
   return (
-    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+    <div className={`flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3 ${tones[tone]}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="truncate text-[10px] font-semibold leading-4 sm:text-[11px]">{label}</p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }

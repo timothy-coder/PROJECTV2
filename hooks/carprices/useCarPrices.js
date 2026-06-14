@@ -24,13 +24,11 @@ export function useCarPrices() {
 
   const stats = useMemo(() => ({
     total: data.prices.length,
-    brands: new Set(data.prices.map((item) => item.marcaId)).size,
-    models: new Set(data.prices.map((item) => item.modeloId)).size,
-    stock: data.prices.filter((item) => item.enStock && item.existe).length,
-    pedido: data.prices.filter((item) => !item.enStock && item.existe).length,
+    stock: data.history.filter((item) => !item.enReserva).length,
+    pedido: data.pendingPurchases.length,
     history: data.history.length,
     pendingPurchases: data.pendingPurchases.length,
-  }), [data.history.length, data.pendingPurchases.length, data.prices]);
+  }), [data.history, data.pendingPurchases.length, data.prices.length]);
 
   const actions = useMemo(() => ({
     create: async (payload) => { await carPricesApi.create(payload); await reload(); },

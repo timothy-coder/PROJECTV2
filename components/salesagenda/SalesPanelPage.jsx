@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, Pencil, RefreshCw } from "lucide-react";
+import { ChevronDown, Eye, Pencil, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useSalesAgenda } from "@/hooks/salesagenda/useSalesAgenda";
@@ -42,21 +42,21 @@ export default function SalesPanelPage({ userPermissions }) {
     <div className="min-w-0 bg-slate-50 p-4 text-slate-950">
       <header className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-violet-700">Panel de Ventas</h1>
-          <p className="text-sm text-slate-500">{canViewAll ? "Vista completa" : "Mi vista"}</p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">Panel de Ventas</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">{canViewAll ? "Vista completa" : "Mi vista"}</p>
         </div>
         <Button variant="outline" size="icon" onClick={data.reload}>
           <RefreshCw className="size-4" />
         </Button>
       </header>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <div className="mb-4 grid grid-cols-3 gap-1.5 sm:gap-3">
         {allOpportunities.length ? <Stat label="OPO Totales" value={allOpportunities.length} accent="violet" /> : null}
         {allLeads.length ? <Stat label="Leads Totales" value={allLeads.length} accent="red" /> : null}
         {allFordLeads.length ? <Stat label="Leads Ford Totales" value={allFordLeads.length} accent="amber" /> : null}
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-3 gap-1.5 sm:gap-3 lg:grid-cols-5">
         {stages.map((stage) => {
           const op = allOpportunities.filter((item) => Number(item.etapaId) === Number(stage.id)).length;
           const ld = allLeads.filter((item) => Number(item.etapaId) === Number(stage.id)).length;
@@ -68,7 +68,7 @@ export default function SalesPanelPage({ userPermissions }) {
         })}
       </div>
 
-      <section className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
+      <section className="mb-1 rounded-lg border bg-white p-2 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-bold text-violet-700">Tareas - {tasks.length} registros</h2>
           <PeriodFilter value={taskPeriod} onChange={setTaskPeriod} />
@@ -89,10 +89,10 @@ export default function SalesPanelPage({ userPermissions }) {
 function Stat({ label, value, sub, accent }) {
   const colors = { violet: "border-violet-300 text-violet-700", red: "border-red-200 text-red-500", amber: "border-amber-200 text-amber-600", cyan: "border-cyan-300 text-cyan-600" };
   return (
-    <div className={`rounded-lg border bg-white p-4 shadow-sm ${colors[accent] || ""}`}>
-      <p className="text-xs text-slate-600">{label}</p>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
-      {sub ? <p className="mt-1 text-xs text-slate-500">{sub}</p> : null}
+    <div className={`rounded-lg border bg-white p-2 shadow-sm sm:p-4 ${colors[accent] || ""}`}>
+      <p className="truncate text-[10px] leading-4 text-slate-600 sm:text-xs">{label}</p>
+      <p className="mt-1 text-lg font-bold leading-5 sm:mt-2 sm:text-2xl">{value}</p>
+      {sub ? <p className="mt-1 line-clamp-2 text-[10px] leading-3 text-slate-500 sm:text-xs sm:leading-4">{sub}</p> : null}
     </div>
   );
 }
@@ -110,14 +110,38 @@ function PeriodFilter({ value, onChange }) {
 }
 
 function TaskRow({ item }) {
+  const [open, setOpen] = useState(false);
   const detailPath = detailPathForItem(item);
+  const goDetail = () => {
+    window.location.assign(detailPath);
+  };
+
   return (
     <div className="flex items-center justify-between rounded-lg border p-3" style={item.timeState?.color ? { backgroundColor: `${item.timeState.color}22`, borderLeft: `4px solid ${item.timeState.color}` } : undefined}>
-      <div>
-        <p className="font-bold">{item.code} - {item.clienteNombre}</p>
-        <p className="text-xs text-slate-500">{item.agendaDate} {item.agendaTime} - {item.timeState?.nombre || ""}</p>
+      <div className="min-w-0 pr-2">
+        <p className="truncate text-xs font-medium text-slate-800 sm:text-sm"><span className="font-bold">{item.code}</span> - {item.clienteNombre}</p>
+        <p className="hidden text-xs text-slate-500 sm:block">{item.agendaDate} {item.agendaTime} - {item.timeState?.nombre || ""}</p>
+        <div className="mt-1 space-y-0.5 text-xs text-slate-500 sm:hidden">
+          <p>Asignado: {item.asignadoNombre || "-"}</p>
+          <p>Etapa: {item.etapaNombre || "-"}</p>
+          <p>Agenda: {[item.agendaDate, item.agendaTime].filter(Boolean).join(" ") || "-"}</p>
+        </div>
       </div>
-      <Button size="sm" variant="outline" onClick={() => { window.location.href = detailPath; }}>Abrir</Button>
+      <div className="relative shrink-0 sm:hidden">
+        <Button size="sm" variant="outline" className="h-8 gap-1 px-2" onClick={() => setOpen((current) => !current)}>
+          Acciones
+          <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+        </Button>
+        {open ? (
+          <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" onClick={goDetail}>
+              <Eye className="size-4" />
+              Abrir
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <Button size="sm" variant="outline" className="hidden sm:inline-flex" onClick={goDetail}>Abrir</Button>
     </div>
   );
 }
@@ -130,38 +154,71 @@ function Table({ title, rows, period, onPeriodChange }) {
         <PeriodFilter value={period} onChange={onPeriodChange} />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className="w-full text-left text-sm sm:min-w-[760px]">
           <thead>
             <tr className="border-b">
-              <th className="py-3">Codigo</th>
-              <th>Cliente</th>
-              <th>Asignado</th>
-              <th>Etapa</th>
-              <th>Fecha Agenda</th>
+              <th className="py-3">Codigo / Cliente</th>
+              <th className="hidden sm:table-cell">Cliente</th>
+              <th className="hidden sm:table-cell">Asignado</th>
+              <th className="hidden sm:table-cell">Etapa</th>
+              <th className="hidden sm:table-cell">Fecha Agenda</th>
               <th className="text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {rows.map((item) => {
-              const detailPath = detailPathForItem(item);
-              return (
-                <tr key={item.id}>
-                  <td className="py-3 font-bold">{item.code}</td>
-                  <td>{item.clienteNombre}</td>
-                  <td>{item.asignadoNombre}</td>
-                  <td><span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">{item.etapaNombre}</span></td>
-                  <td>{item.agendaDate || "-"}</td>
-                  <td className="text-right">
-                    <Button size="icon" variant="ghost" onClick={() => { window.location.href = detailPath; }}><Eye className="size-4" /></Button>
-                    <Button size="icon" variant="ghost" onClick={() => { window.location.href = detailPath; }}><Pencil className="size-4" /></Button>
-                  </td>
-                </tr>
-              );
-            })}
+            {rows.map((item) => <PanelTableRow key={`${item.kind}-${item.id}`} item={item} />)}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+function PanelTableRow({ item }) {
+  const [open, setOpen] = useState(false);
+  const detailPath = detailPathForItem(item);
+  const goDetail = () => {
+    window.location.assign(detailPath);
+  };
+
+  return (
+    <tr>
+      <td className="py-3 pr-3 align-top">
+        <p className="font-bold text-slate-950">{item.code}</p>
+        <p className="mt-0.5 text-xs font-semibold text-slate-700 sm:hidden">{item.clienteNombre}</p>
+        <div className="mt-1 space-y-0.5 text-xs text-slate-500 sm:hidden">
+          <p>Asignado: {item.asignadoNombre || "-"}</p>
+          <p>Etapa: {item.etapaNombre || "-"}</p>
+          <p>Agenda: {item.agendaDate || "-"}</p>
+        </div>
+      </td>
+      <td className="hidden sm:table-cell">{item.clienteNombre}</td>
+      <td className="hidden sm:table-cell">{item.asignadoNombre}</td>
+      <td className="hidden sm:table-cell"><span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">{item.etapaNombre}</span></td>
+      <td className="hidden sm:table-cell">{item.agendaDate || "-"}</td>
+      <td className="relative py-3 text-right align-top">
+        <Button size="sm" variant="outline" className="ml-auto flex h-8 gap-1 px-2 sm:hidden" onClick={() => setOpen((current) => !current)}>
+          Acciones
+          <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+        </Button>
+        {open ? (
+          <div className="absolute right-0 top-11 z-20 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" onClick={goDetail}>
+              <Eye className="size-4" />
+              Ver
+            </button>
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50" onClick={goDetail}>
+              <Pencil className="size-4" />
+              Editar
+            </button>
+          </div>
+        ) : null}
+        <div className="hidden justify-end gap-1 sm:flex">
+          <Button size="icon" variant="ghost" onClick={goDetail}><Eye className="size-4" /></Button>
+          <Button size="icon" variant="ghost" onClick={goDetail}><Pencil className="size-4" /></Button>
+        </div>
+      </td>
+    </tr>
   );
 }
 

@@ -25,6 +25,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function getInitials(user) {
   const source = user?.fullname || user?.username || "Usuario";
@@ -127,6 +128,30 @@ function getActiveGroupKey(menu, pathname) {
   return "";
 }
 
+function CollapsedNavIcon({ href, label, active, children }) {
+  const className = [
+    "flex items-center justify-center p-3 rounded-lg text-sm transition",
+    active
+      ? "bg-indigo-600/20 border border-indigo-500/30 text-white"
+      : "hover:bg-white/5 text-slate-200",
+  ].join(" ");
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link href={href} title={label} aria-label={label} className={className}>
+            {children}
+          </Link>
+        }
+      />
+      <TooltipContent side="right" align="center" sideOffset={10} className="bg-slate-950 text-white">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function NavLinks({ menu, pathname, onNavigate, activeGroupKey }) {
   const [openGroupKey, setOpenGroupKey] = useState(activeGroupKey);
 
@@ -219,6 +244,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
 
   const onNavigate = () => {
     if (isMobile) setOpen(false);
+    else setCollapsed(true);
   };
 
   // =========================
@@ -269,6 +295,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
   // =========================
   if (collapsed) {
     const iconItems = menu.flatMap((section) => section.items);
+    const homeActive = pathname === HOME_ITEM.to || pathname.startsWith(HOME_ITEM.to + "/");
 
     return (
       <aside className="h-svh w-20 bg-slate-900 text-slate-100 flex flex-col min-h-0 border-r border-white/10 transition-all duration-300">
@@ -284,42 +311,34 @@ export default function DashboardNav({ title = "Dashboard", user }) {
           </Button>
         </div>
 
+        <TooltipProvider delay={0}>
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2">
           {/* HOME */}
-          <Link
+          <CollapsedNavIcon
             href={HOME_ITEM.to}
-            title={HOME_ITEM.label}
-            className={[
-              "flex items-center justify-center p-3 rounded-lg text-sm transition",
-              pathname === HOME_ITEM.to || pathname.startsWith(HOME_ITEM.to + "/")
-                ? "bg-indigo-600/20 border border-indigo-500/30 text-white"
-                : "hover:bg-white/5 text-slate-200",
-            ].join(" ")}
+            label={HOME_ITEM.label}
+            active={homeActive}
           >
             {HOME_ITEM.icon ? <HOME_ITEM.icon className="w-5 h-5" /> : null}
-          </Link>
+          </CollapsedNavIcon>
 
           {/* Icon-only */}
           {iconItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.to || pathname.startsWith(item.to + "/");
             return (
-              <Link
+              <CollapsedNavIcon
                 key={item.to}
                 href={item.to}
-                title={item.label}
-                className={[
-                  "flex items-center justify-center p-3 rounded-lg text-sm transition",
-                  active
-                    ? "bg-indigo-600/20 border border-indigo-500/30 text-white"
-                    : "hover:bg-white/5 text-slate-200",
-                ].join(" ")}
+                label={item.label}
+                active={active}
               >
                 {Icon ? <Icon className="w-5 h-5" /> : null}
-              </Link>
+              </CollapsedNavIcon>
             );
           })}
         </div>
+        </TooltipProvider>
         <UserBox user={user} collapsed />
       </aside>
     );
@@ -349,10 +368,10 @@ export default function DashboardNav({ title = "Dashboard", user }) {
       <NavLinks
         menu={menu}
         pathname={pathname}
-        onNavigate={() => {}}
+        onNavigate={onNavigate}
         activeGroupKey={activeGroupKey}
       />
-      <UserBox user={user} />
+      <UserBox user={user} onNavigate={onNavigate} />
     </aside>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bell,
   CalendarDays,
@@ -17,7 +17,6 @@ import {
 import { hasPerm } from "@/lib/permissions";
 
 const TABS = ["Asesores", "Tecnicos", "Lavado", "Control de Calidad", "Etapas", "Pausadas"];
-const TIMES = ["13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30", "20:00"];
 
 const ADVISORS = [
   { name: "Elvis Herrera\nPorras", color: "bg-cyan-500" },
@@ -52,20 +51,74 @@ const STAGES = [
   { name: "Paralizado", items: ["26714", "26766", "26777", "26805"] },
 ];
 
-export default function WorkshopPlannerPage({ userPermissions }) {
+function normalizeText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function advisorListForUser(currentUser, canViewAll) {
+  if (canViewAll) return ADVISORS;
+  const userName = normalizeText(currentUser?.fullname || currentUser?.name || currentUser?.username);
+  const match = ADVISORS.find((advisor) => {
+    const advisorName = normalizeText(advisor.name.replace(/\n/g, " "));
+    return userName && (advisorName.includes(userName) || userName.includes(advisorName));
+  });
+  return match ? [match] : [{ name: currentUser?.fullname || currentUser?.username || "Mi usuario", color: "bg-blue-600" }];
+}
+
+function formatPlannerDate(date) {
+  return new Intl.DateTimeFormat("es-PE", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(date);
+}
+
+function buildTimeSlots(date) {
+  const start = new Date(date);
+  const minutes = start.getMinutes();
+  start.setMinutes(minutes < 30 ? 0 : 30, 0, 0);
+  const slots = [];
+  for (let index = 0; index < 14; index += 1) {
+    const slot = new Date(start.getTime() + index * 30 * 60 * 1000);
+    slots.push(slot.toTimeString().slice(0, 5));
+  }
+  return slots;
+}
+
+function minutesFromTime(value) {
+  const [hours, minutes] = String(value).split(":").map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
+}
+
+function currentTimePosition(now, times) {
+  const current = now.getHours() * 60 + now.getMinutes();
+  const start = minutesFromTime(times[0]);
+  return Math.max(0, Math.min(14, (current - start) / 30));
+}
+
+export default function WorkshopPlannerPage({ userPermissions, currentUser }) {
   const [activeTab, setActiveTab] = useState("Asesores");
+  const [advisorFilterOpen, setAdvisorFilterOpen] = useState(false);
+  const [selectedAdvisors, setSelectedAdvisors] = useState([]);
   const canView = Boolean(hasPerm(userPermissions, ["planeador_tallerpv", "view"]) || hasPerm(userPermissions, ["planeador_tallerpv", "viewall"]));
+  const canViewAll = hasPerm(userPermissions, ["planeador_tallerpv", "viewall"]);
+  const now = useMemo(() => new Date(), []);
+  const times = useMemo(() => buildTimeSlots(now), [now]);
+  const availableAdvisors = useMemo(() => advisorListForUser(currentUser, canViewAll), [canViewAll, currentUser]);
+  const visibleAdvisors = useMemo(() => {
+    if (!canViewAll || !selectedAdvisors.length) return availableAdvisors;
+    return availableAdvisors.filter((advisor) => selectedAdvisors.includes(advisor.name));
+  }, [availableAdvisors, canViewAll, selectedAdvisors]);
+  const isStages = activeTab === "Etapas";
+  const people = activeTab === "Asesores" ? visibleAdvisors : TECHNICIANS;
 
   if (!canView) {
     return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver el planeador de taller.</div>;
   }
 
-  const isStages = activeTab === "Etapas";
-  const people = activeTab === "Asesores" ? ADVISORS : TECHNICIANS;
+  function toggleAdvisor(name) {
+    setSelectedAdvisors((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name]);
+  }
 
   return (
     <div className="min-h-full bg-[#f7f7f8] text-slate-700">
-      <PlannerTopBar />
+      <PlannerTopBar now={now} />
       <div className="bg-amber-400 px-6 py-4 text-center text-xs font-bold text-white">
         Su cuenta tiene un saldo vencido. Envie su comprobante a <span className="underline">cobranza@clearcheck.us</span> para evitar que su cuenta sea suspendida. Obtenga hasta 20% de descuento con pago anticipado anual.
       </div>
@@ -92,24 +145,46 @@ export default function WorkshopPlannerPage({ userPermissions }) {
           <div className="mb-2 flex items-center justify-between gap-4">
             <Legend activeTab={activeTab} />
             <div className="flex items-center gap-4">
-              <button type="button" className="inline-flex h-8 min-w-[170px] items-center justify-between rounded-full border border-slate-300 bg-white px-4 text-xs font-bold text-blue-600">
-                {activeTab === "Asesores" ? "Asesores +4" : activeTab === "Tecnicos" ? "Tecnicos +10" : activeTab}
-                <ChevronDown className="size-4 text-slate-500" />
-              </button>
+              {activeTab === "Asesores" && canViewAll ? (
+                <div className="relative">
+                  <button type="button" className="inline-flex h-8 min-w-[180px] items-center justify-between rounded-full border border-slate-300 bg-white px-4 text-xs font-bold text-blue-600" onClick={() => setAdvisorFilterOpen((current) => !current)}>
+                    {selectedAdvisors.length ? `Asesores ${selectedAdvisors.length}` : `Asesores +${availableAdvisors.length}`}
+                    <ChevronDown className={`size-4 text-slate-500 transition ${advisorFilterOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {advisorFilterOpen ? (
+                    <div className="absolute right-0 z-30 mt-2 w-64 rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-lg">
+                      <button type="button" className="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-bold text-blue-600 hover:bg-blue-50" onClick={() => setSelectedAdvisors([])}>
+                        Ver todos
+                      </button>
+                      {availableAdvisors.map((advisor) => (
+                        <label key={advisor.name} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50">
+                          <input type="checkbox" checked={!selectedAdvisors.length || selectedAdvisors.includes(advisor.name)} onChange={() => toggleAdvisor(advisor.name)} />
+                          <span className="whitespace-pre-line text-xs font-semibold text-slate-700">{advisor.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <button type="button" className="inline-flex h-8 min-w-[170px] items-center justify-between rounded-full border border-slate-300 bg-white px-4 text-xs font-bold text-blue-600">
+                  {activeTab === "Asesores" ? "Mi asesor" : activeTab === "Tecnicos" ? "Tecnicos +10" : activeTab}
+                  <ChevronDown className="size-4 text-slate-500" />
+                </button>
+              )}
               <button type="button" className="grid size-8 place-items-center text-blue-600">
                 <Maximize2 className="size-5" />
               </button>
             </div>
           </div>
 
-          {isStages ? <StagesBoard /> : <TimelineGrid title={activeTab} people={people} showEvents={activeTab !== "Asesores"} />}
+          {isStages ? <StagesBoard /> : <TimelineGrid title={activeTab} people={people} times={times} now={now} showEvents={activeTab !== "Asesores"} />}
         </section>
       </main>
     </div>
   );
 }
 
-function PlannerTopBar() {
+function PlannerTopBar({ now }) {
   return (
     <header className="flex h-[52px] items-center justify-between border-b border-slate-200 bg-white px-7">
       <div className="flex h-full items-center">
@@ -129,7 +204,7 @@ function PlannerTopBar() {
           </div>
         </div>
         <button type="button" className="ml-4 inline-flex h-9 items-center gap-4 rounded-full border border-slate-300 bg-white px-4 text-sm font-extrabold text-blue-600">
-          03/06/26
+          {formatPlannerDate(now)}
           <CalendarDays className="size-5" />
         </button>
       </div>
@@ -176,7 +251,6 @@ function Legend({ activeTab }) {
   return (
     <div className="flex items-center gap-4 pl-2 text-xs text-slate-600">
       <LegendLine color="bg-emerald-400" label="Cita confirmada u Orden creada" />
-      <LegendLine color="bg-red-500" label="Cliente no llego" />
     </div>
   );
 }
@@ -190,12 +264,13 @@ function LegendLine({ color, label }) {
   );
 }
 
-function TimelineGrid({ title, people, showEvents }) {
+function TimelineGrid({ title, people, times, now, showEvents }) {
+  const nowPosition = currentTimePosition(now, times);
   return (
     <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
       <div className="grid min-w-[1360px] grid-cols-[130px_repeat(14,minmax(105px,1fr))]">
         <div className="border-b border-slate-200 px-4 py-3 text-sm font-extrabold text-slate-600">{title}</div>
-        {TIMES.map((time, index) => (
+        {times.map((time, index) => (
           <div key={time} className={`border-b border-slate-200 px-1 py-3 text-center text-xs text-slate-500 ${index >= 11 ? "bg-slate-100" : ""}`}>
             {time}
           </div>
@@ -204,10 +279,9 @@ function TimelineGrid({ title, people, showEvents }) {
       <div className="max-h-[calc(100vh-252px)] min-h-[500px] overflow-auto">
         <div className="relative grid min-w-[1360px] grid-cols-[130px_repeat(14,minmax(105px,1fr))]">
           {people.map((person, rowIndex) => (
-            <TimelineRow key={person.name} person={person} rowIndex={rowIndex} />
+            <TimelineRow key={person.name} person={person} rowIndex={rowIndex} times={times} />
           ))}
-          <NoShowRow />
-          <div className="pointer-events-none absolute bottom-0 top-0 w-px bg-blue-600" style={{ left: "calc(130px + 7.15 * ((100% - 130px) / 14))" }} />
+          <div className="pointer-events-none absolute bottom-0 top-0 w-px bg-blue-600" style={{ left: `calc(130px + ${nowPosition} * ((100% - 130px) / 14))` }} />
           {showEvents ? TECH_EVENTS.map((event) => <TimelineEvent key={`${event.code || event.title}-${event.row}-${event.start}`} event={event} />) : null}
         </div>
       </div>
@@ -215,29 +289,15 @@ function TimelineGrid({ title, people, showEvents }) {
   );
 }
 
-function TimelineRow({ person, rowIndex }) {
+function TimelineRow({ person, rowIndex, times }) {
   return (
     <>
       <div className={`flex min-h-[100px] items-center border-b border-r border-slate-200 px-4 text-sm ${person.muted ? "text-slate-300" : "text-slate-900"}`}>
         {person.color ? <span className={`mr-2 h-1.5 w-1.5 rounded-full ${person.color}`} /> : null}
         <span className="whitespace-pre-line leading-tight">{person.name}</span>
       </div>
-      {TIMES.map((time, index) => (
+      {times.map((time, index) => (
         <div key={`${rowIndex}-${time}`} className={`min-h-[100px] border-b border-r border-slate-200 ${index >= 11 ? "bg-slate-100" : ""}`} />
-      ))}
-    </>
-  );
-}
-
-function NoShowRow() {
-  return (
-    <>
-      <div className="flex min-h-[96px] items-center border-b border-r border-slate-200 px-4 text-sm text-slate-900">
-        <span className="mr-2 grid size-3 place-items-center rounded-full border border-red-500 text-[9px] font-bold text-red-500">!</span>
-        No llego
-      </div>
-      {TIMES.map((time, index) => (
-        <div key={`noshow-${time}`} className={`min-h-[96px] border-b border-r border-slate-200 ${index >= 11 ? "bg-slate-100" : ""}`} />
       ))}
     </>
   );

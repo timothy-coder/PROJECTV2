@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Car, Clock, Download, DollarSign, Edit3, Eye, Filter, History, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Car, ChevronDown, Clock, Download, DollarSign, Edit3, Eye, Filter, History, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,13 @@ export default function CarPricesPage({ userPermissions }) {
   const fileInputRef = useRef(null);
   const inventoryFileInputRef = useRef(null);
   const [view, setView] = useState("prices");
-  const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", monedaId: "", estado: "" });
+  const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", estado: "" });
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [historyDialog, setHistoryDialog] = useState({ open: false });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   const [importMessage, setImportMessage] = useState("");
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const canView = hasPerm(userPermissions, ["inventariocarros", "view"]);
   const canCreate = hasPerm(userPermissions, ["inventariocarros", "create"]);
   const canEdit = hasPerm(userPermissions, ["inventariocarros", "edit"]);
@@ -55,15 +57,13 @@ export default function CarPricesPage({ userPermissions }) {
       const matchesQuery = !query || `${item.marcaName} ${item.modeloName} ${item.version} ${item.combustible}`.toLowerCase().includes(query);
       const matchesBrand = !filters.marcaId || Number(filters.marcaId) === item.marcaId;
       const matchesModel = !filters.modeloId || Number(filters.modeloId) === item.modeloId;
-      const matchesCurrency = !filters.monedaId || Number(filters.monedaId) === item.monedaId;
       const matchesState = !filters.estado || (filters.estado === "stock" && item.enStock && item.existe) || (filters.estado === "pedido" && !item.enStock && item.existe) || (filters.estado === "no_ofrece" && !item.existe);
-      return matchesQuery && matchesBrand && matchesModel && matchesCurrency && matchesState;
+      return matchesQuery && matchesBrand && matchesModel && matchesState;
     });
   }, [data.prices, filters]);
 
   const brandOptions = [{ value: "", label: "Todas" }, ...data.options.brands.map((item) => ({ value: item.id, label: item.name }))];
   const modelFilterOptions = [{ value: "", label: "Todos" }, ...data.options.models.filter((item) => !filters.marcaId || Number(filters.marcaId) === item.marcaId).map((item) => ({ value: item.id, label: item.name }))];
-  const currencyOptions = [{ value: "", label: "Todas" }, ...data.options.currencies.map((item) => ({ value: item.id, label: `${item.codigo} ${item.simbolo}` }))];
   const stateOptions = [{ value: "", label: "Todos" }, { value: "stock", label: "En stock" }, { value: "pedido", label: "Bajo pedido" }, { value: "no_ofrece", label: "No se ofrece" }];
 
   async function exportPrices() {
@@ -166,30 +166,47 @@ export default function CarPricesPage({ userPermissions }) {
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-violet-700 text-white shadow-sm"><Car className="size-5" /></div>
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
+
+            <Car className="size-5" />
+            </div>
           <div>
-            <h1 className="text-3xl font-bold leading-none text-violet-700">Precios de Carros</h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">Gestiona precios por marca, modelo y version</p>
+            <h1 className="text-base font-bold leading-tight text-violet-700">Precios de Carros</h1>
+            <p className="mt-0.5 text-xs font-medium text-violet-400">Gestiona precios por marca, modelo y version</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {canExport ? <Button variant="outline" onClick={exportPrices}><Download className="size-4" />Exportar precios</Button> : null}
-          {canImport ? <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" />Importar precios</Button> : null}
-          {canHistoryExport ? <Button variant="outline" onClick={exportInventory}><Download className="size-4" />Exportar inventario</Button> : null}
-          {canHistoryImport ? <Button variant="outline" onClick={() => inventoryFileInputRef.current?.click()}><Upload className="size-4" />Importar inventario</Button> : null}
-          {canHistory ? <Button variant="outline" onClick={() => setView("history")}><History className="size-4" />Inventario</Button> : null}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          {(canExport || canImport || canHistoryExport || canHistoryImport) ? (
+            <div className="relative w-full sm:w-56">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActionsMenuOpen((current) => !current)}
+                className="w-full justify-center"
+              >
+                Opciones
+                <ChevronDown className={`size-4 transition ${actionsMenuOpen ? "rotate-180" : ""}`} />
+              </Button>
+              {actionsMenuOpen ? (
+                <div className="absolute right-0 top-11 z-30 w-full overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                  {canExport ? <MenuItem icon={Download} label="Exportar precios" onClick={exportPrices} close={() => setActionsMenuOpen(false)} /> : null}
+                  {canImport ? <MenuItem icon={Upload} label="Importar precios" onClick={() => fileInputRef.current?.click()} close={() => setActionsMenuOpen(false)} /> : null}
+                  {canHistoryExport ? <MenuItem icon={Download} label="Exportar inventario" onClick={exportInventory} close={() => setActionsMenuOpen(false)} /> : null}
+                  {canHistoryImport ? <MenuItem icon={Upload} label="Importar inventario" onClick={() => inventoryFileInputRef.current?.click()} close={() => setActionsMenuOpen(false)} /> : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importPrices} />
           <input ref={inventoryFileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importInventory} />
         </div>
       </div>
       {importMessage ? <p className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{importMessage}</p> : null}
 
-      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-5">
+      <div className="mb-3 grid grid-cols-3 shrink-0 gap-2">
         <Stat label="Total" value={data.stats.total} icon={DollarSign} />
-        <Stat label="Marcas" value={data.stats.brands} icon={Car} />
-        <Stat label="Modelos" value={data.stats.models} icon={Car} tone="green" />
         <Stat label="En Stock" value={data.stats.stock} icon={Filter} tone="green" />
-        <Stat label="Bajo Pedido" value={data.stats.pedido} icon={Clock} tone="orange" />
+        <Stat label="Pendiente compra" value={data.stats.pedido} icon={Clock} tone="orange" />
       </div>
 
       <div className="mb-3 w-full shrink-0 overflow-x-auto rounded-lg bg-slate-100 p-1">
@@ -202,18 +219,28 @@ export default function CarPricesPage({ userPermissions }) {
 
       {activeView === "prices" ? <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
         <div className="shrink-0 space-y-2 border-b border-slate-200 px-3 py-2">
-          <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_130px_130px_auto_auto] lg:items-end">
+          <div className="grid gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,260px)_minmax(280px,340px)_minmax(200px,240px)_auto_auto] lg:items-end">
             <Field label="Buscar">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <Input value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Marca, modelo, version..." className="h-9 bg-white pl-9" />
               </div>
             </Field>
-            <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
-            <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelFilterOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
-            <Field label="Moneda"><SearchableSelect value={filters.monedaId} options={currencyOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, monedaId: value }))} /></Field>
-            <Field label="Estado"><SearchableSelect value={filters.estado} options={stateOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, estado: value }))} /></Field>
-            <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", monedaId: "", estado: "" })}>Limpiar</Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 lg:hidden"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              Filtros
+              <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+            </Button>
+            <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 lg:contents`}>
+              <Field label="Marca"><SearchableSelect value={filters.marcaId} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
+              <Field label="Modelo"><SearchableSelect value={filters.modeloId} options={modelFilterOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modeloId: value }))} /></Field>
+              <Field label="Estado"><SearchableSelect value={filters.estado} options={stateOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, estado: value }))} /></Field>
+              <Button variant="outline" className="h-9" onClick={() => setFilters({ query: "", marcaId: "", modeloId: "", estado: "" })}>Limpiar</Button>
+            </div>
             {canCreate ? (
               <Button onClick={() => setDialog({ open: true, item: null })} className="h-9 bg-violet-700 text-white hover:bg-violet-800">
                 <Plus className="size-4" />
@@ -221,48 +248,59 @@ export default function CarPricesPage({ userPermissions }) {
               </Button>
             ) : null}
           </div>
-          <p className="text-xs font-medium text-slate-500">Mostrando {filteredPrices.length} de {data.prices.length} precios</p>
         </div>
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[1040px] text-left text-sm">
+          <table className="w-full text-left text-sm sm:min-w-[760px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
               <tr>
-                <th className="px-3 py-3">ID</th>
                 <th className="px-3 py-3">Marca</th>
-                <th className="px-3 py-3">Modelo</th>
-                <th className="px-3 py-3">Version</th>
-                <th className="px-3 py-3">Combustible</th>
+                <th className="hidden px-3 py-3 sm:table-cell">Modelo</th>
+                <th className="hidden px-3 py-3 sm:table-cell">Version</th>
+                <th className="hidden px-3 py-3 sm:table-cell">Combustible</th>
                 <th className="px-3 py-3">Precio Base</th>
-                <th className="px-3 py-3">En Stock</th>
-                <th className="px-3 py-3">Existe</th>
-                <th className="px-3 py-3">Entrega</th>
                 <th className="px-3 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {data.loading ? (
-                <tr><td colSpan={10} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={6} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : filteredPrices.map((item) => (
                 <tr key={item.id}>
-                  <td className="px-3 py-3 font-bold text-violet-700">#{item.id}</td>
-                  <td className="px-3 py-3 font-medium">{item.marcaName}</td>
-                  <td className="px-3 py-3">{item.modeloName}</td>
-                  <td className="px-3 py-3 font-semibold">{item.version}</td>
-                  <td className="px-3 py-3"><FuelBadge value={item.combustible} /></td>
-                  <td className="px-3 py-3 font-bold text-emerald-700">{formatMoney(item.monedaSimbolo, item.precioBase)}</td>
-                  <td className="px-3 py-3"><StockBadge active={item.enStock} /></td>
-                  <td className="px-3 py-3"><OfferBadge active={item.existe} /></td>
-                  <td className="px-3 py-3">{item.enStock ? "Disponible" : `${item.tiempoEntregaDias} dias`}</td>
                   <td className="px-3 py-3">
-                    <div className="flex justify-end gap-2">
-                      {canEdit ? <Button variant="outline" size="icon" onClick={() => setDialog({ open: true, item })}><Edit3 className="size-4" /></Button> : null}
-                      {canDelete ? <Button variant="destructive" size="icon" onClick={() => setDeleteDialog({ open: true, item })}><Trash2 className="size-4" /></Button> : null}
-                    </div>
+                    <div className="font-medium text-slate-950">{item.marcaName} <span className="font-normal">{item.modeloName}</span></div>
+                    <div className="mt-1 text-xs font-semibold text-slate-600 sm:hidden">{item.version}</div>
+                  </td>
+                  <td className="hidden px-3 py-3 sm:table-cell">{item.modeloName}</td>
+                  <td className="hidden px-3 py-3 font-semibold sm:table-cell">{item.version}</td>
+                  <td className="hidden px-3 py-3 sm:table-cell"><FuelBadge value={item.combustible} /></td>
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-emerald-700">{formatMoney(item.monedaSimbolo, item.precioBase)}</div>
+                    <div className="mt-1 sm:hidden"><FuelBadge value={item.combustible} /></div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <PriceRowActions
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      onEdit={() => setDialog({ open: true, item })}
+                      onDelete={() => setDeleteDialog({ open: true, item })}
+                    />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+          <span className="font-medium">Pagina 1 de 1</span>
+          <span className="text-center font-medium">{filteredPrices.length} de {data.prices.length} registros</span>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled className="h-9">
+              Anterior
+            </Button>
+            <Button variant="outline" disabled className="h-9">
+              Siguiente
+            </Button>
+          </div>
         </div>
       </section> : null}
 
@@ -462,7 +500,6 @@ function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar vehiculo, VIN, factura o motor" className="h-9 w-full bg-white pl-9 sm:w-72" />
           </div>
-          <span className="w-fit rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filteredHistory.length} de {history.length} registros</span>
           {canCreate ? <Button variant="outline" onClick={onCreate} className="h-9"><Plus className="size-4" />Crear carro</Button> : null}
         </div>
       </div>
@@ -511,6 +548,18 @@ function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit
           </tbody>
         </table>
       </div>
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+        <span className="font-medium">Pagina 1 de 1</span>
+        <span className="text-center font-medium">{filteredHistory.length} de {history.length} registros</span>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" disabled className="h-9">
+            Anterior
+          </Button>
+          <Button variant="outline" disabled className="h-9">
+            Siguiente
+          </Button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -535,7 +584,6 @@ function PendingPurchasesSection({ loading, rows }) {
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar reserva, cliente o vehiculo" className="h-9 w-full bg-white pl-9 sm:w-72" />
           </div>
-          <span className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{filteredRows.length} de {rows.length} pendientes</span>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -582,7 +630,69 @@ function PendingPurchasesSection({ loading, rows }) {
           </tbody>
         </table>
       </div>
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+        <span className="font-medium">Pagina 1 de 1</span>
+        <span className="text-center font-medium">{filteredRows.length} de {rows.length} registros</span>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" disabled className="h-9">
+            Anterior
+          </Button>
+          <Button variant="outline" disabled className="h-9">
+            Siguiente
+          </Button>
+        </div>
+      </div>
     </section>
+  );
+}
+
+function MenuItem({ icon: Icon, label, onClick, close, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onClick?.();
+        close?.();
+      }}
+      className={[
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50",
+        className,
+      ].join(" ")}
+    >
+      {Icon ? <Icon className="size-4" /> : null}
+      {label}
+    </button>
+  );
+}
+
+function PriceRowActions({ canEdit, canDelete, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative flex justify-end">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen((current) => !current)}
+        className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+      >
+        Acciones
+        <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+      </Button>
+
+      {open ? (
+        <div className="absolute right-0 top-10 z-30 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+          {canEdit ? <MenuItem icon={Edit3} label="Editar" onClick={onEdit} close={() => setOpen(false)} /> : null}
+          {canDelete ? <MenuItem icon={Trash2} label="Eliminar" onClick={onDelete} close={() => setOpen(false)} className="text-red-600 hover:bg-red-50" /> : null}
+        </div>
+      ) : null}
+
+      <div className="hidden justify-end gap-2 sm:flex">
+        {canEdit ? <Button variant="outline" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}
+        {canDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}
+      </div>
+    </div>
   );
 }
 
@@ -593,12 +703,12 @@ function Stat({ label, value, icon: Icon, tone = "purple" }) {
     orange: "border-orange-200 bg-orange-50 text-orange-700",
   };
   return (
-    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+    <div className={`flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3 ${tones[tone]}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="truncate text-[10px] font-semibold leading-4 sm:text-[11px]">{label}</p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }
@@ -618,10 +728,6 @@ function Toggle({ label, description, checked, onCheckedChange }) {
 
 function StockBadge({ active }) {
   return <span className={`rounded-full border px-2 py-1 text-xs font-bold ${active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-orange-200 bg-orange-50 text-orange-700"}`}>{active ? "En stock" : "Bajo pedido"}</span>;
-}
-
-function OfferBadge({ active }) {
-  return <span className={`rounded-full border px-2 py-1 text-xs font-bold ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-red-200 bg-red-50 text-red-700"}`}>{active ? "Si" : "No"}</span>;
 }
 
 function ReservationUsageBadge({ item }) {

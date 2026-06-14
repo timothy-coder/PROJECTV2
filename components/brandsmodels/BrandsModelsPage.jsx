@@ -55,6 +55,7 @@ export default function BrandsModelsPage({ userPermissions }) {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, title: "", description: "", onConfirm: null });
   const [classesOpen, setClassesOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(false);
+  const [brandActionsOpenId, setBrandActionsOpenId] = useState(null);
 
   const canViewBrands = can(userPermissions, "marcas", "view");
   const canCreateBrand = can(userPermissions, "marcas", "create");
@@ -91,29 +92,30 @@ export default function BrandsModelsPage({ userPermissions }) {
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       <PageHeader />
 
-      <div className="mb-3 grid shrink-0 gap-2 lg:grid-cols-3">
-        <Stat label="Total de Marcas" value={data.stats.brands} tone="blue" icon={Car} />
-        <Stat label="Total de Modelos" value={data.stats.models} tone="purple" icon={Layers} />
-        <Stat label="Total de Clases" value={data.stats.classes} tone="green" icon={Layers} />
+      <div className="mb-3 grid grid-cols-3 shrink-0 gap-2">
+        <Stat label="Total de Marcas" shortLabel="Marcas" value={data.stats.brands} tone="blue" icon={Car} />
+        <Stat label="Total de Modelos" shortLabel="Modelos" value={data.stats.models} tone="purple" icon={Layers} />
+        <Stat label="Total de Clases" shortLabel="Clases" value={data.stats.classes} tone="green" icon={Layers} />
       </div>
 
       {canViewClasses || canViewMaintenance ? (
         <section className="mb-3 shrink-0 rounded-lg border border-slate-200 border-l-4 border-l-violet-600 bg-white shadow-sm">
-          <div className="flex flex-wrap gap-2 px-4 py-3">
-            <Button variant="outline" onClick={data.reload} disabled={data.loading} className="h-10">
+          <div className="grid grid-cols-3 gap-2 px-3 py-3 sm:flex sm:flex-wrap sm:px-4">
+            <Button variant="outline" onClick={data.reload} disabled={data.loading} className="h-10 px-2 text-xs sm:px-4 sm:text-sm">
               <RefreshCw className="size-4" />
-              Recargar
+              <span className="hidden sm:inline">Recargar</span>
             </Button>
             {canViewClasses ? (
-              <Button variant="outline" onClick={() => setClassesOpen(true)} className="h-10 border-emerald-300 text-emerald-700">
+              <Button variant="outline" onClick={() => setClassesOpen(true)} className="h-10 border-emerald-300 px-2 text-xs text-emerald-700 sm:px-4 sm:text-sm">
                 <Layers className="size-4" />
                 Clases
               </Button>
             ) : null}
             {canViewMaintenance ? (
-              <Button variant="outline" onClick={() => setMaintenanceOpen(true)} className="h-10 border-orange-300 text-orange-700">
+              <Button variant="outline" onClick={() => setMaintenanceOpen(true)} className="h-10 border-orange-300 px-2 text-xs text-orange-700 sm:px-4 sm:text-sm">
                 <Wrench className="size-4" />
-                F. de mantenimiento
+                <span className="sm:hidden">Mant.</span>
+                <span className="hidden sm:inline">F. de mantenimiento</span>
               </Button>
             ) : null}
           </div>
@@ -132,9 +134,6 @@ export default function BrandsModelsPage({ userPermissions }) {
             />
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="whitespace-nowrap text-xs font-medium text-slate-500">
-              {filteredBrands.length} de {data.brands.length} marca(s)
-            </span>
             {canCreateBrand ? (
               <Button onClick={() => setBrandDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800">
                 <Plus className="size-4" />
@@ -144,13 +143,13 @@ export default function BrandsModelsPage({ userPermissions }) {
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto border-t border-slate-200">
-          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+          <table className="w-full border-collapse text-left text-sm sm:min-w-[760px]">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="w-10 px-3 py-2.5" />
                 <th className="px-3 py-2.5">Marca</th>
-                <th className="px-3 py-2.5">Logo</th>
-                <th className="px-3 py-2.5">Modelos</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Logo</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Modelos</th>
                 <th className="px-3 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
@@ -163,7 +162,10 @@ export default function BrandsModelsPage({ userPermissions }) {
                   </td>
                 </tr>
               ) : filteredBrands.length ? (
-                filteredBrands.map((brand) => (
+                filteredBrands.map((brand) => {
+                  const actionsOpen = brandActionsOpenId === brand.id;
+
+                  return (
                   <Fragment key={brand.id}>
                     <tr className="bg-white">
                       <td className="px-3 py-2.5">
@@ -171,8 +173,25 @@ export default function BrandsModelsPage({ userPermissions }) {
                           {expandedId === brand.id ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                         </Button>
                       </td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-950">{brand.name}</td>
                       <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {brand.imageUrl ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={brand.imageUrl} alt={brand.name} className="h-7 w-10 shrink-0 object-contain sm:hidden" />
+                            </>
+                          ) : (
+                            <span className="hidden rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 sm:hidden">Sin imagen</span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-950">{brand.name}</p>
+                            <span className="mt-1 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700 sm:hidden">
+                              {brand.models.length} modelos
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden px-3 py-2.5 sm:table-cell">
                         {brand.imageUrl ? (
                           <>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -182,11 +201,47 @@ export default function BrandsModelsPage({ userPermissions }) {
                           <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">Sin imagen</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden px-3 py-2.5 sm:table-cell">
                         <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">{brand.models.length}</span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex justify-end gap-2">
+                      <td className="relative px-3 py-2.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setBrandActionsOpenId(actionsOpen ? null : brand.id)}
+                          className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+                        >
+                          Acciones
+                          <ChevronDown className={`size-4 transition ${actionsOpen ? "rotate-180" : ""}`} />
+                        </Button>
+
+                        {actionsOpen ? (
+                          <div className="absolute right-3 top-11 z-20 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+                            <MobileMenuItem icon={Eye} label="Ver marca" onClick={() => setBrandDialog({ open: true, item: brand, readonly: true })} close={() => setBrandActionsOpenId(null)} />
+                            {canEditBrand ? (
+                              <MobileMenuItem icon={Edit3} label="Editar marca" onClick={() => setBrandDialog({ open: true, item: brand, readonly: false })} close={() => setBrandActionsOpenId(null)} />
+                            ) : null}
+                            {canCreateModel ? (
+                              <MobileMenuItem icon={Plus} label="Nuevo modelo" onClick={() => setModelDialog({ open: true, item: null, brand, readonly: false })} close={() => setBrandActionsOpenId(null)} />
+                            ) : null}
+                            {canDeleteBrand ? (
+                              <MobileMenuItem
+                                icon={Trash2}
+                                label="Eliminar marca"
+                                onClick={() => askDelete({
+                                  title: "Eliminar marca",
+                                  description: `Se eliminara la marca ${brand.name} y sus modelos asociados.`,
+                                  onConfirm: () => data.deleteBrand(brand.id),
+                                })}
+                                close={() => setBrandActionsOpenId(null)}
+                                className="text-red-600 hover:bg-red-50"
+                              />
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="hidden justify-end gap-2 sm:flex">
                           <Button variant="ghost" size="icon" onClick={() => setBrandDialog({ open: true, item: brand, readonly: true })}>
                             <Eye className="size-4" />
                           </Button>
@@ -241,7 +296,8 @@ export default function BrandsModelsPage({ userPermissions }) {
                       </tr>
                     ) : null}
                   </Fragment>
-                ))
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={5} className="py-10 text-center text-slate-500">No hay marcas registradas.</td>
@@ -249,6 +305,18 @@ export default function BrandsModelsPage({ userPermissions }) {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+          <span className="font-medium">Pagina 1 de 1</span>
+          <span className="text-center font-medium">{filteredBrands.length} de {data.brands.length} registros</span>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled className="h-9">
+              Anterior
+            </Button>
+            <Button variant="outline" disabled className="h-9">
+              Siguiente
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -291,8 +359,8 @@ function PageHeader() {
       <div className="flex items-center gap-3">
         <IconBox icon={Car} />
         <div>
-          <h1 className="text-2xl font-bold leading-tight text-slate-950">Marcas & Modelos</h1>
-          <p className="mt-1 text-xs font-medium text-slate-500">Gestiona marcas, modelos, clases y algoritmos de mantenimiento</p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">Marcas & Modelos</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">Gestiona marcas, modelos y clases</p>
         </div>
       </div>
     </div>
@@ -301,13 +369,13 @@ function PageHeader() {
 
 function IconBox({ icon: Icon }) {
   return (
-    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white shadow-sm">
+    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
       <Icon className="size-5" />
     </div>
   );
 }
 
-function Stat({ label, value, tone, icon: Icon }) {
+function Stat({ label, shortLabel, value, tone, icon: Icon }) {
   const tones = {
     blue: "border-blue-200 bg-blue-50 text-blue-700",
     purple: "border-purple-200 bg-purple-50 text-purple-700",
@@ -315,33 +383,63 @@ function Stat({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={`flex items-center justify-between rounded-lg border px-3 py-2 ${tones[tone]}`}>
+    <div className={`flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3 ${tones[tone]}`}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="text-[10px] font-semibold leading-4 sm:text-[11px]">
+          <span className="sm:hidden">{shortLabel || label}</span>
+          <span className="hidden sm:inline">{label}</span>
+        </p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }
 
+function MobileMenuItem({ icon: Icon, label, onClick, close, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onClick?.();
+        close?.();
+      }}
+      className={[
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50",
+        className,
+      ].join(" ")}
+    >
+      {Icon ? <Icon className="size-4" /> : null}
+      {label}
+    </button>
+  );
+}
+
 function ModelsTable({ models, onView, onEdit, onDelete, canEdit, canDelete }) {
+  const [openActionId, setOpenActionId] = useState(null);
+
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-      <table className="w-full min-w-[520px] text-sm">
+      <table className="w-full text-sm sm:min-w-[520px]">
         <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
           <tr>
             <th className="px-3 py-2 text-left">Modelo</th>
-            <th className="px-3 py-2 text-left">Clase</th>
+            <th className="hidden px-3 py-2 text-left sm:table-cell">Clase</th>
             <th className="px-3 py-2 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200">
           {models.length ? (
-            models.map((model) => (
+            models.map((model) => {
+              const actionsOpen = openActionId === model.id;
+
+              return (
               <tr key={model.id}>
-                <td className="px-3 py-2 font-medium text-slate-950">{model.name}</td>
                 <td className="px-3 py-2">
+                  <div className="font-medium text-slate-950">{model.name}</div>
+                  <div className="mt-1 text-xs text-slate-500 sm:hidden">{model.claseName || "Sin clase"}</div>
+                </td>
+                <td className="hidden px-3 py-2 sm:table-cell">
                   {model.claseName ? (
                     <span className="inline-flex items-center gap-2">
                       <span className="size-2 rounded-full bg-violet-500" />
@@ -351,8 +449,31 @@ function ModelsTable({ models, onView, onEdit, onDelete, canEdit, canDelete }) {
                     "Sin clase"
                   )}
                 </td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-2">
+                <td className="relative px-3 py-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setOpenActionId(actionsOpen ? null : model.id)}
+                    className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+                  >
+                    Acciones
+                    <ChevronDown className={`size-4 transition ${actionsOpen ? "rotate-180" : ""}`} />
+                  </Button>
+
+                  {actionsOpen ? (
+                    <div className="absolute right-3 top-11 z-20 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+                      <MobileMenuItem icon={Eye} label="Ver modelo" onClick={() => onView(model)} close={() => setOpenActionId(null)} />
+                      {canEdit ? (
+                        <MobileMenuItem icon={Edit3} label="Editar modelo" onClick={() => onEdit(model)} close={() => setOpenActionId(null)} />
+                      ) : null}
+                      {canDelete ? (
+                        <MobileMenuItem icon={Trash2} label="Eliminar modelo" onClick={() => onDelete(model)} close={() => setOpenActionId(null)} className="text-red-600 hover:bg-red-50" />
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className="hidden justify-end gap-2 sm:flex">
                     <Button variant="ghost" size="icon" onClick={() => onView(model)}>
                       <Eye className="size-4" />
                     </Button>
@@ -369,7 +490,8 @@ function ModelsTable({ models, onView, onEdit, onDelete, canEdit, canDelete }) {
                   </div>
                 </td>
               </tr>
-            ))
+              );
+            })
           ) : (
             <tr>
               <td colSpan={3} className="px-3 py-8 text-center text-slate-500">Esta marca no tiene modelos.</td>
@@ -573,6 +695,7 @@ function ClassesSheet({ open, onOpenChange, data, userPermissions, askDelete }) 
 
 function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete }) {
   const [dialog, setDialog] = useState({ open: false, item: null });
+  const [openActionId, setOpenActionId] = useState(null);
   const canCreate = can(userPermissions, "algoritmo_visita", "create");
   const canEdit = can(userPermissions, "algoritmo_visita", "edit");
   const canDelete = can(userPermissions, "algoritmo_visita", "delete");
@@ -601,25 +724,69 @@ function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete
             ) : null}
           </div>
           <div className="max-h-[58svh] overflow-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[520px] text-sm">
+            <table className="w-full text-sm sm:min-w-[520px]">
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">Modelo</th>
-                  <th className="px-3 py-2 text-left">Marca</th>
-                  <th className="px-3 py-2 text-left">Km</th>
-                  <th className="px-3 py-2 text-left">Meses</th>
+                  <th className="px-3 py-2 text-left">Marca / Modelo</th>
+                  <th className="px-3 py-2 text-left">Km / Tiempo</th>
                   <th className="px-3 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {data.maintenance.map((item) => (
+                {data.maintenance.map((item) => {
+                  const actionsOpen = openActionId === item.id;
+
+                  return (
                   <tr key={item.id}>
-                    <td className="px-3 py-2 font-medium">{item.modeloName}</td>
-                    <td className="px-3 py-2">{item.marcaName}</td>
-                    <td className="px-3 py-2"><span className="rounded bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">{item.kilometraje} km</span></td>
-                    <td className="px-3 py-2"><span className="rounded bg-purple-100 px-2 py-1 text-xs font-bold text-purple-700">{item.meses} m</span></td>
                     <td className="px-3 py-2">
-                      <div className="flex justify-end gap-2">
+                      <div className="font-semibold text-slate-950">{item.marcaName || "-"}</div>
+                      <div className="text-xs font-medium text-slate-500">{item.modeloName || "-"}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">{item.kilometraje} km</span>
+                        <span className="rounded bg-purple-100 px-2 py-1 text-xs font-bold text-purple-700">{item.meses} m</span>
+                      </div>
+                    </td>
+                    <td className="relative px-3 py-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setOpenActionId(actionsOpen ? null : item.id)}
+                        className="ml-auto flex h-8 gap-1 px-2 sm:hidden"
+                      >
+                        Acciones
+                        <ChevronDown className={`size-4 transition ${actionsOpen ? "rotate-180" : ""}`} />
+                      </Button>
+
+                      {actionsOpen ? (
+                        <div className="absolute right-3 top-11 z-20 w-44 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+                          {canEdit ? (
+                            <MobileMenuItem
+                              icon={Edit3}
+                              label="Editar"
+                              onClick={() => setDialog({ open: true, item })}
+                              close={() => setOpenActionId(null)}
+                            />
+                          ) : null}
+                          {canDelete ? (
+                            <MobileMenuItem
+                              icon={Trash2}
+                              label="Eliminar"
+                              onClick={() => askDelete({
+                                title: "Eliminar algoritmo",
+                                description: `Se eliminara el algoritmo de ${item.modeloName}.`,
+                                onConfirm: () => data.deleteMaintenance(item.id),
+                              })}
+                              close={() => setOpenActionId(null)}
+                              className="text-red-600 hover:bg-red-50"
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className="hidden justify-end gap-2 sm:flex">
                         {canEdit ? (
                           <Button variant="ghost" size="icon" onClick={() => setDialog({ open: true, item })}>
                             <Edit3 className="size-4" />
@@ -641,7 +808,8 @@ function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -682,6 +850,7 @@ function MaintenanceDialog({ state, data, onClose, onSubmit }) {
   const [allYears, setAllYears] = useState(Array.isArray(state.item?.anios) && state.item.anios.includes("000-999"));
   const [ranges, setRanges] = useState(() => parseYearRanges(state.item?.anios));
   const [saving, setSaving] = useState(false);
+  const [rangeDeleteDialog, setRangeDeleteDialog] = useState({ open: false, range: null, index: 0 });
   const brandOptions = data.brands.map((item) => ({ value: item.id, label: item.name }));
   const modelOptions = data.models
     .filter((model) => !form.marcaId || Number(model.marcaId) === Number(form.marcaId))
@@ -758,7 +927,7 @@ function MaintenanceDialog({ state, data, onClose, onSubmit }) {
                       )));
                     }}
                     onAdd={() => setRanges((current) => [...current, createYearRange()])}
-                    onRemove={() => setRanges((current) => current.filter((item) => item.id !== range.id))}
+                    onRemove={() => setRangeDeleteDialog({ open: true, range, index })}
                   />
                 ))}
               </div>
@@ -772,6 +941,18 @@ function MaintenanceDialog({ state, data, onClose, onSubmit }) {
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteDialog
+        state={{
+          open: rangeDeleteDialog.open,
+          title: "Eliminar rango",
+          description: `Se eliminara el rango ${rangeDeleteDialog.index + 1}.`,
+          onConfirm: () => {
+            if (!rangeDeleteDialog.range) return;
+            setRanges((current) => current.filter((item) => item.id !== rangeDeleteDialog.range.id));
+          },
+        }}
+        onClose={() => setRangeDeleteDialog({ open: false, range: null, index: 0 })}
+      />
     </Dialog>
   );
 }

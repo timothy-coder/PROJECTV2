@@ -62,7 +62,7 @@ export default function PricesPage({ userPermissions }) {
           <Wrench className="size-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold leading-tight text-slate-950">Matriz de Precios</h1>
+          <h1 className="text-base font-bold leading-tight text-slate-950">Matriz de Precios</h1>
           <p className="text-xs font-medium text-slate-500">Gestiona precios de mantenimiento por modelo</p>
         </div>
       </div>

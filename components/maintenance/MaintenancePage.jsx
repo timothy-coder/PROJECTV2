@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { Check, ChevronDown, ChevronRight, Edit3, Eye, ListChecks, Loader2, Plus, RefreshCw, Search, Trash2, Wrench, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Edit3, Eye, ListChecks, Loader2, Plus, Search, Trash2, Wrench, Zap } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -66,12 +66,12 @@ export default function MaintenancePage({ userPermissions }) {
           <Wrench className="size-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold leading-tight text-slate-950">Mantenimientos</h1>
+          <h1 className="text-base font-bold leading-tight text-slate-950">Mantenimientos</h1>
           <p className="text-xs font-medium text-slate-500">Gestiona mantenimientos y submantenimientos</p>
         </div>
       </div>
 
-      <div className="mb-3 grid shrink-0 gap-2 md:grid-cols-4">
+      <div className="mb-3 grid grid-cols-4 shrink-0 gap-2">
         <Stat label="Total" value={data.stats.total} tone="purple" icon={ListChecks} />
         <Stat label="Activos" value={data.stats.active} tone="green" icon={Zap} />
         <Stat label="Con base" value={data.stats.withBase} tone="orange" icon={Zap} />
@@ -85,13 +85,6 @@ export default function MaintenancePage({ userPermissions }) {
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar..." className="h-10 bg-white pl-9" />
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="whitespace-nowrap text-xs font-medium text-slate-500">
-              {filteredMaintenances.length} de {data.maintenances.length} mantenimiento(s)
-            </span>
-            <Button variant="outline" onClick={data.reload} disabled={data.loading} className="h-10">
-              <RefreshCw className="size-4" />
-              Recargar
-            </Button>
             {canCreateMaintenance ? (
               <Button onClick={() => setDialog({ open: true, type: "maintenance", item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800">
                 <Plus className="size-4" />
@@ -129,6 +122,18 @@ export default function MaintenancePage({ userPermissions }) {
           canEditSub={canEditSub}
           canDeleteSub={canDeleteSub}
         />
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-slate-200 px-4 py-2 text-xs text-slate-500">
+          <span className="font-medium">Pagina 1 de 1</span>
+          <span className="text-center font-medium">{filteredMaintenances.length} de {data.maintenances.length} registros</span>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled className="h-9">
+              Anterior
+            </Button>
+            <Button variant="outline" disabled className="h-9">
+              Siguiente
+            </Button>
+          </div>
+        </div>
       </section>
 
       {dialog.open ? (
@@ -180,9 +185,9 @@ function MaintenanceList({
       {items.map((item) => {
         const baseNames = getBaseNames(item.mantenimientoId, maintenances);
         return (
-          <div key={item.id} className="overflow-hidden rounded-lg border border-slate-200">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-1 gap-2 p-3">
+          <div key={item.id} className="overflow-visible rounded-lg border border-slate-200">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-1 gap-2 p-3 pr-1">
                 <Button variant="ghost" size="icon-sm" onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}>
                   {expandedId === item.id ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                 </Button>
@@ -197,9 +202,16 @@ function MaintenanceList({
                 {baseNames.length ? <p className="mt-1 text-xs font-medium text-slate-500">Suma: {baseNames.join(", ")}</p> : null}
               </div>
               </div>
-              <div className="flex shrink-0 justify-end gap-2 p-3">
-                {canCreateSub ? <Button onClick={() => onCreateSub(item)} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Sub</Button> : null}
-                <RowActions onView={() => onView(item)} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} canEdit={canEdit} canDelete={canDelete} />
+              <div className="flex shrink-0 justify-end gap-2 p-3 pl-1">
+                {canCreateSub ? <Button onClick={() => onCreateSub(item)} className="hidden bg-violet-700 text-white hover:bg-violet-800 sm:inline-flex"><Plus className="size-4" />Sub</Button> : null}
+                <RowActions
+                  onView={() => onView(item)}
+                  onEdit={() => onEdit(item)}
+                  onDelete={() => onDelete(item)}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
+                  mobileExtraActions={canCreateSub ? [{ label: "Sub", icon: Plus, onClick: () => onCreateSub(item) }] : []}
+                />
               </div>
             </div>
             {expandedId === item.id ? (
@@ -230,9 +242,9 @@ function SubmaintenanceList({ loading, items, onView, onEdit, onDelete, canView 
   return (
     <div className={cn("space-y-2", nested ? "border-t border-slate-200 bg-slate-50 p-3" : "px-4 pb-4")}>
       {items.map((item) => (
-        <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
+        <div key={item.id} className="overflow-visible rounded-lg border border-slate-200 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-bold text-slate-950">{item.name}</p>
                 <Badge tone="blue">{item.mantenimientoName || "Sin padre"}</Badge>
@@ -431,13 +443,58 @@ function MaintenanceMultiSelect({ value, options, disabled, onChange }) {
   );
 }
 
-function RowActions({ onView, onEdit, onDelete, canEdit, canDelete }) {
+function RowActions({ onView, onEdit, onDelete, canEdit, canDelete, mobileExtraActions = [] }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="flex shrink-0 justify-end gap-2">
-      <Button variant="ghost" size="icon" onClick={onView}><Eye className="size-4" /></Button>
-      {canEdit ? <Button variant="ghost" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}
-      {canDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}
+    <div className="relative flex shrink-0 justify-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen((current) => !current)}
+        className="h-8 gap-1 px-2 sm:hidden"
+      >
+        Acciones
+        <ChevronDown className={`size-4 transition ${open ? "rotate-180" : ""}`} />
+      </Button>
+
+      {open ? (
+        <div className="absolute right-0 top-10 z-50 w-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg sm:hidden">
+          {mobileExtraActions.map((action) => (
+            <MobileMenuItem key={action.label} icon={action.icon} label={action.label} onClick={action.onClick} close={() => setOpen(false)} />
+          ))}
+          <MobileMenuItem icon={Eye} label="Ver" onClick={onView} close={() => setOpen(false)} />
+          {canEdit ? <MobileMenuItem icon={Edit3} label="Editar" onClick={onEdit} close={() => setOpen(false)} /> : null}
+          {canDelete ? <MobileMenuItem icon={Trash2} label="Eliminar" onClick={onDelete} close={() => setOpen(false)} className="text-red-600 hover:bg-red-50" /> : null}
+        </div>
+      ) : null}
+
+      <div className="hidden shrink-0 justify-end gap-2 sm:flex">
+        <Button variant="ghost" size="icon" onClick={onView}><Eye className="size-4" /></Button>
+        {canEdit ? <Button variant="ghost" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}
+        {canDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}
+      </div>
     </div>
+  );
+}
+
+function MobileMenuItem({ icon: Icon, label, onClick, close, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onClick?.();
+        close?.();
+      }}
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50",
+        className
+      )}
+    >
+      {Icon ? <Icon className="size-4" /> : null}
+      {label}
+    </button>
   );
 }
 
@@ -487,12 +544,12 @@ function Stat({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={cn("flex items-center justify-between rounded-lg border px-3 py-2", tones[tone])}>
+    <div className={cn("flex items-center justify-between rounded-lg border px-2 py-2 sm:px-3", tones[tone])}>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold leading-4">{label}</p>
+        <p className="text-[10px] font-semibold leading-4 sm:text-[11px]">{label}</p>
         <p className="mt-0.5 text-xl font-bold leading-6 text-slate-950">{value}</p>
       </div>
-      <Icon className="size-5 shrink-0 opacity-50" />
+      <Icon className="hidden size-5 shrink-0 opacity-50 sm:block" />
     </div>
   );
 }
