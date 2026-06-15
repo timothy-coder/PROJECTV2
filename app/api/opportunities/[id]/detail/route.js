@@ -9,6 +9,30 @@ function canSeeAll(user) {
   return Boolean(hasPerm(user.permissions, ["oportunidades", "viewall"]) || hasPerm(user.permissions, ["leads", "viewall"]) || hasPerm(user.permissions, ["agenda", "viewall"]));
 }
 
+function datePart(value) {
+  if (!value) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+  const text = String(value);
+  const iso = text.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  if (iso) return iso;
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+  }
+  return text.slice(0, 10);
+}
+
+function timePart(value) {
+  if (!value) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+  }
+  const text = String(value);
+  return text.match(/\d{2}:\d{2}/)?.[0] || text.slice(0, 5);
+}
+
 async function stageId(connection, name) {
   const [rows] = await connection.query(`SELECT id FROM ventas_etapasconversion WHERE LOWER(nombre)=LOWER(?) LIMIT 1`, [name]);
   return rows[0]?.id || null;
@@ -110,7 +134,7 @@ export async function GET(request, { params }) {
         creadoNombre: opportunity.creado_nombre,
       },
       stages: stages.map((s) => ({ id: s.id, nombre: s.nombre, temp: Number(s.descripcion || 0), color: s.color || "#2563eb", sortOrder: s.sort_order || s.id })),
-      details: details.map((d) => ({ id: d.id, fechaAgenda: String(d.fecha_agenda || "").slice(0, 10), horaAgenda: String(d.hora_agenda || "").slice(0, 8), createdAt: d.created_at })),
+      details: details.map((d) => ({ id: d.id, fechaAgenda: datePart(d.fecha_agenda), horaAgenda: timePart(d.hora_agenda), createdAt: d.created_at })),
       activities: activities.map((a) => ({ id: a.id, detalle: a.detalle || "", userName: a.user_name, createdAt: a.created_at })),
       interest,
       quotes: quotes.map((q) => ({
@@ -126,7 +150,12 @@ export async function GET(request, { params }) {
             userAgent: view.user_agent || "",
           })),
       })),
-      testDrives,
+      testDrives: testDrives.map((row) => ({
+        ...row,
+        fechaTestdrive: datePart(row.fecha_testdrive),
+        horaInicio: timePart(row.hora_inicio),
+        horaFin: timePart(row.hora_fin),
+      })),
       closures,
       reservations: reservations.map((row) => ({ id: row.id, estado: row.estado || "borrador", createdAt: row.created_at })),
       options: { brands, models, prices, closeOptions, accessories, gifts },
@@ -155,6 +184,16 @@ export async function POST(request, { params }) {
     if (body.action === "activity") {
       const [[op]] = await connection.query(`SELECT etapasconversion_id FROM ventas_oportunidades WHERE id=?`, [id]);
       await connection.query(`INSERT INTO ventas_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by) VALUES (?, ?, ?, ?)`, [id, op.etapasconversion_id, body.detalle, user.id]);
+    }
+    if (body.action === "agenda") {
+      if (!body.fechaAgenda || !body.horaAgenda) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Completa fecha y hora de agenda." }, { status: 400 });
+      }
+      await connection.query(
+        `INSERT INTO ventas_oportunidades_detalles (oportunidad_padre_id, fecha_agenda, hora_agenda, oportunidad_id) VALUES (?, ?, ?, ?)`,
+        [id, body.fechaAgenda, body.horaAgenda, id]
+      );
     }
     if (body.action === "interest") {
       if (body.deleteId) await connection.query(`UPDATE ventas_oportunidad_client_interest_vehicles SET active=0, updated_at=NOW() WHERE id=?`, [Number(body.deleteId)]);
@@ -276,7 +315,23 @@ export async function POST(request, { params }) {
     }
     if (body.action === "testdrive") {
       const [[op]] = await connection.query(`SELECT cliente_id FROM ventas_oportunidades WHERE id=?`, [id]);
-      await connection.query(`INSERT INTO ventas_oportunidades_test_drives (oportunidad_id, cliente_id, fecha_testdrive, hora_inicio, hora_fin, modelo_id, vin, placa, descripcion, estado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, op.cliente_id, body.fechaTestdrive, body.horaInicio, body.horaFin || null, body.modeloId || null, body.vin || null, body.placa || null, body.descripcion || null, body.estado || "programado", user.id]);
+      if (body.id) {
+        await connection.query(
+          `UPDATE ventas_oportunidades_test_drives
+           SET fecha_testdrive=COALESCE(?, fecha_testdrive),
+               hora_inicio=COALESCE(?, hora_inicio),
+               hora_fin=?,
+               modelo_id=COALESCE(?, modelo_id),
+               vin=?,
+               placa=?,
+               descripcion=?,
+               estado=COALESCE(?, estado)
+           WHERE id=? AND oportunidad_id=?`,
+          [body.fechaTestdrive || null, body.horaInicio || null, body.horaFin || null, body.modeloId || null, body.vin || null, body.placa || null, body.descripcion || null, body.estado || null, Number(body.id), id]
+        );
+      } else {
+        await connection.query(`INSERT INTO ventas_oportunidades_test_drives (oportunidad_id, cliente_id, fecha_testdrive, hora_inicio, hora_fin, modelo_id, vin, placa, descripcion, estado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, op.cliente_id, body.fechaTestdrive, body.horaInicio, body.horaFin || null, body.modeloId || null, body.vin || null, body.placa || null, body.descripcion || null, body.estado || "programado", user.id]);
+      }
       const testId = await stageId(connection, "Test drive");
       if (testId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [testId, id]);
     }

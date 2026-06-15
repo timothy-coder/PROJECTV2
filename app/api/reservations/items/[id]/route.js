@@ -140,14 +140,12 @@ async function recalcReservationTotal(connection, reservationId, override = {}) 
   const merged = { ...detail, ...override };
   const base = Number(merged.precio_unitario || 0) * Number(merged.cantidad || 1);
   const extraDiscountTotal = discountRows.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
-  const itemsTotal = await quoteItemsTotal(connection, merged.cotizacion_id);
   const total = base
     - Number(merged.dsctotienda || 0)
     - Number(merged.dsctobonoretoma || 0)
     - Number(merged.dsctonper || 0)
     - extraDiscountTotal
-    - Number(merged.cuota_inicial || 0)
-    + itemsTotal;
+    - Number(merged.cuota_inicial || 0);
   await connection.query(`UPDATE ventas_reserva_detalles SET total=? WHERE id=?`, [total, detail.id]);
   return total;
 }
@@ -717,7 +715,6 @@ export async function PUT(request, { params }) {
       const coowners = normalizeCoowners(d.copropietarios);
       const tipoPersona = normalizePersonType(d.tipoComprobante, d.tipoPersona);
       const extraDiscountTotal = extraDiscounts.reduce((sum, discount) => sum + getDiscountAmount(discount, base), 0);
-      const itemsTotal = await quoteItemsTotal(connection, d.cotizacionId);
       const glpSn = String(d.glpSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
       const tarjetaSn = String(d.tarjetaSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
       const fleteSn = String(d.fleteSn || "NO").toUpperCase() === "SI" ? "SI" : "NO";
@@ -726,8 +723,7 @@ export async function PUT(request, { params }) {
         - Number(d.bonoRetoma || 0)
         - Number(d.descuentoNper || 0)
         - extraDiscountTotal
-        - Number(d.cuotaInicial || 0)
-        + itemsTotal;
+        - Number(d.cuotaInicial || 0);
       const [detailUpdate] = await connection.query(
         `UPDATE ventas_reserva_detalles
          SET tipo_comprobante=?, tipo_persona=?, numero_motor=?, tc_referencial=?, total=?, vin=?, vin_existe=?, usovehiculo=?, placa=?,

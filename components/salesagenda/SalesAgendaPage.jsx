@@ -54,13 +54,16 @@ export default function SalesAgendaPage({ userPermissions }) {
   const centerOptions = data.centers.map((item) => ({ value: item.id, label: item.nombre }));
   const mobileDays = mode === "month" ? monthDays(baseDate) : days;
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <header className="mb-3 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:mb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:flex sm:h-[calc(100svh-1rem)] sm:flex-col sm:overflow-hidden sm:p-4">
+      <header className="mb-3 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:mb-4 sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-violet-700 text-white sm:size-10"><Calendar className="size-5" /></div>
-          <div><h1 className="text-lg font-bold sm:text-2xl">Agenda</h1><p className="text-xs text-slate-500">{dateRangeLabel(days)}</p></div>
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-700 text-white">
+            <Calendar className="size-5" />
+            </div>
+          <div><h1 className="text-base font-bold leading-tight text-violet-700">Agenda</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">{dateRangeLabel(days)}</p></div>
         </div>
-        <div className="grid grid-cols-[auto_auto_1fr_auto] gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <div className="grid grid-cols-[auto_auto_1fr_auto] gap-2 sm:hidden">
           <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? -30 : -7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronLeft className="size-4" /></Button>
           <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? 30 : 7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronRight className="size-4" /></Button>
           <Button variant="outline" onClick={() => { const today = new Date(); setBaseDate(today); setSelectedDate(formatDate(today)); }}>Hoy</Button>
@@ -70,13 +73,22 @@ export default function SalesAgendaPage({ userPermissions }) {
           <Button variant="outline" size="icon" onClick={data.reload}><RefreshCw className="size-4" /></Button>
         </div>
       </header>
-      <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2 sm:flex sm:flex-wrap sm:items-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
+      <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2 sm:shrink-0 sm:flex sm:flex-wrap sm:items-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
         <button type="button" className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 px-3 text-xs font-bold text-slate-700 sm:hidden" onClick={() => setFiltersOpen((current) => !current)}>
           Filtros
           <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
         </button>
         <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:contents`}>
-          <Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field>
+          <div className="hidden items-end gap-2 sm:flex">
+            <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? -30 : -7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronLeft className="size-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? 30 : 7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronRight className="size-4" /></Button>
+            <Button variant="outline" onClick={() => { const today = new Date(); setBaseDate(today); setSelectedDate(formatDate(today)); }}>Hoy</Button>
+          </div>
+          <div className="hidden w-36 sm:block"><Field label="Vista"><SearchableSelect value={mode} options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]} onChange={setMode} /></Field></div>
+          <div className="hidden w-48 sm:block"><Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field></div>
+          {canCreate ? <Button onClick={() => setDialog({ date: selectedDate || formatDate(new Date()), time: "" })} className="hidden bg-violet-700 text-white hover:bg-violet-800 sm:inline-flex"><Plus className="size-4" />Nueva</Button> : null}
+          <Button variant="outline" size="icon" onClick={data.reload} className="hidden sm:inline-flex"><RefreshCw className="size-4" /></Button>
+          <div className="sm:hidden"><Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field></div>
           {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
           {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
           <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
@@ -91,11 +103,11 @@ export default function SalesAgendaPage({ userPermissions }) {
         <MobileAgenda days={mobileDays} selectedDate={selectedDate} setSelectedDate={setSelectedDate} items={filteredItems} canCreate={canCreate} onNew={(date) => setDialog({ date, time: "" })} />
       </div>
       {mode === "month" ? (
-        <div className="hidden sm:block">
+        <div className="hidden min-h-0 overflow-auto sm:block sm:flex-1">
           <MonthCalendar days={monthCalendarDays(baseDate)} week={schedule.week} items={filteredItems} canCreate={canCreate} nowTime={nowTime} onCell={(day) => setDialog({ date: day.date, time: "" })} />
         </div>
       ) : (
-        <div className="hidden overflow-auto rounded-lg border border-slate-200 bg-white sm:block">
+        <div className="hidden min-h-0 overflow-auto rounded-lg border border-slate-200 bg-white sm:block sm:flex-1">
           <div className="grid min-w-[1180px]" style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(160px, 1fr))` }}>
             <div className="border-b border-r bg-slate-50" />
             {days.map((day) => <div key={day.date} className="border-b border-r bg-slate-50 py-2 text-center text-xs font-bold">{day.label}<p className="font-normal">{day.day}</p></div>)}

@@ -534,7 +534,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   const depositsTotal = useMemo(() => (form.depositos || []).reduce((sum, item) => sum + Number(item.monto || 0), 0), [form.depositos]);
   const accessoriesTotal = useMemo(() => accessories.reduce((sum, item) => sum + Number(item.total || 0), 0), [accessories]);
   const giftsTotal = useMemo(() => gifts.reduce((sum, item) => sum + Number(item.total || 0), 0), [gifts]);
-  const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal - Number(form.cuotaInicial || 0) + accessoriesTotal + giftsTotal, [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.cuotaInicial, extraDiscountTotal, accessoriesTotal, giftsTotal]);
+  const total = useMemo(() => baseTotal - Number(form.descuentoTienda || 0) - Number(form.bonoRetoma || 0) - Number(form.descuentoNper || 0) - extraDiscountTotal - Number(form.cuotaInicial || 0), [baseTotal, form.descuentoTienda, form.bonoRetoma, form.descuentoNper, form.cuotaInicial, extraDiscountTotal]);
   const telefono2 = firstPresentValue(form.telefono2, form.telefono_2, form.telefono, form.telefonoReserva, form.telefono_reserva, reservation.telefono2, reservation.telefono_2);
   const vinMessage = form.vinExiste ? "" : (form.cuotaInicial ? "Anticipo sin data" : "Reserva total sin data");
   const isFactura = String(form.tipoComprobante || "").toUpperCase().includes("FACTURA");
