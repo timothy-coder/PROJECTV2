@@ -593,7 +593,7 @@ function EditableQuoteDialog({ options, onClose, onSubmit, state }) {
     setForm((f) => ({ ...f, precioId: value, precioBase: price?.precio_base ?? "" }));
   };
   return (
-    <BaseDialog title={isQuote ? "Modificar cotizacion" : "Nueva cotizacion"} wide onClose={onClose} onSubmit={() => onSubmit(payload)}>
+    <BaseDialog title={isQuote ? "Modificar cotización" : "Nueva cotizacion"} wide onClose={onClose} onSubmit={() => onSubmit(payload)}>
       <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
         <div className="grid gap-4 md:grid-cols-[1fr_1fr_190px]">
           <div className="space-y-3">
@@ -604,7 +604,7 @@ function EditableQuoteDialog({ options, onClose, onSubmit, state }) {
             <Field label="Modelo">
               <SearchableSelect value={form.modeloId} options={modelOptions} onChange={(v) => setForm((f) => ({ ...f, modeloId: v, precioId: "", precioBase: "" }))} />
             </Field>
-            <Field label="AÃ±o">
+            <Field label="Año">
               <Input value={form.anio} onChange={(e) => setForm((f) => ({ ...f, anio: e.target.value }))} />
             </Field>
             <Field label="Version">
@@ -851,5 +851,5 @@ function timeInputValue(value) {
   return String(value).match(/\d{2}:\d{2}/)?.[0] || "";
 }
 function ClosureDialog({ options, onClose, onSubmit }) { const [form, setForm] = useState({ detalle: "", cierreDetalleId: "" }); const opts = [{ value: "", label: "Sin clasificacion" }, ...options.closeOptions.map((o) => ({ value: o.id, label: o.detalle }))]; return <BaseDialog title="Registrar Cierre" onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Detalle del cierre"><Textarea value={form.detalle} onChange={(e) => setForm((f) => ({ ...f, detalle: e.target.value }))} /></Field><Field label="Clasificacion"><SearchableSelect value={form.cierreDetalleId} options={opts} onChange={(v) => setForm((f) => ({ ...f, cierreDetalleId: v }))} /></Field></BaseDialog>; }
-function BaseDialog({ title, children, onClose, onSubmit, wide }) { return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className={`${wide ? "max-w-4xl" : "max-w-lg"} max-h-[92svh] overflow-y-auto bg-white text-slate-950`}><form onSubmit={(e) => { e.preventDefault(); onSubmit(); onClose(); }} className="space-y-3"><DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>{children}<DialogFooter className="sticky bottom-0 border-t bg-white pt-3"><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar</Button></DialogFooter></form></DialogContent></Dialog>; }
+function BaseDialog({ title, children, onClose, onSubmit, wide }) { return <Dialog open onOpenChange={(o) => !o && onClose()}><DialogContent className={`${wide ? "sm:max-w-[min(1180px,calc(100vw-3rem))] lg:max-w-[1180px]" : "sm:max-w-lg"} max-h-[92svh] overflow-y-auto bg-white text-slate-950`}><form onSubmit={(e) => { e.preventDefault(); onSubmit(); onClose(); }} className="space-y-3"><DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>{children}<DialogFooter className="sticky bottom-0 border-t bg-white pt-3"><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar</Button></DialogFooter></form></DialogContent></Dialog>; }
 function Field({ label, children }) { return <div className="space-y-1"><Label>{label}</Label>{children}</div>; }

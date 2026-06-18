@@ -31,7 +31,7 @@ function StatCard({ label, value, tone, icon: Icon }) {
 }
 
 export function LinksTab({ tab, userPermissions }) {
-  const { links, loading, error, stats, createLink, updateLink, deleteLink, reload } = useConfigurationLinks();
+  const { links, roles, loading, error, stats, createLink, updateLink, deleteLink, reload } = useConfigurationLinks();
   const [dialogMode, setDialogMode] = useState(null);
   const [selectedLink, setSelectedLink] = useState(null);
   const canCreate = canUseAction(userPermissions, tab, "create");
@@ -110,6 +110,7 @@ export function LinksTab({ tab, userPermissions }) {
                         <span>ID: {item.id}</span>
                         <span className={cn("rounded-full px-2 py-0.5", item.isForDesktop ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500")}>Desktop</span>
                         <span className={cn("rounded-full px-2 py-0.5", item.isForMobile ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500")}>Mobile</span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">{item.roles?.length ? item.roles.map((role) => role.name).join(", ") : "Todos los roles"}</span>
                       </div>
                     </div>
 
@@ -140,6 +141,7 @@ export function LinksTab({ tab, userPermissions }) {
         open={dialogMode === "create" || dialogMode === "edit"}
         mode={dialogMode}
         item={selectedLink}
+        roles={roles}
         onClose={() => setDialogMode(null)}
         onSubmit={(payload) => (dialogMode === "edit" ? updateLink(selectedLink.id, payload) : createLink(payload))}
       />
@@ -153,12 +155,19 @@ export function LinksTab({ tab, userPermissions }) {
   );
 }
 
-function LinkDialog({ open, mode, item, onClose, onSubmit }) {
+function LinkDialog({ open, mode, item, roles, onClose, onSubmit }) {
   const [form, setForm] = useState({
     link: item?.link || "",
     isForDesktop: item?.isForDesktop || false,
     isForMobile: item?.isForMobile || false,
+    roleIds: item?.roles?.map((role) => Number(role.id)) || [],
   });
+  const toggleRole = (roleId, checked) => {
+    setForm((value) => ({
+      ...value,
+      roleIds: checked ? [...new Set([...value.roleIds, roleId])] : value.roleIds.filter((id) => Number(id) !== Number(roleId)),
+    }));
+  };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -188,6 +197,19 @@ function LinkDialog({ open, mode, item, onClose, onSubmit }) {
               <Checkbox checked={form.isForMobile} onCheckedChange={(checked) => setForm((value) => ({ ...value, isForMobile: Boolean(checked) }))} />
               Para mobile
             </label>
+          </div>
+          <div className="space-y-2">
+            <Label>Roles</Label>
+            <div className="grid max-h-56 gap-2 overflow-y-auto rounded-md border border-slate-200 p-2 sm:grid-cols-2">
+              {roles.map((role) => (
+                <label key={role.id} className="flex items-center gap-2 rounded-md border border-slate-100 p-2 text-sm font-semibold text-slate-700">
+                  <Checkbox checked={form.roleIds.includes(Number(role.id))} onCheckedChange={(checked) => toggleRole(Number(role.id), Boolean(checked))} />
+                  {role.name}
+                </label>
+              ))}
+              {!roles.length ? <div className="col-span-2 rounded-md border border-dashed p-3 text-center text-sm text-slate-500">No hay roles registrados.</div> : null}
+            </div>
+            <p className="text-xs text-slate-500">Si no seleccionas roles, el link sera visible para todos.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>

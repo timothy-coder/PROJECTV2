@@ -169,6 +169,44 @@ function duplicateReasons(payload, row) {
   return reasons;
 }
 
+function formatDuplicateActivity(row) {
+  if (!row?.activity_at) return "Sin oportunidades ni reservas registradas";
+  const date = new Date(row.activity_at);
+  const formatted = Number.isNaN(date.getTime())
+    ? String(row.activity_at)
+    : new Intl.DateTimeFormat("es-PE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "America/Lima",
+      }).format(date);
+  return `${row.activity_type || "Actividad"}: ${formatted}`;
+}
+
+async function findLastClientActivity(clientId) {
+  const [rows] = await pool.query(
+    `SELECT activity_type, activity_at
+     FROM (
+       SELECT 'Oportunidad' AS activity_type, o.created_at AS activity_at
+       FROM ventas_oportunidades o
+       WHERE o.cliente_id = ?
+       UNION ALL
+       SELECT 'Reserva' AS activity_type, r.created_at AS activity_at
+       FROM ventas_reservas r
+       INNER JOIN ventas_oportunidades o ON o.id = r.oportunidad_id
+       WHERE o.cliente_id = ?
+     ) activity
+     WHERE activity_at IS NOT NULL
+     ORDER BY activity_at DESC
+     LIMIT 1`,
+    [clientId, clientId]
+  );
+  return rows[0] || null;
+}
+
 async function findDuplicateClient(payload, excludeId = null) {
   const checks = [
     ["c.identificacion_fiscal = ?", payload.identificacionFiscal],
@@ -195,12 +233,16 @@ async function findDuplicateClient(payload, excludeId = null) {
   const duplicate = rows[0];
   if (!duplicate) return null;
   const reasons = duplicateReasons(payload, duplicate);
+  const lastActivity = await findLastClientActivity(duplicate.id);
+  const activityLabel = formatDuplicateActivity(lastActivity);
   const owner = duplicate.created_by_name || "usuario no identificado";
   const clientName = [duplicate.nombre, duplicate.apellido].filter(Boolean).join(" ") || `cliente #${duplicate.id}`;
   return {
     duplicate,
     reasons,
-    message: `El cliente ya esta registrado por ${owner}. Motivo: ${reasons.join(", ") || "datos duplicados"}. Cliente: ${clientName}.`,
+    lastActivity,
+    activityLabel,
+    message: `El cliente ya esta registrado por ${owner}. Motivo: ${reasons.join(", ") || "datos duplicados"}. Cliente: ${clientName}. Ultima actividad: ${activityLabel}.`,
   };
 }
 
@@ -331,6 +373,8 @@ export async function POST(request) {
           reason: duplicate.reasons.join(", "),
           createdByName: duplicate.duplicate.created_by_name || "",
           clientId: duplicate.duplicate.id,
+          lastActivity: duplicate.lastActivity?.activity_at || null,
+          lastActivityType: duplicate.lastActivity?.activity_type || "",
         },
         { status: 409 }
       );

@@ -219,12 +219,12 @@ function ItemsCard({ title, rows, partKey, tone, onAdd, onEdit, onDelete }) {
   const subtotal = rows.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
   const discount = rows.reduce((sum, item) => sum + Number(item.descuento_monto || 0) + Number(item.subtotal || 0) * Number(item.descuento_porcentaje || 0) / 100, 0);
   return (
-    <section className="rounded-xl border bg-white p-5 shadow-sm">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="font-bold">{title} ({rows.length})</h2>
-        <Button className="bg-slate-950 text-white hover:bg-slate-800" onClick={onAdd}><Plus className="size-4" />Agregar</Button>
+    <section className="rounded-lg border bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold">{title} ({rows.length})</h2>
+        <Button className="h-8 bg-slate-950 px-3 text-xs text-white hover:bg-slate-800 sm:h-9 sm:text-sm" onClick={onAdd}><Plus className="size-4" />Agregar</Button>
       </div>
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="hidden overflow-x-auto rounded-lg border sm:block">
         <table className="w-full min-w-[860px] text-sm">
           <thead className="bg-slate-100 text-left">
             <tr><th className="px-3 py-3">Descripcion</th><th>Referencia</th><th>Cant.</th><th>Unitario</th><th>Total C/IGV</th><th>Desc.</th><th>Total Final</th><th>Accion</th></tr>
@@ -252,14 +252,38 @@ function ItemsCard({ title, rows, partKey, tone, onAdd, onEdit, onDelete }) {
           </tbody>
         </table>
       </div>
-      <div className={`mt-5 rounded-lg border p-4 ${tone === "violet" ? "border-violet-200 bg-violet-50" : "border-blue-200 bg-blue-50"}`}>
-        <div className="grid gap-4 md:grid-cols-4">
+      <div className="space-y-2 sm:hidden">
+        {rows.map((row) => (
+          <div key={row.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-bold leading-tight">{row.detalle}</p>
+                <p className="mt-1 text-[11px] font-medium text-slate-500">{row[partKey] || "-"}</p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <Button size="icon" variant="ghost" className="size-7 text-blue-700" onClick={() => onEdit(row)}><Pencil className="size-4" /></Button>
+                <Button size="icon" variant="ghost" className="size-7 text-red-600" onClick={() => onDelete(row)}><Trash2 className="size-4" /></Button>
+              </div>
+            </div>
+            {row.notas ? <p className="mt-2 text-[11px] text-slate-500">{row.notas}</p> : null}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <Info label="Cant." value={row.cantidad} />
+              <Info label="Unitario" value={money(row.precio_unitario)} />
+              <Info label="Desc." value={discountLabel(row)} />
+              <Info label="Total" value={money(row.total)} />
+            </div>
+          </div>
+        ))}
+        {!rows.length ? <div className="rounded-lg border border-dashed py-8 text-center text-sm text-slate-500">Sin registros</div> : null}
+      </div>
+      <div className={`mt-3 rounded-lg border p-3 ${tone === "violet" ? "border-violet-200 bg-violet-50" : "border-blue-200 bg-blue-50"}`}>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Info label="Total C/IGV" value={money(subtotal)} />
           <Info label="Desc. Items" value={money(discount)} />
           <Info label="S/IGV" value={money(total / 1.18)} />
           <Info label="IGV (18%)" value={money(total - total / 1.18)} />
         </div>
-        <div className="mt-4 rounded border border-blue-400 bg-white p-3 text-right font-bold text-blue-700">Total {title}: {money(total)}</div>
+        <div className="mt-3 rounded border border-blue-400 bg-white p-2 text-right text-sm font-bold text-blue-700">Total {title}: {money(total)}</div>
       </div>
     </section>
   );
@@ -335,7 +359,7 @@ function Field({ label, children }) {
   return <div className="space-y-2"><Label>{label}</Label>{children}</div>;
 }
 function Info({ label, value }) {
-  return <div><p className="text-xs text-slate-600">{label}</p><p className="font-bold">{value}</p></div>;
+  return <div className="min-w-0"><p className="text-[11px] text-slate-600">{label}</p><p className="truncate text-sm font-bold">{value}</p></div>;
 }
 function discountLabel(row) {
   const amount = Number(row.descuento_monto || 0);

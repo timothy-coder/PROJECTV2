@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Car, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Save, UserRound, XCircle } from "lucide-react";
+import { Calendar, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Wrench, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -19,6 +19,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const { data, loading, save, createAppointment, updateAppointment } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
+  const [maintenance, setMaintenance] = useState({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
   const [editingActivity, setEditingActivity] = useState(null);
   const [quoteType, setQuoteType] = useState("taller");
   const [quoteOpen, setQuoteOpen] = useState(false);
@@ -32,7 +33,6 @@ export default function PostventaOpportunityDetailPage({ id }) {
 
   const { opportunity, stages, details, activities, appointments = [], appointmentOptions = {}, closings = [], closures = [], currentUser } = data;
   const currentIndex = stages.findIndex((stage) => Number(stage.id) === Number(opportunity.etapaId));
-  const progress = Math.round(((Math.max(currentIndex, 0) + 1) / Math.max(stages.length, 1)) * 100);
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre?.toLowerCase() === "nuevo");
   const isClosed = String(opportunity.etapaNombre || "").toLowerCase().includes("cerrad");
@@ -43,59 +43,68 @@ export default function PostventaOpportunityDetailPage({ id }) {
     setActivity("");
   }
 
-  async function addAgenda(event) {
-    event.preventDefault();
+  async function addAgenda() {
+    if (!agenda.fechaAgenda || !agenda.horaAgenda) return;
     await save({ action: "agenda", ...agenda });
     setAgenda({ fechaAgenda: "", horaAgenda: "" });
+  }
+
+  async function addMaintenance() {
+    if (!maintenance.fechaVisitaTaller) return;
+    await save({ action: "maintenance", ...maintenance });
+    setMaintenance({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
+    toast.success("Mantenimiento registrado, oportunidad cerrada y proximo mantenimiento recalculado");
   }
 
   return (
     <TooltipProvider>
       <div className="min-h-full bg-slate-50 p-3 text-slate-950 sm:p-4">
-        <header className="sticky top-0 z-40 mb-4 border-b border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-3xl font-bold">{opportunity.clienteNombre}</h1>
-              <p className="text-sm text-slate-500">{opportunity.code} - {opportunity.vehiculoNombre}</p>
+        <header className="sticky top-0 z-40 mb-3 border-b border-slate-200 bg-white p-3 shadow-sm sm:mb-4 sm:p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-sm font-bold leading-tight sm:text-base">{opportunity.clienteNombre}</h1>
+                <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-bold text-orange-700">Temp. {temperature}%</span>
+              </div>
+              <p className="mt-0.5 text-xs font-semibold text-slate-500">{opportunity.code} - {opportunity.vehiculoNombre}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => history.back()}>x</Button>
+            <div className="flex shrink-0 items-center gap-2">
+              {currentUser.canViewAll && newStage ? (
+                <Button variant="outline" size="sm" className="hidden border-orange-300 text-xs text-orange-600 sm:inline-flex" onClick={() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" })}>
+                  <RotateCcw className="size-3.5" />Inicio
+                </Button>
+              ) : null}
+              <Button variant="ghost" size="icon" onClick={() => history.back()}>x</Button>
+            </div>
           </div>
-          <div className="flex min-w-0 overflow-x-auto pb-2">
+          {currentUser.canViewAll && newStage ? (
+            <Button variant="outline" size="sm" className="mb-3 w-full border-orange-300 text-xs text-orange-600 sm:hidden" onClick={() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" })}>
+              <RotateCcw className="size-3.5" />Devolver al inicio
+            </Button>
+          ) : null}
+          <div className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-1 sm:overflow-visible">
             {stages.map((stage, index) => (
               <button
                 key={stage.id}
                 type="button"
-                className="flex items-center"
+                className="flex shrink-0 items-center sm:flex-1 sm:shrink"
                 onClick={() => save({ action: "stage", etapaId: stage.id, detalle: `Cambio de etapa a ${stage.nombre}` })}
               >
-                <span className={`whitespace-nowrap rounded-lg px-4 py-2 text-xs font-bold ${index <= currentIndex ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
-                  {index <= currentIndex ? "✓ " : ""}{stage.nombre}
+                <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${index <= currentIndex ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                  {stage.nombre}
                 </span>
-                {index < stages.length - 1 ? <span className={`h-0.5 w-8 ${index < currentIndex ? "bg-emerald-400" : "bg-slate-300"}`} /> : null}
+                {index < stages.length - 1 ? <span className={`h-0.5 w-5 shrink-0 sm:w-6 ${index < currentIndex ? "bg-emerald-400" : "bg-slate-300"}`} /> : null}
               </button>
             ))}
           </div>
         </header>
 
-        <div className="mb-4 grid gap-4 lg:grid-cols-2">
-          <section className="rounded-lg bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-lg font-bold">Temperatura</h2>
-            <p className="text-4xl font-bold">{temperature}%</p>
-            <div className="mt-3 h-8 rounded-lg bg-orange-500 text-center text-sm font-bold leading-8 text-white">PostVenta</div>
-          </section>
-          <section className="rounded-lg bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-lg font-bold">Progreso</h2>
-            <div className="h-3 rounded-full bg-slate-200"><div className="h-3 rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div>
-            <p className="mt-2 text-right font-bold">{progress}%</p>
-            {currentUser.canViewAll && newStage ? (
-              <Button variant="outline" className="mt-3 w-full border-orange-400 text-orange-600" onClick={() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" })}>
-                <RotateCcw className="size-4" />Devolver al Inicio
-              </Button>
-            ) : null}
-          </section>
-        </div>
-
         <InfoSection opportunity={opportunity} />
+        <div className="mb-4 grid gap-3 lg:grid-cols-2">
+          <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={addActivity} onEdit={setEditingActivity} />
+          <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={addAgenda} />
+        </div>
+        <MaintenanceSection maintenance={maintenance} setMaintenance={setMaintenance} onSubmit={addMaintenance} />
         <QuoteSection
           canCreate={currentUser.canCreateQuote}
           createdQuote={createdQuote}
@@ -104,7 +113,6 @@ export default function PostventaOpportunityDetailPage({ id }) {
           quoteType={quoteType}
           setQuoteType={setQuoteType}
         />
-        <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={addAgenda} />
         <AppointmentSection
           appointments={appointments}
           canCreate={Boolean(currentUser.canCreateAppointment)}
@@ -116,14 +124,6 @@ export default function PostventaOpportunityDetailPage({ id }) {
           isClosed={isClosed}
           onOpen={() => setCloseOpen(true)}
         />
-
-        <section className="my-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
-          <h2 className="mb-3 flex gap-2 font-bold"><MessageSquare className="size-5" />Registrar nueva actividad</h2>
-          <Textarea value={activity} onChange={(event) => setActivity(event.target.value)} placeholder="Describe que accion se realizo..." />
-          <Button className="mt-3 w-full" onClick={addActivity}><Save className="size-4" />Guardar actividad</Button>
-        </section>
-
-        <History activities={activities} onEdit={setEditingActivity} />
 
         {editingActivity ? (
           <ActivityDialog
@@ -320,62 +320,128 @@ function QuoteSection({ canCreate, createdQuote, onCopy, onOpen, quoteType, setQ
 }
 
 function InfoSection({ opportunity }) {
-  const clientRows = [
+  const rows = [
     ["CLIENTE", opportunity.clienteNombre],
     ["CODIGO", opportunity.code],
+    ["VEHICULO", opportunity.vehiculoNombre],
+    ["PLACA", opportunity.placa || "-"],
+    ["VIN", opportunity.vin || "-"],
+    ["ANIO", opportunity.anio || "-"],
+    ["COLOR", opportunity.color || "-"],
     ["ORIGEN", opportunity.origenNombre],
     ["SUBORIGEN", opportunity.suborigenNombre || "-"],
     ["ASIGNADO A", opportunity.asignadoNombre],
     ["CORREO", opportunity.email || "-"],
     ["CELULAR", opportunity.celular || "-"],
     ["DNI", opportunity.dni || "-"],
-  ];
-  const vehicleRows = [
-    ["VEHICULO", opportunity.vehiculoNombre],
-    ["PLACA", opportunity.placa || "-"],
-    ["VIN", opportunity.vin || "-"],
-    ["ANIO", opportunity.anio || "-"],
-    ["COLOR", opportunity.color || "-"],
     ["CREADO POR", opportunity.creadoNombre || "-"],
   ];
 
   return (
-    <section className="mb-4 grid gap-4 lg:grid-cols-2">
-      <div className="rounded-lg bg-white p-5 shadow-sm">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-bold"><UserRound className="size-5" />Informacion del Cliente</h2>
-        <div className="grid gap-4 sm:grid-cols-2">{clientRows.map(([key, value]) => <InfoItem key={key} label={key} value={value} />)}</div>
-      </div>
-      <div className="rounded-lg bg-white p-5 shadow-sm">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-bold"><Car className="size-5" />Informacion del Vehiculo</h2>
-        <div className="grid gap-4 sm:grid-cols-2">{vehicleRows.map(([key, value]) => <InfoItem key={key} label={key} value={value} />)}</div>
+    <section className="mb-3 rounded-lg bg-white p-3 shadow-sm sm:p-4">
+      <h2 className="mb-3 text-sm font-bold sm:text-base">Informacion General</h2>
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {rows.map(([key, value]) => <InfoItem key={key} label={key} value={value} />)}
       </div>
     </section>
   );
 }
 
 function InfoItem({ label, value }) {
-  return <div><p className="text-xs font-bold text-slate-500">{label}</p><p>{value}</p></div>;
+  return (
+    <div className="min-w-0 rounded-md bg-slate-50 px-3 py-2">
+      <p className="text-[10px] font-bold text-slate-500">{label}</p>
+      <p className="truncate text-xs font-semibold text-slate-900 sm:text-sm">{value}</p>
+    </div>
+  );
+}
+
+function ActivitySection({ activity, setActivity, activities, onSubmit, onEdit }) {
+  const rows = [...activities].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  return (
+    <section className="rounded-lg border border-blue-200 bg-blue-50 p-3 sm:p-4">
+      <h2 className="mb-2 flex gap-2 text-sm font-bold text-blue-900 sm:text-base"><MessageSquare className="size-4" />Registrar nueva actividad</h2>
+      <Textarea className="min-h-24 bg-white text-sm" value={activity} onChange={(event) => setActivity(event.target.value)} placeholder="Describe que accion se realizo..." />
+      <Button className="mt-2 w-full" disabled={!activity.trim()} onClick={onSubmit}>Guardar actividad</Button>
+      <div className="mt-3 border-t border-blue-200 pt-3">
+        <h3 className="mb-2 text-xs font-bold text-blue-900">Historial de actividades ({rows.length})</h3>
+        <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
+          {rows.length ? rows.map((item) => (
+            <Tooltip key={item.id}>
+              <TooltipTrigger className="w-full">
+                <div className="flex w-full items-start justify-between gap-2 rounded border bg-white p-3 text-left text-sm">
+                  <p className="min-w-0 flex-1 whitespace-pre-wrap">{item.detalle}</p>
+                  <Button type="button" size="icon" variant="outline" className="size-8 shrink-0" onClick={(event) => { event.preventDefault(); onEdit(item); }}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{item.userName} - {formatDateTimeEs(item.createdAt)}</TooltipContent>
+            </Tooltip>
+          )) : <div className="w-full rounded border border-dashed bg-white p-5 text-center text-sm text-slate-500">No hay actividades</div>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function AgendaSection({ details, agenda, setAgenda, onSubmit }) {
+  const rows = [...details].sort((a, b) => new Date(b.createdAt || b.fechaAgenda || 0) - new Date(a.createdAt || a.fechaAgenda || 0));
   return (
-    <section className="mb-4 rounded-lg bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="flex gap-2 text-lg font-bold"><Calendar className="size-5" />Detalles de Agenda</h2>
+    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:p-4">
+      <h2 className="mb-2 flex gap-2 text-sm font-bold text-emerald-900 sm:text-base"><Calendar className="size-4" />Registrar nueva agenda</h2>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Fecha de agenda"><Input type="date" value={agenda.fechaAgenda} onChange={(event) => setAgenda((current) => ({ ...current, fechaAgenda: event.target.value }))} /></Field>
+        <Field label="Hora de agenda"><Input type="time" value={agenda.horaAgenda} onChange={(event) => setAgenda((current) => ({ ...current, horaAgenda: event.target.value }))} /></Field>
       </div>
-      <form onSubmit={onSubmit} className="mb-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-        <Field label="Fecha"><Input required type="date" value={agenda.fechaAgenda} onChange={(event) => setAgenda((current) => ({ ...current, fechaAgenda: event.target.value }))} /></Field>
-        <Field label="Hora"><Input required type="time" value={agenda.horaAgenda} onChange={(event) => setAgenda((current) => ({ ...current, horaAgenda: event.target.value }))} /></Field>
-        <div className="flex items-end"><Button type="submit" className="w-full">Agregar</Button></div>
-      </form>
-      <div className="space-y-2">
-        {details.map((detail) => (
-          <div key={detail.id} className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-            <p className="font-bold">{detail.fechaAgenda || "-"}</p>
-            <p>{detail.horaAgenda || "-"}</p>
-          </div>
-        ))}
-        {!details.length ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-slate-500">No hay agendas registradas.</div> : null}
+      <Button className="mt-2 w-full bg-emerald-600 text-white hover:bg-emerald-700" disabled={!agenda.fechaAgenda || !agenda.horaAgenda} onClick={onSubmit}>Guardar agenda</Button>
+      <div className="mt-3 border-t border-emerald-200 pt-3">
+        <h3 className="mb-2 text-xs font-bold text-emerald-900">Historial de agenda ({rows.length})</h3>
+        <div className="max-h-36 space-y-2 overflow-y-auto pr-1">
+          {rows.map((detail) => (
+            <div key={detail.id} className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
+              <p className="font-bold">{formatDateEs(detail.fechaAgenda)} - {formatTimeEs(detail.horaAgenda)}</p>
+            </div>
+          ))}
+          {!rows.length ? <div className="rounded border border-dashed bg-white p-5 text-center text-sm text-slate-500">No hay agendas registradas</div> : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MaintenanceSection({ maintenance, setMaintenance, onSubmit }) {
+  return (
+    <section className="mb-4 rounded-lg border border-amber-200 bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-3 flex flex-col gap-1">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-amber-900 sm:text-base">
+          <Wrench className="size-4" />Agregar mantenimiento
+        </h2>
+        <p className="text-xs font-medium text-slate-500">
+          Al guardar se cierra la oportunidad y se recalcula el proximo mantenimiento del vehiculo.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <Field label="Fecha de mantenimiento">
+          <Input
+            type="date"
+            value={maintenance.fechaVisitaTaller}
+            onChange={(event) => setMaintenance((current) => ({ ...current, fechaVisitaTaller: event.target.value }))}
+          />
+        </Field>
+        <Field label="Kilometraje">
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            value={maintenance.kilometrajeTaller}
+            onChange={(event) => setMaintenance((current) => ({ ...current, kilometrajeTaller: event.target.value }))}
+            placeholder="Opcional"
+          />
+        </Field>
+        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={!maintenance.fechaVisitaTaller} onClick={onSubmit}>
+          <Wrench className="size-4" />Guardar
+        </Button>
       </div>
     </section>
   );
@@ -477,30 +543,40 @@ function NativeSelect({ value, onChange, options }) {
   return <select value={value} onChange={onChange} className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400">{options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</select>;
 }
 
-function History({ activities, onEdit }) {
-  return (
-    <section className="mb-4 rounded-lg bg-white p-5 shadow-sm">
-      <h2 className="mb-3 font-bold">Historial ({activities.length})</h2>
-      <div className="space-y-2">
-        {activities.length ? activities.map((activity) => (
-          <Tooltip key={activity.id}>
-            <TooltipTrigger className="w-full">
-              <div className="flex w-full items-start justify-between gap-3 rounded border bg-white p-3 text-left">
-                <div>
-                  <p className="whitespace-pre-wrap">{activity.detalle}</p>
-                  <p className="mt-2 text-xs font-bold text-slate-500">{activity.etapaNombre || "Sin etapa"}</p>
-                </div>
-                <Button type="button" size="icon" variant="outline" onClick={(event) => { event.preventDefault(); onEdit(activity); }}>
-                  <Pencil className="size-4" />
-                </Button>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>{activity.userName} - {new Date(activity.createdAt).toLocaleString("es-PE")}</TooltipContent>
-          </Tooltip>
-        )) : <div className="w-full rounded border border-dashed p-6 text-center text-slate-500">No hay actividades</div>}
-      </div>
-    </section>
-  );
+function formatDateEs(value) {
+  if (!value) return "-";
+  const rawValue = String(value);
+  const raw = rawValue.match(/\d{4}-\d{2}-\d{2}/)?.[0] || rawValue.slice(0, 10);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return raw || "-";
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (Number.isNaN(date.getTime())) return raw;
+  return new Intl.DateTimeFormat("es-PE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatTimeEs(value) {
+  if (!value) return "-";
+  return String(value).slice(0, 5);
+}
+
+function formatDateTimeEs(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("es-PE", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function todayInputDate() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function ActivityDialog({ item, onClose, onSubmit }) {

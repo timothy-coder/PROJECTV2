@@ -83,22 +83,22 @@ export default async function Page({ params }) {
     const totalTax = vehicleFinal - vehicleNet + accessoriesTotal - accessoriesNet + giftsTotal - giftsNet;
     const grandTotal = vehicleFinal + accessoriesTotal + giftsTotal + quoteTramite;
     return (
-      <main className="min-h-full bg-slate-50 p-4 text-slate-950">
-        <div id="quote-preview-root" className="mx-auto max-w-6xl space-y-5">
-          <header className="flex flex-wrap items-start justify-between gap-3">
+      <main className="min-h-full bg-slate-50 p-2 text-slate-950 sm:p-3 lg:p-4">
+        <div id="quote-preview-root" className="mx-auto max-w-6xl space-y-3 lg:space-y-4">
+          <header className="rounded-lg border bg-white p-3 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-3">
             <div>
-              <h1 className="text-3xl font-bold">Resumen de Cotización</h1>
+              <h1 className="text-lg font-bold leading-tight sm:text-xl lg:text-2xl">Resumen de Cotización</h1>
               <p className="text-sm text-slate-600">Q-{String(quote.id).padStart(6, "0")}</p>
             </div>
-            <div className="flex gap-2">
-              <Link className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-bold shadow-sm" href={`/oportunidades/${quote.oportunidad_pk}`}><ArrowRight className="size-4" />Ir a Oportunidad</Link>
-              <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-bold text-white shadow-sm" href={`/reservas`}><ArrowRight className="size-4" />Llevar a Reserva</Link>
-              <CreateReservationButton opportunityId={quote.oportunidad_pk} quoteId={quote.id} />
+            <div className="mt-3 grid gap-2 sm:mt-0 sm:flex sm:flex-wrap sm:justify-end">
+              <Link className="inline-flex h-9 items-center justify-center gap-2 rounded-md border bg-white px-3 text-xs font-bold shadow-sm hover:bg-slate-50 sm:text-sm" href={`/oportunidades/${quote.oportunidad_pk}`}><ArrowRight className="size-4" />Oportunidad</Link>
+              <Link className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 shadow-sm hover:bg-blue-100 sm:text-sm" href={`/reservas`}><ArrowRight className="size-4" />Reservas</Link>
+              <CreateReservationButton opportunityId={quote.oportunidad_pk} quoteId={quote.id} className="w-full text-xs sm:w-auto sm:text-sm" />
             </div>
           </header>
-          <section className="rounded-xl border border-violet-200 bg-violet-50 p-5">
-            <h2 className="mb-8 font-bold text-violet-800">Información de la Oportunidad</h2>
-            <div className="grid gap-6 md:grid-cols-3">
+          <section className="rounded-lg border border-violet-200 bg-violet-50 p-3 sm:p-4">
+            <h2 className="mb-3 text-sm font-bold text-violet-800">Información de la Oportunidad</h2>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
               <IconInfo icon={UserRound} label="Cliente" value={quote.cliente} sub={quote.email} />
               <IconInfo icon={MapPin} label="Oportunidad" value={quote.oportunidad_id} sub={quote.origen || "-"} />
               <IconInfo icon={Check} label="Etapa" value="Cotización" />
@@ -107,15 +107,15 @@ export default async function Page({ params }) {
               <IconInfo icon={CalendarDays} label="Fecha Agendada" value={formatDate(quote.fecha_agenda)} />
             </div>
           </section>
-          <section className="rounded-xl border bg-white p-5 shadow-sm">
-            <h2 className="mb-10 font-bold">Información General - Vehí­culo</h2>
-            <div className="grid gap-8 md:grid-cols-4">
+          <section className="rounded-lg border bg-white p-3 shadow-sm sm:p-4">
+            <h2 className="mb-3 text-sm font-bold">Información General - Vehí­culo</h2>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Info label="Marca" value={quote.marca} /><Info label="Modelo" value={quote.modelo} /><Info label="Versión" value={quote.version} /><Info label="Año" value={quote.anio || "-"} />
               <Info label="Color Ext." value={quote.color_externo || "-"} /><Info label="Color Int." value={quote.color_interno || "-"} /><Info label="Dias de validez de la cotizacion" value={quote.sku || "N/A"} /><Info label="Estado" value={quote.estado} accent />
             </div>
             <QuoteVehicleColorEditor quoteId={id} colorExterno={quote.color_externo || ""} colorInterno={quote.color_interno || ""} />
           </section>
-          <details className="group rounded-xl border border-blue-200 bg-blue-50 p-5">
+          <details className="group rounded-lg border border-blue-200 bg-blue-50 p-3 sm:p-4">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
               <div>
                 <h2 className="font-bold text-blue-900">Especificaciones del Modelo</h2>
@@ -124,7 +124,7 @@ export default async function Page({ params }) {
               <span className="rounded-md border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-800 group-open:hidden">Ver detalle</span>
               <span className="hidden rounded-md border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-800 group-open:inline">Ocultar</span>
             </summary>
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {specGroups.map((group) => (
                 <SpecGroup key={group.id} group={group} />
               ))}
@@ -135,9 +135,9 @@ export default async function Page({ params }) {
               ) : null}
             </div>
           </details>
-          <section className="rounded-xl border border-orange-200 bg-orange-50 p-5">
-            <h2 className="mb-8 font-bold text-orange-900">Precio del Vehí­culo</h2>
-            <div className="grid gap-4 md:grid-cols-4">
+          <section className="rounded-lg border border-orange-200 bg-orange-50 p-3 sm:p-4">
+            <h2 className="mb-3 text-sm font-bold text-orange-900">Precio del Vehí­culo</h2>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
               <InfoBox label="Modelo/Versión" value={`${quote.modelo} ${quote.version}`} />
               <InfoBox label="Stock" value={quote.en_stock ? "Disponible" : "Bajo pedido"} green={quote.en_stock} />
               <InfoBox label="Entrega (dí­as)" value={quote.tiempo_entrega_dias || 0} />
@@ -145,8 +145,8 @@ export default async function Page({ params }) {
               <InfoBox label="T.C. Referencial" value={quote.tc_referencial ? Number(quote.tc_referencial).toFixed(4) : "-"} />
               <InfoBox label="$ Precio tramite" value={money(quoteTramite)} orange />
             </div>
-            {vehicleDiscount ? <div className="mt-5 rounded-lg border border-orange-300 bg-orange-100 p-3 text-sm font-bold text-orange-900">Descuento aplicado: -{money(vehicleDiscount)} ({Number(quote["descuento_veh\u00edculo_porcentaje"] || 0).toFixed(2)}%)</div> : null}
-            <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehí­culo:</p><p className="text-xl font-bold text-blue-800">{money(vehicleFinal)}</p></div>
+            {vehicleDiscount ? <div className="mt-3 rounded-lg border border-orange-300 bg-orange-100 p-2 text-xs font-bold text-orange-900 sm:text-sm">Descuento aplicado: -{money(vehicleDiscount)} ({Number(quote["descuento_veh\u00edculo_porcentaje"] || 0).toFixed(2)}%)</div> : null}
+            <div className="mt-3 rounded-lg border border-blue-300 bg-blue-50 p-3"><p className="text-xs font-bold text-blue-700">Precio final del vehí­culo:</p><p className="text-2xl font-bold text-blue-800 sm:text-xl">{money(vehicleFinal)}</p></div>
             <QuoteVehiclePricingEditor
               quoteId={id}
               precioBase={quoteBasePrice}
@@ -173,33 +173,33 @@ export default async function Page({ params }) {
               price: Number(item.precio_venta ?? item.precio_compra ?? 0),
             }))}
           />
-          <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5">
-            <h2 className="mb-6 font-bold text-emerald-900">Resumen General</h2>
-            <div className="grid gap-4 md:grid-cols-3">
+          <section className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 sm:p-4">
+            <h2 className="mb-3 text-sm font-bold text-emerald-900">Resumen General</h2>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               <SummaryBox label="Precio Vehiculo" sub={`S/IGV: ${money(quoteBasePrice / 1.18)}`} value={money(quoteBasePrice)} />
               
               <SummaryBox label="Accesorios (c/IGV)" sub={`c/desc: ${money(accessoriesTotal)}`} value={money(accessoriesGross)} />
               <SummaryBox label="Regalos (c/IGV)" sub={`c/desc: ${money(giftsTotal)}`} value={money(giftsGross)} />
               <SummaryBox label="Tramite" value={money(quoteTramite)} />
             </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
               <SummaryBox label="Desc. Vehiculo" value={discountMoney(vehicleDiscount)} danger />
               <SummaryBox label="Total Descuentos" value={discountMoney(itemDiscounts)} danger />
             </div>
-            <div className="mt-4 grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-2">
+            <div className="mt-2 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 md:grid-cols-2">
               <SummaryDetail label="Subtotal S/IGV:" value={money(subtotalNet)} blue />
               <SummaryDetail label="IGV Total (18%):" value={`+${money(totalTax)}`} green />
             </div>
-            <div className="mt-4 rounded-xl border border-emerald-500 bg-white p-5">
+            <div className="mt-3 rounded-lg border border-emerald-500 bg-white p-3 sm:p-4">
               <p className="text-xs font-bold text-slate-600">GRAN TOTAL (CON IGV Y DESC.)</p>
-              <p className="mt-3 text-5xl font-bold text-emerald-700">{money(grandTotal)}</p>
-              <div className="mt-3 space-y-1 text-xs text-slate-500">
+              <p className="mt-1 text-3xl font-bold text-emerald-700 sm:text-4xl">{money(grandTotal)}</p>
+              <div className="mt-2 grid gap-1 text-xs text-slate-500 sm:grid-cols-3">
                 <p>Incluye vehiculo, accesorios y regalos</p>
                 <p>Con todos los descuentos aplicados</p>
                 <p>IGV incluido en el total</p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
               <p className="mb-3 text-xs font-bold text-blue-900">Desglose Detallado:</p>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
@@ -230,10 +230,10 @@ export default async function Page({ params }) {
   }
 }
 
-function IconInfo({ icon: Icon, label, value, sub }) { return <div className="flex gap-3"><Icon className="mt-1 size-4 text-violet-700" /><div><p className="text-xs text-slate-600">{label}</p><p className="font-bold">{value || "-"}</p>{sub ? <p className="text-xs text-slate-500">{sub}</p> : null}</div></div>; }
-function Info({ label, value, accent }) { return <div><p className="text-xs text-slate-600">{label}</p><p className={`font-bold ${accent ? "text-blue-700" : ""}`}>{value}</p></div>; }
-function InfoBox({ label, value, green, orange, red }) { return <div className="rounded-lg border bg-white p-4"><p className="text-xs text-slate-600">{label}</p><p className={`font-bold ${green ? "text-emerald-700" : orange ? "text-orange-700" : red ? "text-red-600" : ""}`}>{value}</p></div>; }
-function SummaryBox({ label, sub, value, danger }) { return <div className={`rounded-lg border bg-white p-4 ${danger ? "border-red-200 bg-red-50" : "border-emerald-200"}`}><p className="text-xs text-slate-600">{label}</p>{sub ? <p className="text-xs text-slate-500">{sub}</p> : null}<p className={`mt-1 text-lg font-bold ${danger ? "text-red-600" : "text-slate-950"}`}>{value}</p></div>; }
+function IconInfo({ icon: Icon, label, value, sub }) { return <div className="flex min-w-0 gap-2"><Icon className="mt-1 size-4 shrink-0 text-violet-700" /><div className="min-w-0"><p className="text-[11px] text-slate-600">{label}</p><p className="truncate text-sm font-bold">{value || "-"}</p>{sub ? <p className="truncate text-[11px] text-slate-500">{sub}</p> : null}</div></div>; }
+function Info({ label, value, accent }) { return <div className="min-w-0 rounded-md bg-slate-50 p-2"><p className="text-[11px] text-slate-600">{label}</p><p className={`truncate text-sm font-bold ${accent ? "text-blue-700" : ""}`}>{value}</p></div>; }
+function InfoBox({ label, value, green, orange, red }) { return <div className="min-w-0 rounded-lg border bg-white p-3"><p className="text-[11px] text-slate-600">{label}</p><p className={`truncate text-sm font-bold ${green ? "text-emerald-700" : orange ? "text-orange-700" : red ? "text-red-600" : ""}`}>{value}</p></div>; }
+function SummaryBox({ label, sub, value, danger }) { return <div className={`min-w-0 rounded-lg border bg-white p-3 ${danger ? "border-red-200 bg-red-50" : "border-emerald-200"}`}><p className="text-[11px] text-slate-600">{label}</p>{sub ? <p className="truncate text-[11px] text-slate-500">{sub}</p> : null}<p className={`mt-1 truncate text-sm font-bold sm:text-base ${danger ? "text-red-600" : "text-slate-950"}`}>{value}</p></div>; }
 function SummaryDetail({ label, value, blue, green }) { return <div><p className="text-xs text-slate-600">{label}</p><p className={`text-sm font-bold ${blue ? "text-blue-700" : green ? "text-emerald-700" : "text-slate-950"}`}>{value}</p></div>; }
 function discountMoney(value) { return Number(value || 0) > 0 ? `-${money(value)}` : "$0.00"; }
 function buildSpecGroups(rows) {

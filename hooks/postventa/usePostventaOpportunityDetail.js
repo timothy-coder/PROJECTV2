@@ -21,8 +21,9 @@ export function usePostventaOpportunityDetail(id) {
 
   const actions = useMemo(() => ({
     save: async (payload) => {
-      await apiFetch(`/api/postventa-opportunities/${id}`, { method: "POST", body: JSON.stringify(payload) });
+      const result = await apiFetch(`/api/postventa-opportunities/${id}`, { method: "POST", body: JSON.stringify(payload) });
       await reload();
+      return result;
     },
     createAppointment: async (payload) => {
       const result = await apiFetch("/api/postventa-appointments", { method: "POST", body: JSON.stringify({ ...payload, oportunidadId: id }) });

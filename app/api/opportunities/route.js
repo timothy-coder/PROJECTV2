@@ -109,6 +109,7 @@ export async function GET(request) {
     const ids = opportunityRows.map((row) => row.id);
     let detailRows = [];
     let activityRows = [];
+    let closureRows = [];
     if (ids.length) {
       const [details] = await pool.query(`SELECT * FROM ventas_oportunidades_detalles WHERE oportunidad_padre_id IN (?) ORDER BY created_at ASC`, [ids]);
       const [activities] = await pool.query(
@@ -119,8 +120,17 @@ export async function GET(request) {
          WHERE a.oportunidad_id IN (?) ORDER BY a.created_at ASC`,
         [ids]
       );
+      const [closures] = await pool.query(
+        `SELECT c.oportunidad_id, c.detalle, c.created_at, cd.detalle AS clasificacion
+         FROM ventas_oportunidades_cierres c
+         LEFT JOIN configuracion_ventas_cierres_detalle cd ON cd.id = c.cierre_detalle_id
+         WHERE c.oportunidad_id IN (?)
+         ORDER BY c.created_at ASC`,
+        [ids]
+      );
       detailRows = details;
       activityRows = activities;
+      closureRows = closures;
     }
     const [clients] = await pool.query(
       `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre, identificacion_fiscal
@@ -153,16 +163,22 @@ export async function GET(request) {
       opportunities: opportunityRows.map((row) => {
         const details = detailRows.filter((detail) => detail.oportunidad_padre_id === row.id);
         const activities = activityRows.filter((activity) => activity.oportunidad_id === row.id);
+        const closures = closureRows.filter((closure) => closure.oportunidad_id === row.id);
         const currentOrder = Number(row.etapa_orden || row.etapasconversion_id);
         const temperature = stageTemps.filter((stage) => stage.order <= currentOrder).reduce((sum, stage) => sum + stage.temp, 0);
         const lastDetail = details.at(-1);
         const lastActivity = activities.at(-1);
+        const lastClosure = closures.at(-1);
         const agendaDate = datePart(lastDetail?.fecha_agenda);
         const agendaTime = timePart(lastDetail?.hora_agenda);
         const agendaAt = agendaDate && agendaTime ? new Date(`${agendaDate}T${agendaTime}`) : null;
         const minutesUntilAgenda = agendaAt ? Math.round((agendaAt.getTime() - now.getTime()) / 60000) : null;
         const normalizedStage = normalizeStageName(row.etapa_nombre);
         const stageUsesTimeState = !["cerrada", "cerrado", "venta facturada"].includes(normalizedStage);
+        const isClosedStage = ["cerrada", "cerrado"].includes(normalizedStage);
+        const listDetail = isClosedStage
+          ? (lastClosure?.clasificacion || lastClosure?.detalle || lastActivity?.detalle || "-")
+          : (lastActivity?.detalle || "-");
         const timeState = stageUsesTimeState && minutesUntilAgenda !== null
           ? timeStates.find((state) => minutesUntilAgenda >= Number(state.minutos_desde) && minutesUntilAgenda <= Number(state.minutos_hasta))
           : null;
@@ -194,7 +210,7 @@ export async function GET(request) {
             color: timeState.color_hexadecimal,
             descripcion: timeState.descripcion || "",
           } : null,
-          detail: lastActivity?.detalle || "-",
+          detail: listDetail,
           temperature,
           details: details.map((detail) => ({ id: detail.id, fechaAgenda: datePart(detail.fecha_agenda), horaAgenda: timePart(detail.hora_agenda), createdAt: detail.created_at })),
           activities: activities.map((activity) => ({ id: activity.id, detalle: activity.detalle || "", etapaNombre: activity.etapa_nombre || "", createdByNombre: activity.created_by_nombre, createdAt: activity.created_at })),

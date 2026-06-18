@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, Eye, FileText, Plus, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Download, Eye, FileText, MoreVertical, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -73,6 +73,7 @@ export default function ReservationDetailPage({ id }) {
   const { data, loading, update } = useReservationDetail(id);
   const [carDataOpen, setCarDataOpen] = useState(false);
   const [headerObservaciones, setHeaderObservaciones] = useState(null);
+  const [reservationSaveState, setReservationSaveState] = useState("guardado");
   if (loading || !data) return <div className="p-4">Cargando reserva...</div>;
   const { reservation, detail, currentUser, vins, accessories, gifts, options, salesBossName, vinReleaseRequest } = data;
   const isSigned = reservation.estado === "firmado";
@@ -118,18 +119,22 @@ export default function ReservationDetailPage({ id }) {
         @font-face { font-family: Autography; src: url('/fonts/Autography.ttf') format('truetype'); }
       `}</style>
       <div className="flex flex-1 flex-col lg:min-h-0">
-        <header className="shrink-0 border-b pb-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <header className="shrink-0 border-b border-violet-200 bg-slate-50 pb-3">
+          <div className="flex flex-wrap items-start gap-3">
             <Link className="inline-flex size-8 items-center justify-center rounded-md border bg-white hover:bg-slate-50" href="/reservas"><ArrowLeft className="size-4" /></Link>
-            <div>
-              <h1 className="text-xl font-bold">Reserva #{reservation.id} <StatusBadge estado={reservation.estado} /></h1>
-              <p className="text-sm text-slate-600">Oportunidad #{reservation.oportunidadCode} - Cliente: <b>{reservation.cliente}</b> - Vehiculo: <b>{detail.marca} {detail.modelo} {detail.anio}</b></p>
+            <div className="min-w-0">
+              <h1 className="flex flex-wrap items-center gap-2 text-base font-bold leading-tight text-violet-700">
+                <span>Nota de Pedido N° {reservation.id}</span>
+                <StatusBadge estado={reservation.estado} />
+                <SaveStateBadge state={reservationSaveState} />
+              </h1>
+              <p className="mt-0.5 text-xs font-medium text-violet-400">Oportunidad #{reservation.oportunidadCode} - Cliente: <b>{reservation.cliente}</b> - Vehiculo: <b>{detail.marca} {detail.modelo} {detail.anio}</b></p>
             </div>
           </div>
         </header>
         <div className="mt-3 grid shrink-0 gap-2 lg:grid-cols-3">
           {currentUser.reservationStatusActions?.observe ? (
-            <ActionCard title="Observaciones">
+            <ActionCard title="Observaciones" className="lg:col-span-1">
               <Textarea
                 disabled={isSigned}
                 value={displayedHeaderObservaciones}
@@ -143,30 +148,23 @@ export default function ReservationDetailPage({ id }) {
               ) : null}
             </ActionCard>
           ) : null}
-          <ActionCard title="Acciones" className="lg:col-span-1">
-            <div className="flex flex-col gap-1.5">
-              {reservation.oportunidadId ? <Link className="inline-flex h-7 items-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-3.5" />Ver Oportunidad</Link> : null}
-              <Button variant="outline" className="h-7 px-2 text-xs" onClick={downloadReservationPdf}><Download className="size-3.5" />PDF</Button>
-              {isSigned && detail?.vin ? (
-                <VinReleaseControls
-                  currentUser={currentUser}
-                  request={vinReleaseRequest}
-                  vin={detail.vin}
-                  onAction={resolveVinRelease}
-                />
-              ) : null}
-              {isSigned && detail?.vin && currentUser.canCarData ? (
-                <Button className="h-7 bg-slate-950 px-2 text-xs text-white hover:bg-slate-800" onClick={() => setCarDataOpen(true)}>
-                  Datos del carro
-                </Button>
-              ) : null}
-              <ReservationStatusButtons reservation={reservation} currentUser={currentUser} update={update} />
-            </div>
+          <ActionCard title="Acciones" className={currentUser.reservationStatusActions?.observe ? "lg:col-span-2" : "lg:col-span-3"}>
+            <ReservationActions
+              reservation={reservation}
+              currentUser={currentUser}
+              detail={detail}
+              isSigned={isSigned}
+              vinReleaseRequest={vinReleaseRequest}
+              onDownload={downloadReservationPdf}
+              onCarData={() => setCarDataOpen(true)}
+              onVinRelease={resolveVinRelease}
+              update={update}
+            />
           </ActionCard>
         </div>
         <div className="flex-1 pr-1 lg:min-h-0 lg:overflow-y-auto">
           <div className="hidden"><ReservationPdfPreview reservation={reservation} detail={detail} accessories={accessories || []} gifts={gifts || []} telefono2={telefono2} /></div>
-          <ReservationForm reservation={reservation} detail={detail} vins={vins} accessories={accessories || []} gifts={gifts || []} options={options || { accessories: [], gifts: [] }} update={update} readOnly={isSigned} />
+          <ReservationForm reservation={reservation} detail={detail} vins={vins} accessories={accessories || []} gifts={gifts || []} options={options || { accessories: [], gifts: [] }} update={update} readOnly={isSigned} onSaveStateChange={setReservationSaveState} salesBossName={salesBossName || "Jefe de Ventas"} />
         </div>
         {carDataOpen ? (
           <CarDataDialog
@@ -414,6 +412,58 @@ function ReservationStatusButtons({ reservation, currentUser, update }) {
   return observeButton;
 }
 
+function ReservationActions({ reservation, currentUser, detail, isSigned, vinReleaseRequest, onDownload, onCarData, onVinRelease, update }) {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <div className="hidden grid-cols-2 gap-2 md:grid">
+        <div className="flex flex-col gap-1.5">
+          {reservation.oportunidadId ? <Link className="inline-flex h-8 items-center justify-center gap-1 rounded-md border bg-white px-2 text-xs font-medium hover:bg-slate-50" href={`/oportunidades/${reservation.oportunidadId}`}><Eye className="size-3.5" />Ver Oportunidad</Link> : null}
+          <Button variant="outline" className="h-8 px-2 text-xs" onClick={onDownload}><Download className="size-3.5" />PDF</Button>
+          {isSigned && detail?.vin && currentUser.canCarData ? (
+            <Button className="h-8 bg-slate-950 px-2 text-xs text-white hover:bg-slate-800" onClick={onCarData}>
+              Datos del carro
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {isSigned && detail?.vin ? (
+            <VinReleaseControls
+              currentUser={currentUser}
+              request={vinReleaseRequest}
+              vin={detail.vin}
+              onAction={onVinRelease}
+            />
+          ) : null}
+          <ReservationStatusButtons reservation={reservation} currentUser={currentUser} update={update} />
+        </div>
+      </div>
+      <div className="relative md:hidden">
+        <Button type="button" variant="outline" className="h-9 w-full justify-center text-xs" onClick={() => setOpen((value) => !value)}>
+          <MoreVertical className="size-4" /> Acciones
+        </Button>
+        {open ? (
+          <div className="absolute right-0 top-11 z-40 w-full rounded-lg border bg-white p-1 text-xs shadow-xl">
+            {reservation.oportunidadId ? <Link className="block rounded-md px-3 py-2 font-semibold hover:bg-slate-100" href={`/oportunidades/${reservation.oportunidadId}`} onClick={close}>Ver Oportunidad</Link> : null}
+            <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-semibold hover:bg-slate-100" onClick={() => { close(); onDownload(); }}>PDF</button>
+            {isSigned && detail?.vin && currentUser.canCarData ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-semibold hover:bg-slate-100" onClick={() => { close(); onCarData(); }}>Datos del carro</button> : null}
+            <div className="my-1 border-t" />
+            {isSigned && detail?.vin ? (
+              <div className="px-1 py-1">
+                <VinReleaseControls currentUser={currentUser} request={vinReleaseRequest} vin={detail.vin} onAction={(action, extra) => { close(); onVinRelease(action, extra); }} />
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-1 px-1 py-1" onClick={close}>
+              <ReservationStatusButtons reservation={reservation} currentUser={currentUser} update={update} />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 function CarDataDialog({ open, onOpenChange, detail, update }) {
   const [form, setForm] = useState(() => ({
     numeroFactura: detail?.carEvent?.numeroFactura || "",
@@ -508,7 +558,7 @@ function VinReleaseControls({ currentUser, request, vin, onAction }) {
   );
 }
 
-function ReservationForm({ reservation, detail, vins, accessories, gifts, options, update, readOnly }) {
+function ReservationForm({ reservation, detail, vins, accessories, gifts, options, update, readOnly, onSaveStateChange, salesBossName }) {
   const [form, setForm] = useState({
     ...detail,
     clienteDocumento: reservation.documento || "",
@@ -635,6 +685,9 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
     await saveQuoteItem({ type, mode: "delete", itemId: item.id });
   };
   useEffect(() => {
+    onSaveStateChange?.(saveState);
+  }, [onSaveStateChange, saveState]);
+  useEffect(() => {
     if (readOnly) return undefined;
     if (firstRender.current) {
       firstRender.current = false;
@@ -653,10 +706,6 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
   }, [form, readOnly, total, update]);
   return (
     <section className="rounded-lg border bg-white shadow-sm">
-      <div className="m-2 flex items-center justify-between rounded-md border bg-white px-3 py-2 font-bold shadow-sm lg:sticky lg:top-0 lg:z-20">
-        <span><FileText className="mr-2 inline size-4" />NOTA DE PEDIDO</span>
-        <span className={`rounded-md border px-2 py-1 text-xs ${saveState === "error" ? "border-red-200 bg-red-50 text-red-600" : saveState === "guardando" ? "border-orange-200 bg-orange-50 text-orange-600" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{saveState === "guardando" ? "Autoguardando..." : saveState === "error" ? "Error al guardar" : "Autoguardado"}</span>
-      </div>
       <EditableReservationFormat
         reservation={reservation}
         form={form}
@@ -692,6 +741,7 @@ function ReservationForm({ reservation, detail, vins, accessories, gifts, option
         onAddGift={() => setItemDialog({ type: "gift", item: null })}
         onEditGift={(item) => setItemDialog({ type: "gift", item })}
         onDeleteGift={(item) => removeQuoteItem("gift", item)}
+        salesBossName={salesBossName}
       />
       <div className="hidden">
         <Block title="DATOS DEL CLIENTE">
@@ -947,6 +997,7 @@ function EditableReservationFormat({
   onAddGift,
   onEditGift,
   onDeleteGift,
+  salesBossName,
 }) {
   const updateField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const editableInputClass = "h-5 rounded-[2px] border border-dashed border-slate-300 bg-white/80 px-1 py-0 text-[11px] shadow-none focus-visible:border-blue-500 focus-visible:ring-1 focus-visible:ring-blue-200 disabled:border-transparent disabled:bg-transparent";
@@ -991,12 +1042,12 @@ function EditableReservationFormat({
   while (visibleDeposits.length < 7) visibleDeposits.push(null);
 
   return (
-    <div className="overflow-x-auto px-2 pb-4 pt-1">
-      <div className="w-full min-w-[980px] border border-black bg-white px-7 py-5 font-sans text-[11px] leading-tight text-black">
-        <div className="grid grid-cols-4 items-start gap-y-1">
+    <div className="px-2 pb-4 pt-1 lg:overflow-x-auto">
+      <div className="w-full min-w-0 border border-black bg-white px-3 py-4 font-sans text-[11px] leading-tight text-black sm:px-5 lg:min-w-[980px] lg:px-7 lg:py-5">
+        <div className="grid grid-cols-2 items-start gap-y-1 lg:grid-cols-4">
           <Image src="/uploads/ventas-plantillas/1778903861360-27945a90-a2e4-4c59-8e71-dbb8da209848.jpg" alt="Wankamotors" width={144} height={44} className="h-11 w-36 object-contain object-left" />
-          <div />
-          <div />
+          <div className="hidden lg:block" />
+          <div className="hidden lg:block" />
           <Image src={reservationBrandLogoPath(form.marca || detail.marca || reservation.marca)} alt="Marca" width={80} height={56} className="ml-auto h-14 w-20 object-contain object-right" />
           <div className="font-bold">Asesor</div><div className="font-bold">{reservation.creadoPor || ""}</div>
           <div className="font-bold">Fecha</div><div>{shortDate(reservation.createdAt)}</div>
@@ -1004,17 +1055,15 @@ function EditableReservationFormat({
           <div className="font-bold">Campaña</div><div>{reservation.campania || ""}</div>
         </div>
 
-        <div className="mt-2 border border-black bg-slate-100 py-1 text-center font-bold">NOTA DE PEDIDO - PERSONA {form.tipoPersona === "JURIDICA" ? "JURIDICA" : "NATURAL"}</div>
-
         <div className="border-x border-b border-black">
           <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL CLIENTE</div>
-          <div className="grid grid-cols-[150px_1fr_130px_150px]">
+          <div className="grid grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-[140px_minmax(0,1fr)_140px_minmax(0,1fr)]">
             {field("Tipo de comprobante", select(form.tipoComprobante, [{ value: "Boleta", label: "Boleta" }, { value: "Factura", label: "Factura" }], updateTipoComprobante))}
             {field("Tipo de persona", isFactura ? select(form.tipoPersona || "NATURAL_RUC", [{ value: "NATURAL_RUC", label: "Persona natural con RUC" }, { value: "JURIDICA", label: "Persona juridica" }], (value) => updateField("tipoPersona", value)) : textValue(isBoleta ? "Persona natural" : "Persona natural"))}
             {field("Razón social", input("clienteRazonSocial", form.clienteRazonSocial))}
-            <div /><div />
+            <div className="hidden lg:block" /><div className="hidden lg:block" />
             {field("Cliente /Repr legal", textValue(reservation.cliente))}
-            <div /><div />
+            <div className="hidden lg:block" /><div className="hidden lg:block" />
             {field("DNI / RUC", input("clienteDocumento", form.clienteDocumento))}
             {field("F. de nacimiento", input("clienteFechaNacimiento", form.clienteFechaNacimiento, { type: "date" }))}
             {field("Correo", input("clienteEmail", form.clienteEmail))}
@@ -1022,24 +1071,24 @@ function EditableReservationFormat({
             {field("Ocupación", input("clienteOcupacion", form.clienteOcupacion))}
             {field("Teléfono 2", textValue(telefono2))}
             {field("Domicilio", input("clienteDomicilio", form.clienteDomicilio))}
-            <div /><div />
+            <div className="hidden lg:block" /><div className="hidden lg:block" />
             {field("Distrito", input("clienteDistrito", form.clienteDistrito))}
             {field("Provincia", input("clienteProvincia", form.clienteProvincia))}
             {field("Departamento", input("clienteDepartamento", form.clienteDepartamento))}
-            <div className="col-span-4 flex items-center justify-between bg-white py-1">
+            <div className="col-span-2 flex items-center justify-between bg-white py-1 lg:col-span-4">
               <span />
               {!readOnly ? <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={onAddCoowner}><UserPlus className="size-3" />Agregar copropietario</Button> : null}
             </div>
             {field("Cónyuge/Copropiedad", input("clienteConyugue", conyugue))}
-            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-blue-700" onClick={() => onEditCoowner(item, index)}>Editar</button>)}</div><div />
+            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-blue-700" onClick={() => onEditCoowner(item, index)}>Editar</button>)}</div><div className="hidden lg:block" />
             {field("DNI Cónyuge", input("clienteDniConyugue", dniConyugue))}
-            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-red-600" onClick={() => onDeleteCoowner(index)}>Quitar</button>)}</div><div />
+            <div className="px-1 text-right">{(form.copropietarios || []).map((item, index) => <button key={item.id || index} type="button" className="ml-2 text-[10px] text-red-600" onClick={() => onDeleteCoowner(index)}>Quitar</button>)}</div><div className="hidden lg:block" />
           </div>
         </div>
 
         <div className="border-x border-b border-black">
           <div className="border-b border-black bg-slate-100 px-1 font-bold">DATOS DEL VEHICULO</div>
-          <div className="grid grid-cols-[120px_1fr_120px_1fr]">
+          <div className="grid grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-[120px_minmax(0,1fr)_120px_minmax(0,1fr)]">
             {field("Modelo", textValue(form.modelo))}
             {field("Versión", textValue(form.version))}
             {field("Chasis / VIN", form.vinExiste ? select(form.vin, vins, applySelectedVin) : <span className="text-red-600">{vinMessage}</span>)}
@@ -1048,7 +1097,7 @@ function EditableReservationFormat({
             {field("Año Modelo", input("anioModelo", form.anioModelo))}
             {field("Uso del vehículo / Placa", input("usoVehiculo", usoPlaca), "whitespace-nowrap")}
             {field("Código", input("codigo", form.codigo))}
-            <div className="col-span-4 px-1 py-1">
+            <div className="col-span-2 px-1 py-1 lg:col-span-4">
               <label className="inline-flex items-center gap-2 font-bold"><Switch disabled={readOnly} checked={form.vinExiste} onCheckedChange={(checked) => setForm((old) => ({ ...old, vinExiste: checked, vin: checked ? old.vin : "", numeroMotor: checked ? old.numeroMotor : "" }))} /> VIN existe</label>
             </div>
           </div>
@@ -1056,8 +1105,8 @@ function EditableReservationFormat({
 
         <div className="border-x border-b border-black">
           <div className="border-b border-black bg-slate-100 px-1 font-bold">TRANSACCION</div>
-          <div className="grid grid-cols-6">
-            <div className="col-span-2 bg-slate-100 px-1 font-bold">Precio de Lista (Valor incluye IGV)</div><div className="col-span-4 text-center font-bold">{input("precioUnitario", precioLista, { type: "number" })}</div>
+          <div className="grid grid-cols-2 lg:grid-cols-6">
+            <div className="bg-slate-100 px-1 font-bold lg:col-span-2">Precio de Lista (Valor incluye IGV)</div><div className="text-center font-bold lg:col-span-4">{input("precioUnitario", precioLista, { type: "number" })}</div>
             {discounts.map((discount) => (
               <div key={discount.key} className="contents">
                 <div className="bg-slate-100 px-1 font-bold">{discount.label}</div><div className="text-center">{input(discount.key, discount.value, { type: "number" })}</div>
@@ -1084,9 +1133,9 @@ function EditableReservationFormat({
           <div className="flex justify-end border-t border-black/20 py-1">
             {!readOnly ? <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={addDiscount}><Plus className="size-3" />Agregar descuento</Button> : null}
           </div>
-          <div className="grid grid-cols-4 pt-1">
+          <div className="grid grid-cols-[112px_minmax(0,1fr)] pt-1 lg:grid-cols-4">
             {field("T.C. Referencial", input("tcReferencial", form.tcReferencial, { type: "number", step: "0.0001" }))}
-            <div /><div />
+            <div className="hidden lg:block" /><div className="hidden lg:block" />
             {field("Forma de Pago", input("formaPago", form.formaPago))}
             {field("Tipo de crédito", input("tipoCredito", form.tipoCredito))}
             {field("Banco", input("banco", form.banco))}
@@ -1096,7 +1145,7 @@ function EditableReservationFormat({
             <span>Depósitos (Monto / Fecha / Banco / N° OP)</span>
             {!readOnly ? <Button type="button" size="sm" variant="ghost" className="h-6 text-[10px]" onClick={addDeposit}><Plus className="size-3" />Agregar</Button> : null}
           </div>
-          <div className="grid grid-cols-5">
+          <div className="grid grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-5">
             {visibleDeposits.slice(0, 7).map((dep, index) => (
               <div key={dep?.id || index} className="contents">
                 <div className="bg-slate-100 px-1 font-bold">Monto de depósito</div>
@@ -1124,32 +1173,32 @@ function EditableReservationFormat({
 
         <div className="border-x border-b border-black">
           <div className="border-b border-black bg-slate-100 px-1 font-bold">OTROS</div>
-          <div className="grid grid-cols-8">
+          <div className="grid grid-cols-[112px_minmax(0,1fr)] lg:grid-cols-8">
             {field("Considera GLP", select(form.glpSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("glpSn", value)))}
             {field("Precio", input("glp", isYes(form.glpSn) ? form.glp : "", { type: "number", disabled: !isYes(form.glpSn) }))}
             {field("Flete", select(form.fleteSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("fleteSn", value)))}
             {field("Precio", input("flete", isYes(form.fleteSn) ? form.flete : "", { type: "number", disabled: !isYes(form.fleteSn) }))}
             {field("Tarjeta y Placa", select(form.tarjetaSn || "NO", [{ value: "NO", label: "NO" }, { value: "SI", label: "SI" }], (value) => updateField("tarjetaSn", value)))}
             {field("Precio", input("tarjetaPlaca", isYes(form.tarjetaSn) ? form.tarjetaPlaca : "", { type: "number", disabled: !isYes(form.tarjetaSn) }))}
-            <div /><div />
+            <div className="hidden lg:block" /><div className="hidden lg:block" />
           </div>
           <EditablePdfItems title="Accesorios" rows={accessories} onAdd={onAddAccessory} onEdit={onEditAccessory} onDelete={onDeleteAccessory} readOnly={readOnly} />
           <EditablePdfItems title="Obsequios" rows={gifts} onAdd={onAddGift} onEdit={onEditGift} onDelete={onDeleteGift} readOnly={readOnly} />
         </div>
 
-        <div className="mt-2 grid grid-cols-4 gap-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px]">
+        <div className="mt-2 grid grid-cols-1 gap-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
           <p><b>Vehículo:</b> {money(baseTotal)}</p>
           <p><b>Accesorios:</b> {money(accessoriesTotal)}</p>
           <p><b>Regalos:</b> {money(giftsTotal)}</p>
           <p><b>Depósitos:</b> {money(depositsTotal)}</p>
           <p><b>Descuentos adicionales:</b> -{money(extraDiscountTotal)}</p>
-          <p className="col-span-3 text-right font-bold text-blue-700">TOTAL FINAL: {money(total)}</p>
+          <p className="font-bold text-blue-700 sm:col-span-2 lg:col-span-3 lg:text-right">TOTAL FINAL: {money(total)}</p>
         </div>
 
-        <div className="mt-10 grid grid-cols-3 gap-16 text-center">
-          <div><div className="border-t border-black pt-1">Cliente</div></div>
-          <div><div className="border-t border-black pt-1">Asesor de Ventas</div></div>
-          <div><div className="border-t border-black pt-1">Jefe de Ventas</div></div>
+        <div className="mt-10 grid gap-8 text-center sm:grid-cols-3 lg:gap-16">
+          <FormatSignature title="Cliente" />
+          <FormatSignature title="Asesor de Ventas" name={readOnly ? reservation.creadoPor : ""} />
+          <FormatSignature title="Jefe de Ventas" name={readOnly ? salesBossName : ""} />
         </div>
         <div className="mt-3 border border-black px-4 pb-3 pt-2 text-center">
           <div className="font-bold">OBSERVACIONES</div>
@@ -1189,6 +1238,17 @@ function EditablePdfItems({ title, rows, onAdd, onEdit, onDelete, readOnly }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function FormatSignature({ title, name = "" }) {
+  return (
+    <div>
+      <div className="flex h-9 items-end justify-center">
+        {name ? <span className="font-[Autography] text-2xl leading-none">{name}</span> : null}
+      </div>
+      <div className="border-t border-black pt-1">{title}</div>
     </div>
   );
 }
@@ -1245,7 +1305,12 @@ function ActionCard({ title, children, className = "lg:col-span-2" }) {
     </div>
   );
 }
-function StatusBadge({ estado }) { return <span className="ml-2 rounded-full bg-blue-100 px-2 py-1 align-middle text-xs font-bold text-blue-700">{estado}</span>; }
+function SaveStateBadge({ state }) {
+  const tone = state === "error" ? "border-red-200 bg-red-50 text-red-600" : state === "guardando" ? "border-orange-200 bg-orange-50 text-orange-600" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const label = state === "guardando" ? "Autoguardando..." : state === "error" ? "Error al guardar" : "Autoguardado";
+  return <span className={`rounded-md border px-2 py-1 text-xs font-bold ${tone}`}>{label}</span>;
+}
+function StatusBadge({ estado }) { return <span className="rounded-full bg-blue-100 px-2 py-1 align-middle text-xs font-bold text-blue-700">{estado}</span>; }
 
 function ReservationItemDialog({ dialog, options, onClose, onSubmit }) {
   const item = dialog.item;

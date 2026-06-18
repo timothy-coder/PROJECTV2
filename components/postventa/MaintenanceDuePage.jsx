@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, Eye, Loader2, MoreVertical, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -36,6 +36,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [vehicleDetail, setVehicleDetail] = useState(null);
   const [opportunityPicker, setOpportunityPicker] = useState(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [mobileActionId, setMobileActionId] = useState(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const tableContainerRef = useRef(null);
@@ -170,10 +172,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
     <div className="min-w-0 overflow-hidden bg-slate-50 p-3 text-slate-950 sm:p-4">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Proximos mantenimientos</h1>
-          <p className="text-sm text-slate-500">
-            Resumen de vehiculos y mantenimiento pronosticado {canViewAll ? "- Vista completa" : "- Mi vista"}
-          </p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">Proximos mantenimientos</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">Resumen de vehiculos y mantenimiento pronosticado {canViewAll ? "- Vista completa" : "- Mi vista"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -192,9 +192,13 @@ export default function MaintenanceDuePage({ userPermissions }) {
       </header>
 
       <section className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="mb-3 font-semibold">Vista general de proximos mantenimientos</h2>
+        <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 sm:hidden" onClick={() => setFiltersOpen((open) => !open)}>
+          Filtros
+          <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        <h2 className="mb-3 hidden font-semibold sm:block">Vista general de proximos mantenimientos</h2>
 
-        <div className="mb-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+        <div className={`${filtersOpen ? "grid" : "hidden"} mb-4 min-w-0 grid-cols-1 gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8`}>
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -313,7 +317,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
           Mostrando {rows.length} de {meta.total || 0} vehiculos segun la fecha de proximo mantenimiento.
         </p>
 
-        <div ref={tableContainerRef} className="max-w-full overflow-x-auto rounded-lg border">
+        <div ref={tableContainerRef} className="hidden max-w-full overflow-x-auto rounded-lg border sm:block">
           <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <thead className="bg-slate-100 text-xs font-bold text-slate-700">
               <tr>
@@ -409,6 +413,65 @@ export default function MaintenanceDuePage({ userPermissions }) {
               {!rows.length ? (
                 <tr>
                   <td colSpan={9} className="py-10 text-center text-slate-500">
+                    {data.loading ? "Cargando..." : "No hay vehiculos para mostrar"}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="overflow-visible rounded-lg border sm:hidden">
+          <table className="w-full table-fixed text-left text-xs">
+            <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-600">
+              <tr>
+                <th className="w-[42%] px-2 py-2">Cliente</th>
+                <th className="w-[36%] px-2 py-2">Mantenimiento</th>
+                <th className="w-[22%] px-2 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((item) => (
+                <tr key={item.id} className="align-top">
+                  <td className="px-2 py-3">
+                    <button type="button" className="line-clamp-2 text-left text-[11px] font-bold leading-tight text-slate-950" onClick={() => setClientDetail(item)}>
+                      {item.clienteNombre}
+                    </button>
+                    <button type="button" className="mt-1 line-clamp-2 text-left text-[10px] font-medium leading-tight text-slate-500" onClick={() => setVehicleDetail(item)}>
+                      {item.vehiculo}
+                    </button>
+                    {item.vin ? <p className="mt-1 truncate text-[9px] text-slate-400">VIN: {item.vin}</p> : null}
+                  </td>
+                  <td className="px-2 py-3">
+                    <div><DateBadge value={item.proximoMantenimiento} days={item.diasRestantes} /></div>
+                    <div className="mt-2"><DaysBadge value={item.diasRestantes} /></div>
+                    <p className="mt-1 text-[10px] text-slate-500">{item.calculo || "-"}</p>
+                  </td>
+                  <td className="relative px-2 py-3 text-right">
+                    <Button size="icon" variant="outline" className="size-8" onClick={() => setMobileActionId((current) => current === item.id ? null : item.id)}>
+                      <MoreVertical className="size-4" />
+                    </Button>
+                    {mobileActionId === item.id ? (
+                      <div className="absolute right-2 top-12 z-30 w-44 rounded-lg border border-slate-200 bg-white p-1 text-left text-xs shadow-xl">
+                        <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); setClientDetail(item); }}>Ver cliente</button>
+                        <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); setVehicleDetail(item); }}>Ver vehiculo</button>
+                        {item.oportunidadId && canOpenOpportunity ? (
+                          <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); openOpportunity(item); }}>
+                            Ver oportunidad{item.oportunidades?.length > 1 ? ` (${item.oportunidades.length})` : ""}
+                          </button>
+                        ) : null}
+                        {canCreate ? (
+                          <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => { setMobileActionId(null); setDialogVehicle(item); }}>
+                            {item.oportunidadId ? "Agregar oportunidad" : "Crear oportunidad"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {!rows.length ? (
+                <tr>
+                  <td colSpan={3} className="py-10 text-center text-slate-500">
                     {data.loading ? "Cargando..." : "No hay vehiculos para mostrar"}
                   </td>
                 </tr>

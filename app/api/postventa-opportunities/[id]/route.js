@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -45,6 +46,20 @@ function timePart(value) {
   if (!value) return "";
   if (value instanceof Date) return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
   return String(value).slice(11, 16) || String(value).slice(0, 5);
+}
+
+function numberValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function dateTimeValue(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 19).replace("T", " ");
+  const clean = String(value).trim();
+  if (!clean) return null;
+  return clean.length <= 10 ? `${clean} 00:00:00` : clean.replace("T", " ").slice(0, 19);
 }
 
 async function loadOpportunity(connection, id, user, canAll) {
@@ -322,6 +337,39 @@ export async function POST(request, { params }) {
         `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
          VALUES (?, ?, ?, ?)`,
         [id, opportunity.etapasconversionpv_id, `Agenda registrada: ${body.fechaAgenda} ${body.horaAgenda}`, user.id]
+      );
+    }
+    if (body.action === "maintenance") {
+      const fechaVisita = dateTimeValue(body.fechaVisitaTaller ?? body.fechaVisita ?? body.fecha);
+      const kilometraje = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+      if (!fechaVisita) {
+        await connection.rollback();
+        return NextResponse.json({ message: "La fecha de mantenimiento es obligatoria." }, { status: 400 });
+      }
+      const closeStageId = await closedStageId(connection);
+      if (!closeStageId) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No existe una etapa Cerrada/Cerrado configurada." }, { status: 400 });
+      }
+      await connection.query(
+        `INSERT INTO administracion_vehiculos_historial_mantenimientos
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [opportunity.vehiculo_id, fechaVisita, kilometraje, user.id]
+      );
+      const nextDate = await updateVehicleNextMaintenanceDate(connection, opportunity.vehiculo_id);
+      const maintenanceDate = datePart(fechaVisita);
+      const closeDetail = `Mantenimiento el dia ${maintenanceDate}`;
+      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [closeStageId, id]);
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_cierres (oportunidad_id, detalle, cierre_detalle_id, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, closeDetail, null, user.id]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, closeStageId, `${closeDetail}. Proximo mantenimiento recalculado${nextDate ? `: ${nextDate}` : ""}`, user.id]
       );
     }
     await connection.commit();

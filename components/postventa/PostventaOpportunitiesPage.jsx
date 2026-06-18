@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Edit3, Eye, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
+import { ChevronDown, Edit3, Eye, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   const [query, setQuery] = useState("");
   const [stageId, setStageId] = useState("");
   const [timeStateId, setTimeStateId] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [mobileActionId, setMobileActionId] = useState(null);
   const [editDialog, setEditDialog] = useState({ open: false, item: null, detail: null });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
   const perm = permissionKey(kind);
@@ -53,8 +55,8 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     <div className="min-w-0 bg-slate-50 p-4 text-slate-950">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-violet-700">{copy.title}</h1>
-          <p className="text-sm text-slate-500">{copy.subtitle} {canViewAll ? "- Vista completa" : "- Mi vista"}</p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">{copy.title}</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">{copy.subtitle} {canViewAll ? "- Vista completa" : "- Mi vista"}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={data.reload}><RefreshCw className="size-4" />Actualizar</Button>
@@ -62,7 +64,11 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         </div>
       </header>
       <section className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[320px_220px_220px_120px]">
+        <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
+          Filtros
+          <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        <div className={`${filtersOpen ? "grid" : "hidden"} gap-3 md:grid md:grid-cols-[320px_220px_220px_120px]`}>
           <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input className="pl-9" placeholder="Buscar cliente, vehiculo o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} /></div>
           <SearchableSelect value={stageId} options={[{ value: "", label: "Todas las etapas" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setStageId} />
           <SearchableSelect value={timeStateId} options={[{ value: "", label: "Todos los estados de tiempo" }, ...(data.options.timeStates || []).map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setTimeStateId} />
@@ -70,10 +76,10 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         </div>
       </section>
       <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1220px] text-left text-sm">
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold text-slate-700">
-              <tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Vehiculo</th><th>Origen</th><th>Etapa</th><th>Asignado</th><th>Fecha agenda</th><th>Cita</th><th>Estado tiempo</th><th className="text-right">Acciones</th></tr>
+              <tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Vehiculo</th><th>Origen</th><th>Etapa</th><th>Asignado</th><th>Fecha agenda</th><th>Cita</th><th className="text-right">Acciones</th></tr>
             </thead>
             <tbody className="divide-y">
               {rows.map((item) => (
@@ -92,7 +98,6 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                       </Button>
                     ) : <span className="text-xs text-slate-400">Sin cita</span>}
                   </td>
-                  <td><TimeStateBadge item={item} /></td>
                   <td className="px-3 text-right">
                     <div className="flex justify-end gap-2">
                       <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => { window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}><Eye className="size-4" /></Button>
@@ -102,7 +107,51 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                   </td>
                 </tr>
               ))}
-              {!rows.length ? <tr><td colSpan={10} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={9} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="overflow-visible md:hidden">
+          <table className="w-full table-fixed text-left text-xs">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase text-slate-600">
+              <tr>
+                <th className="w-[23%] px-2 py-2">Codigo</th>
+                <th className="w-[38%] px-2 py-2">Cliente</th>
+                <th className="w-[23%] px-2 py-2">Etapa</th>
+                <th className="w-[16%] px-2 py-2 text-right">Acc.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((item) => (
+                <tr key={item.id} className="align-top" style={rowTimeStyle(item)}>
+                  <td className="px-2 py-3">
+                    <button type="button" className="break-words text-left text-[11px] font-bold leading-tight text-blue-700" onClick={() => { window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}>
+                      {item.code}
+                    </button>
+                  </td>
+                  <td className="px-2 py-3">
+                    <p className="line-clamp-2 text-[11px] font-bold leading-tight text-slate-950">{item.clienteNombre}</p>
+                    <p className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-slate-500">{item.vehiculoNombre}</p>
+                  </td>
+                  <td className="px-2 py-3">
+                    <span className="inline-flex max-w-full rounded-full px-2 py-1 text-[9px] font-bold leading-tight" style={{ color: item.etapaColor, backgroundColor: `${item.etapaColor}1f` }}>{item.etapaNombre}</span>
+                  </td>
+                  <td className="relative px-2 py-3 text-right">
+                    <Button size="icon" variant="outline" className="size-8" onClick={() => setMobileActionId((current) => current === item.id ? null : item.id)}>
+                      <MoreVertical className="size-4" />
+                    </Button>
+                    {mobileActionId === item.id ? (
+                      <div className="absolute right-2 top-12 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 text-left text-xs shadow-xl">
+                        <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}>Ver detalle</button>
+                        {canEdit ? <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); openEdit(item); }}>Editar</button> : null}
+                        {canAssign ? <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); setAssignDialog({ open: true, item }); }}>Asignar</button> : null}
+                        {item.citaId ? <button type="button" className="block w-full rounded-md px-3 py-2 font-semibold hover:bg-slate-100" onClick={() => { setMobileActionId(null); window.location.href = `/citaspv?id=${item.citaId}`; }}>Ir a cita</button> : null}
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {!rows.length ? <tr><td colSpan={4} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -275,24 +324,18 @@ function AgendaList({ title, details, onDelete }) {
   );
 }
 
-function TimeStateBadge({ item }) {
-  if (!item.timeState) return <span className="text-xs text-slate-400">-</span>;
-  return (
-    <span
-      className="rounded-full border px-2 py-1 text-xs font-bold"
-      style={{ borderColor: item.timeState.color, color: item.timeState.color, backgroundColor: hexToRgba(item.timeState.color, 0.12) }}
-    >
-      {item.timeState.nombre}
-    </span>
-  );
-}
-
 function rowTimeStyle(item) {
+  if (isClosedStage(item?.etapaNombre)) return undefined;
   if (!item.timeState?.color) return undefined;
   return {
     backgroundColor: hexToRgba(item.timeState.color, 0.14),
     boxShadow: `inset 4px 0 0 ${item.timeState.color}`,
   };
+}
+
+function isClosedStage(value) {
+  const stage = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return stage.includes("cerrad");
 }
 
 function hexToRgba(hex, alpha) {

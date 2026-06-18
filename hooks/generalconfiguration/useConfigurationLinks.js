@@ -10,6 +10,7 @@ function sortLinks(items) {
 
 export function useConfigurationLinks() {
   const [links, setLinks] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -19,9 +20,11 @@ export function useConfigurationLinks() {
     try {
       const data = await generalConfigurationApi.links();
       setLinks(sortLinks(data.links || []));
+      setRoles(data.roles || []);
     } catch (err) {
       setError(err.message || "No se pudieron cargar los links.");
       setLinks([]);
+      setRoles([]);
     } finally {
       setLoading(false);
     }
@@ -34,11 +37,13 @@ export function useConfigurationLinks() {
       .then((data) => {
         if (!mounted) return;
         setLinks(sortLinks(data.links || []));
+        setRoles(data.roles || []);
       })
       .catch((err) => {
         if (!mounted) return;
         setError(err.message || "No se pudieron cargar los links.");
         setLinks([]);
+        setRoles([]);
       })
       .finally(() => {
         if (!mounted) return;
@@ -76,5 +81,5 @@ export function useConfigurationLinks() {
     [links]
   );
 
-  return { links, loading, error, stats, createLink, updateLink, deleteLink, reload: loadLinks };
+  return { links, roles, loading, error, stats, createLink, updateLink, deleteLink, reload: loadLinks };
 }

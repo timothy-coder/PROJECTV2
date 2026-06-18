@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUpDown, Eye, Filter, Loader2, Send } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, Eye, Filter, Loader2, MoreVertical, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -19,6 +19,7 @@ const TYPE_STATUS_OPTIONS = [
 ];
 
 const CLOSED_TYPE_STATUS = new Set(["Closed Won", "Closed Lost"]);
+const DEFAULT_START_DATE = "2026-06-01T00:00:00";
 
 function normalizeDateTime(value) {
   if (!value) return "";
@@ -92,7 +93,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const canCreate = hasPerm(userPermissions, ["leads_ford", "create"]);
   const canEdit = hasPerm(userPermissions, ["leads_ford", "edit"]);
 
-  const [startDate, setStartDate] = useState("2025-12-02T00:00:00");
+  const [startDate, setStartDate] = useState(DEFAULT_START_DATE);
   const [endDate, setEndDate] = useState("");
   const [typeStatus, setTypeStatus] = useState("");
   const [typeStatusOpen, setTypeStatusOpen] = useState(false);
@@ -105,6 +106,9 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [importingOpportunities, setImportingOpportunities] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [message, setMessage] = useState("");
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileLeadMenu, setMobileLeadMenu] = useState(null);
 
   const status = useMemo(() => (CLOSED_TYPE_STATUS.has(typeStatus) ? "closed" : "open"), [typeStatus]);
   const filteredItems = useMemo(() => {
@@ -215,7 +219,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        params.set("startDate", normalizeDateTime("2025-12-02T00:00:00"));
+        params.set("startDate", normalizeDateTime(DEFAULT_START_DATE));
         params.set("status", "open");
           const data = await fetch(`/api/ford-leads?${params.toString()}`).then(readJson);
         if (!cancelled) {
@@ -240,13 +244,38 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   }, [tab]);
 
   return (
-    <div className="min-h-[calc(100svh-80px)] space-y-5 bg-slate-50 p-4 text-black sm:p-6 lg:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-violet-200 border-l-4 border-l-violet-700 bg-white p-5 shadow-sm">
+    <div className="min-h-[calc(100svh-80px)] space-y-3 bg-slate-50 p-2 text-black sm:p-3 lg:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-200 bg-slate-50 px-1 pb-3">
         <div>
-          <h1 className="text-2xl font-bold text-violet-700">Leads Ford</h1>
-          <p className="mt-1 text-sm text-slate-600">Consulta, crea y actualiza leads usando la configuracion Ford del entorno.</p>
+          <h1 className="text-base font-bold leading-tight text-violet-700">Leads Ford</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">Consulta, crea y actualiza leads usando la configuracion Ford del entorno.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="relative sm:hidden">
+          <Button variant="outline" className="border-violet-200 bg-white text-violet-700 hover:bg-violet-50" onClick={() => setMobileActionsOpen((open) => !open)}>
+            Acciones
+            <ChevronDown className={`ml-2 size-4 transition ${mobileActionsOpen ? "rotate-180" : ""}`} />
+          </Button>
+          {mobileActionsOpen ? (
+            <div className="fixed left-3 right-3 top-20 z-50 rounded-lg border border-violet-200 bg-white p-1 text-sm shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-56">
+              {canSync ? (
+                <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-semibold text-violet-700 hover:bg-violet-50" disabled={importingOpportunities || !selectedLeadIds.length} onClick={() => { setMobileActionsOpen(false); createOpportunitiesNow({ selectedOnly: true }); }}>
+                  Crear seleccionados
+                </button>
+              ) : null}
+              {canSync ? (
+                <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-semibold text-violet-700 hover:bg-violet-50" disabled={importingOpportunities} onClick={() => { setMobileActionsOpen(false); createOpportunitiesNow({ selectedOnly: false }); }}>
+                  Crear todos
+                </button>
+              ) : null}
+              {canCreate ? (
+                <Link href="/leads-ford/nuevo" className="block rounded-md px-3 py-2 font-semibold text-violet-700 hover:bg-violet-50" onClick={() => setMobileActionsOpen(false)}>
+                  Agregar Lead
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden flex-wrap gap-2 sm:flex">
           {canSync ? (
             <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => createOpportunitiesNow({ selectedOnly: true })} disabled={importingOpportunities || !selectedLeadIds.length}>
               {importingOpportunities ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
@@ -270,8 +299,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
         </div>
       </div>
 
-      <section className="rounded-xl border border-violet-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex flex-wrap gap-2">
+      <section className="bg-white p-2 shadow-sm sm:p-3">
+        <div className="mb-3 flex flex-wrap gap-2">
           <Button type="button" variant={tab === "ford" ? "default" : "outline"} className={tab === "ford" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 text-violet-700 hover:bg-violet-50"} onClick={() => setTab("ford")}>
             Leads Ford
           </Button>
@@ -294,10 +323,10 @@ export default function FordLeadsPage({ userPermissions = {} }) {
               </div>
             </div>
 
-            {message ? <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700">{message}</div> : null}
+            {message ? <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{message}</div> : null}
 
-            <div className="mt-5 overflow-hidden rounded-xl border border-violet-200">
-              <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-4 py-3">
+            <div className="mt-3 overflow-hidden rounded-lg border border-violet-200">
+              <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-3 py-2">
                 <h2 className="text-sm font-bold text-violet-700">Leads enviados a Ford</h2>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-violet-700">{filteredSentItems.length} visibles</span>
               </div>
@@ -358,7 +387,11 @@ export default function FordLeadsPage({ userPermissions = {} }) {
           </div>
         ) : (
         <div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <button type="button" className="mb-2 flex h-9 w-full items-center justify-between rounded-md border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 sm:hidden" onClick={() => setMobileFiltersOpen((open) => !open)}>
+            Filtros
+            <ChevronDown className={`size-4 transition ${mobileFiltersOpen ? "rotate-180" : ""}`} />
+          </button>
+          <div className={`${mobileFiltersOpen ? "grid" : "hidden"} gap-3 sm:grid md:grid-cols-2 xl:grid-cols-6`}>
             <Field label="Inicio">
               <Input type="datetime-local" step="1" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
             </Field>
@@ -412,14 +445,76 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             </div>
           </div>
 
-          {message ? <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700">{message}</div> : null}
+          {message ? <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">{message}</div> : null}
 
-          <div className="mt-5 overflow-hidden rounded-xl border border-violet-200">
-            <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-4 py-3">
+          <div className="mt-3 overflow-hidden rounded-lg border border-violet-200">
+            <div className="flex items-center justify-between border-b border-violet-200 bg-violet-50 px-3 py-2">
               <h2 className="text-sm font-bold text-violet-700">Resultados</h2>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-violet-700">{filteredItems.length} visibles</span>
             </div>
-            <div className="max-h-[calc(100svh-360px)] overflow-auto">
+            <div className="max-h-[calc(100svh-330px)] overflow-auto sm:hidden">
+              <table className="min-w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-violet-50 text-left text-[10px] uppercase text-violet-700">
+                  <tr>
+                    <th className="px-2 py-2">
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Seleccionar visibles" />
+                    </th>
+                    <th className="px-2 py-2">Id</th>
+                    <th className="px-2 py-2">Cliente</th>
+                    <th className="px-2 py-2">Vehiculo</th>
+                    <th className="px-2 py-2 text-right">Opciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-10 text-center text-black">Cargando leads...</td>
+                    </tr>
+                  ) : null}
+                  {!loading && filteredItems.map((item, index) => (
+                    <Fragment key={`${item.id || "lead-mobile"}-${index}`}>
+                      <tr key={`${item.id || "lead-mobile"}-${index}`} className="hover:bg-violet-50/50">
+                        <td className="px-2 py-2 align-top">
+                          <input type="checkbox" checked={Boolean(item.id && selectedLeadIds.includes(item.id))} onChange={() => toggleLeadSelection(item.id)} aria-label={`Seleccionar ${item.id || "lead"}`} />
+                        </td>
+                        <td className="max-w-[92px] truncate px-2 py-2 align-top font-mono text-[10px] font-bold text-violet-700">{item.id || "-"}</td>
+                        <td className="px-2 py-2 align-top">
+                          <p className="line-clamp-2 text-[11px] font-bold leading-tight text-slate-950">{contactName(item.contact)}</p>
+                          <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-slate-500">{item.contact?.email || item.contact?.mobilePhone || item.contact?.phone || "-"}</p>
+                        </td>
+                        <td className="px-2 py-2 align-top text-[11px] leading-tight">{vehicleName(item.vehicle)}</td>
+                        <td className="px-2 py-2 text-right align-top">
+                          <Button size="icon" variant="outline" className="size-7 border-violet-200 text-violet-700" onClick={() => setMobileLeadMenu((current) => current === item.id ? null : item.id)}>
+                            <MoreVertical className="size-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                      {mobileLeadMenu === item.id ? (
+                        <tr key={`${item.id || "lead-mobile"}-${index}-actions`}>
+                          <td colSpan={5} className="bg-violet-50 px-2 py-2">
+                            <div className="ml-auto flex w-full max-w-[180px] flex-col rounded-lg border border-violet-200 bg-white p-1 text-sm shadow-sm">
+                              {item.id ? (
+                                <Link href={`/leads-ford/${encodeURIComponent(item.id)}`} className="block rounded-md px-3 py-2 text-left font-semibold text-violet-700 hover:bg-violet-50" onClick={() => setMobileLeadMenu(null)}>
+                                  Ver detalle
+                                </Link>
+                              ) : (
+                                <span className="block rounded-md px-3 py-2 text-left font-semibold text-slate-400">Sin opciones</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  ))}
+                  {!loading && !filteredItems.length ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-10 text-center text-slate-600">No hay leads para mostrar con estos filtros.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+            <div className="hidden max-h-[calc(100svh-360px)] overflow-auto sm:block">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-10 bg-violet-50 text-left text-xs uppercase text-violet-700">
                 <tr>

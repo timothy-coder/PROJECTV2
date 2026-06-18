@@ -64,12 +64,12 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
 
   return (
     <>
-      <div className="mt-5 flex justify-center gap-3 print:hidden">
+      <div className="mt-4 grid gap-2 print:hidden sm:grid-cols-2 lg:flex lg:justify-end">
         {quoteId && canFord ? (
           <>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-60"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-3 text-xs font-bold text-white disabled:opacity-60 sm:text-sm lg:w-auto"
               disabled={downloading}
               onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf`, fileName)}
             >
@@ -78,7 +78,7 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-violet-700 px-4 text-sm font-bold text-white disabled:opacity-60"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-violet-700 px-3 text-xs font-bold text-white disabled:opacity-60 sm:text-sm lg:w-auto"
               disabled={downloading}
               onClick={() => downloadServerPdf(`/api/cotizacion-preview/${quoteId}/ford-pdf?full=1`, `cotizacion-completa-${quoteId}`)}
             >
@@ -91,7 +91,7 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
           <>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-900 px-4 text-sm font-bold text-white disabled:opacity-60"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-zinc-900 px-3 text-xs font-bold text-white disabled:opacity-60 sm:text-sm lg:w-auto"
               disabled={downloading}
               onClick={() => requestOtherPdf(false)}
             >
@@ -100,7 +100,7 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
             </button>
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-neutral-700 px-4 text-sm font-bold text-white disabled:opacity-60"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-neutral-700 px-3 text-xs font-bold text-white disabled:opacity-60 sm:text-sm lg:w-auto"
               disabled={downloading}
               onClick={() => requestOtherPdf(true)}
             >
@@ -110,14 +110,14 @@ export function QuotePreviewActions({ publicToken, fileName = "cotizacion", quot
           </>
         ) : null}
         {publicToken ? (
-          <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white" href={`/cotizacion/${publicToken}`}>
+          <Link className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-xs font-bold text-white sm:text-sm lg:w-auto" href={`/cotizacion/${publicToken}`}>
             <Eye className="size-4" />
             Ver Enlace Publico
           </Link>
         ) : (
           <button
             type="button"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white opacity-50"
+            className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 text-xs font-bold text-white opacity-50 sm:text-sm lg:w-auto"
             disabled
           >
             <Eye className="size-4" />

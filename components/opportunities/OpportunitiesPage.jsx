@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, CalendarDays, ChevronDown, Edit3, Eye, Kanban, Loader2, Plus, RefreshCw, Search, Send, Table2 } from "lucide-react";
+import { ArrowUpDown, CalendarDays, ChevronDown, Edit3, Eye, Kanban, Loader2, MoreVertical, Plus, RefreshCw, Search, Send, Table2 } from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -143,8 +143,12 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
     <TooltipProvider>
       <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
         <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><h1 className="text-2xl font-bold text-violet-700">{copy.title}</h1><p className="text-xs text-slate-500">{copy.subtitle} {canViewAll ? `${copy.type} - Vista completa` : `${copy.type} - Mi vista`}</p></div>
-          <div className="flex gap-2"><Button variant="outline" onClick={data.reload}><RefreshCw className="size-4" />Actualizar</Button>{canCreate ? <Button onClick={() => setDialog({ open: true, item: null, mode: "edit" })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />{copy.add}</Button> : null}</div>
+          <div><h1 className="text-base font-bold leading-tight text-violet-700">{copy.title}</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">{copy.subtitle} {canViewAll ? `${copy.type} - Vista completa` : `${copy.type} - Mi vista`}</p></div>
+          <div className="flex gap-2"><Button variant="outline" onClick={data.reload}>
+            <RefreshCw className="size-4" />Actualizar</Button>
+            {canCreate ? <Button onClick={() => setDialog({ open: true, item: null, mode: "edit" })} className="bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />{copy.add}</Button> : null}
+            </div>
         </div>
         <section className="mb-3 shrink-0 rounded-lg border border-violet-200 bg-violet-50/30 p-2 sm:p-3">
           <button type="button" className="flex h-9 w-full items-center justify-between rounded-md border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 sm:hidden" onClick={() => setFiltersOpen((current) => !current)}>
@@ -211,9 +215,70 @@ function GeneralView({
   total,
   onPageChange,
 }) {
+  const [openMenu, setOpenMenu] = useState(null);
+  const runMobileAction = (action) => {
+    action();
+    setOpenMenu(null);
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div ref={tableContainerRef} className="max-w-full overflow-x-auto">
+      <div ref={tableContainerRef} className="max-w-full overflow-x-auto md:hidden">
+        <table className="w-full table-fixed text-left text-[11px]">
+          <thead className="bg-slate-50 text-[10px] font-bold text-slate-600">
+            <tr>
+              <th className="w-[27%] px-2 py-2">Codigo</th>
+              <th className="w-[34%] px-2 py-2">Cliente</th>
+              <th className="w-[23%] px-2 py-2">Etapa</th>
+              <th className="w-[16%] px-2 py-2 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="py-10 text-center">
+                  <Loader2 className="inline size-4 animate-spin" />
+                </td>
+              </tr>
+            ) : data.length ? (
+              data.map((item) => (
+                <tr key={item.id} className="relative" style={rowTimeStyle(item)}>
+                  <td className="px-2 py-2 align-top">
+                    <button className="text-[11px] font-bold leading-tight text-blue-700 underline" onClick={() => onView(item)}>
+                      {item.code}
+                    </button>
+                    <div className="mt-1 text-[10px] font-medium leading-tight text-slate-500">
+                      <DateTimeStack value={item.createdAt} />
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 align-top">
+                    <p className="line-clamp-2 text-[11px] font-semibold leading-tight text-slate-900">{item.clienteNombre}</p>
+                    {item.clienteDocumento ? <p className="mt-0.5 truncate text-[10px] font-medium text-slate-500">DNI: {item.clienteDocumento}</p> : null}
+                  </td>
+                  <td className="px-2 py-2 align-top"><StageBadge item={item} /></td>
+                  <td className="px-2 py-2 text-right align-top">
+                    <Button size="icon" variant="outline" className="size-8" onClick={() => setOpenMenu((current) => current === item.id ? null : item.id)}>
+                      <MoreVertical className="size-4" />
+                    </Button>
+                    {openMenu === item.id ? (
+                      <div className="absolute right-2 top-10 z-30 w-36 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl">
+                        <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onView(item))}>Ver</button>
+                        {canEdit ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onEdit(item))}>Editar</button> : null}
+                        {canViewAll ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onAssign(item))}>Asignar</button> : null}
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="py-10 text-center text-slate-500">No hay registros para mostrar</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="hidden max-w-full overflow-x-auto md:block">
         <table className="w-full min-w-[1080px] table-fixed text-left text-xs">
           <thead className="bg-slate-50 text-[11px] font-bold">
             <tr>
@@ -378,8 +443,8 @@ function minutesFromTime(value) {
 
 function buildSalesTimeSlots(date) {
   const start = new Date(date);
-  start.setMinutes(start.getMinutes() < 30 ? 0 : 30, 0, 0);
-  return Array.from({ length: 14 }, (_, index) => {
+  start.setHours(0, 0, 0, 0);
+  return Array.from({ length: 48 }, (_, index) => {
     const slot = new Date(start.getTime() + index * 30 * 60 * 1000);
     return slot.toTimeString().slice(0, 5);
   });
@@ -388,7 +453,7 @@ function buildSalesTimeSlots(date) {
 function currentSalesTimePosition(now, slots) {
   const current = now.getHours() * 60 + now.getMinutes();
   const start = minutesFromTime(slots[0]);
-  return Math.max(0, Math.min(14, (current - start) / 30));
+  return Math.max(0, Math.min(slots.length, (current - start) / 30));
 }
 
 function slotIndexForAgenda(value, slots) {
@@ -396,7 +461,7 @@ function slotIndexForAgenda(value, slots) {
   const time = text.match(/(\d{2}:\d{2})/)?.[1] || "";
   if (!time) return -1;
   const diff = minutesFromTime(time) - minutesFromTime(slots[0]);
-  return diff >= 0 && diff < 14 * 30 ? Math.floor(diff / 30) : -1;
+  return diff >= 0 && diff < slots.length * 30 ? Math.floor(diff / 30) : -1;
 }
 
 function advisorDotClass(index) {
@@ -406,6 +471,9 @@ function advisorDotClass(index) {
 function TimelineView({ data, users, currentUser, canViewAll, detailPath }) {
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const [selectedAdvisorIds, setSelectedAdvisorIds] = useState([]);
+  const [isDraggingBoard, setIsDraggingBoard] = useState(false);
+  const boardScrollRef = useRef(null);
+  const boardDragRef = useRef({ active: false, startX: 0, scrollLeft: 0 });
   const now = useMemo(() => new Date(), []);
   const slots = useMemo(() => buildSalesTimeSlots(now), [now]);
   const advisors = useMemo(() => {
@@ -417,6 +485,18 @@ function TimelineView({ data, users, currentUser, canViewAll, detailPath }) {
     : advisors;
   const todayKey = dateKey(now);
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const board = boardScrollRef.current;
+      if (!board) return;
+      const timelineWidth = Math.max(board.scrollWidth - 130, 1);
+      const slotWidth = timelineWidth / Math.max(slots.length, 1);
+      const currentLeft = 130 + currentSalesTimePosition(now, slots) * slotWidth;
+      board.scrollLeft = Math.max(0, currentLeft - board.clientWidth / 2);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [now, slots]);
+
   function toggleAdvisor(id) {
     const value = String(id);
     setSelectedAdvisorIds((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
@@ -424,6 +504,33 @@ function TimelineView({ data, users, currentUser, canViewAll, detailPath }) {
 
   function openOpportunity(item) {
     window.location.assign(`${detailPath}/${item.id}`);
+  }
+
+  function startBoardDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (!boardScrollRef.current) return;
+    event.preventDefault();
+    boardDragRef.current = {
+      active: true,
+      startX: event.clientX,
+      scrollLeft: boardScrollRef.current.scrollLeft,
+    };
+    setIsDraggingBoard(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveBoardDrag(event) {
+    if (!boardDragRef.current.active || !boardScrollRef.current) return;
+    event.preventDefault();
+    const deltaX = event.clientX - boardDragRef.current.startX;
+    boardScrollRef.current.scrollLeft = boardDragRef.current.scrollLeft - deltaX;
+  }
+
+  function stopBoardDrag(event) {
+    if (!boardDragRef.current.active) return;
+    boardDragRef.current.active = false;
+    setIsDraggingBoard(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
   }
 
   return (
@@ -453,28 +560,36 @@ function TimelineView({ data, users, currentUser, canViewAll, detailPath }) {
           ) : null}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-white">
-        <div className="grid min-w-[1360px] grid-cols-[130px_repeat(14,minmax(105px,1fr))]">
-          <div className="border-b border-r border-slate-200 px-4 py-3 text-sm font-extrabold text-slate-600">Asesores</div>
+      <div
+        ref={boardScrollRef}
+        className={`min-h-0 flex-1 overflow-auto bg-white select-none touch-pan-y ${isDraggingBoard ? "cursor-grabbing" : "cursor-grab"}`}
+        onPointerDown={startBoardDrag}
+        onPointerMove={moveBoardDrag}
+        onPointerUp={stopBoardDrag}
+        onPointerCancel={stopBoardDrag}
+        onPointerLeave={stopBoardDrag}
+      >
+        <div className="grid" style={{ minWidth: `calc(130px + ${slots.length} * 105px)`, gridTemplateColumns: `130px repeat(${slots.length}, minmax(105px, 1fr))` }}>
+          <div className="sticky left-0 z-20 border-b border-r border-slate-200 bg-white px-4 py-3 text-sm font-extrabold text-slate-600">Asesores</div>
           {slots.map((slot, index) => (
-            <div key={slot} className={`border-b border-r border-slate-200 px-1 py-3 text-center text-xs text-slate-500 ${index >= 11 ? "bg-slate-100" : ""}`}>
+            <div key={slot} className={`border-b border-r border-slate-200 px-1 py-3 text-center text-xs text-slate-500 ${index < currentSalesTimePosition(now, slots) ? "bg-slate-100" : ""}`}>
               {slot}
             </div>
           ))}
         </div>
-        <div className="relative grid min-w-[1360px] grid-cols-[130px_repeat(14,minmax(105px,1fr))]">
+        <div className="relative grid" style={{ minWidth: `calc(130px + ${slots.length} * 105px)`, gridTemplateColumns: `130px repeat(${slots.length}, minmax(105px, 1fr))` }}>
           {visibleAdvisors.map((advisor, rowIndex) => {
             const advisorItems = data.filter((item) => Number(item.asignadoA) === Number(advisor.id) && dateKeyFromText(item.nextAgenda) === todayKey);
             return (
               <Fragment key={advisor.id}>
-                <div className="flex min-h-[104px] items-center border-b border-r border-slate-200 px-4 text-sm text-slate-900">
+                <div className="sticky left-0 z-10 flex min-h-[104px] items-center border-b border-r border-slate-200 bg-white px-4 text-sm text-slate-900">
                   <span className={`mr-2 h-1.5 w-1.5 rounded-full ${advisorDotClass(rowIndex)}`} />
                   <span className="leading-tight">{advisor.fullname}</span>
                 </div>
                 {slots.map((slot, index) => {
                   const cellItems = advisorItems.filter((item) => slotIndexForAgenda(item.nextAgenda, slots) === index);
                   return (
-                    <div key={`${advisor.id}-${slot}`} className={`min-h-[104px] border-b border-r border-slate-200 p-1 ${index >= 11 ? "bg-slate-100" : ""}`}>
+                    <div key={`${advisor.id}-${slot}`} className={`min-h-[104px] border-b border-r border-slate-200 p-1 ${index < currentSalesTimePosition(now, slots) ? "bg-slate-100" : ""}`}>
                       <div className="space-y-1">
                         {cellItems.map((item) => (
                           <button key={item.id} type="button" className="w-full rounded-md border border-emerald-200 bg-emerald-50 p-1.5 text-left text-[11px] font-semibold leading-tight text-slate-950 shadow-sm hover:border-violet-300 hover:bg-violet-50" onClick={() => openOpportunity(item)}>
@@ -490,7 +605,7 @@ function TimelineView({ data, users, currentUser, canViewAll, detailPath }) {
               </Fragment>
             );
           })}
-          <div className="pointer-events-none absolute bottom-0 top-0 w-px bg-blue-600" style={{ left: `calc(130px + ${currentSalesTimePosition(now, slots)} * ((100% - 130px) / 14))` }} />
+          <div className="pointer-events-none absolute bottom-0 top-0 w-px bg-blue-600" style={{ left: `calc(130px + ${currentSalesTimePosition(now, slots)} * ((100% - 130px) / ${slots.length}))` }} />
         </div>
       </div>
     </section>
