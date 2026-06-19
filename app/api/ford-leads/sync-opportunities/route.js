@@ -251,13 +251,14 @@ function fordPatchStatus(value, lossReason) {
 async function touchFordLeadModifiedDate(request, lead, changedAt) {
   const leadId = String(lead.id || "").trim();
   if (!leadId) return null;
+  const lossReason = lead.lossReason || lead.lostReason || undefined;
   const body = normalizeFordLeadPatch({
-    status: fordPatchStatus("Assigned", lead.lossReason),
+    status: fordPatchStatus(lead.status, lossReason),
     contact: lead.contact || {},
     vehicle: lead.vehicle || {},
     preferenceDealer: lead.preferenceDealer || {},
     lastModifiedDate: changedAt,
-    lossReason: lead.lossReason || undefined,
+    lossReason,
   });
   return fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body });
 }
