@@ -77,6 +77,8 @@ export default function ReservationDetailPage({ id }) {
   if (loading || !data) return <div className="p-4">Cargando reserva...</div>;
   const { reservation, detail, currentUser, vins, accessories, gifts, options, salesBossName, vinReleaseRequest } = data;
   const isSigned = reservation.estado === "firmado";
+  const isFordBrand = normalizeBrandName(detail?.marca || reservation?.marca).includes("FORD");
+  const fordToken = isFordBrand ? firstPresentValue(reservation.fordToken, reservation.tokenFord, reservation.ford_token) : "";
   const telefono2 = firstPresentValue(detail?.telefono2, detail?.telefono_2, detail?.telefono, detail?.telefonoReserva, detail?.telefono_reserva, reservation.telefono2, reservation.telefono_2);
   const displayedHeaderObservaciones = headerObservaciones ?? reservation.observaciones ?? RESERVATION_OBSERVATION_TEXT;
   const saveHeaderObservaciones = async () => {
@@ -127,6 +129,7 @@ export default function ReservationDetailPage({ id }) {
                 <span>Nota de Pedido N° {reservation.id}</span>
                 <StatusBadge estado={reservation.estado} />
                 <SaveStateBadge state={reservationSaveState} />
+                <FordTokenBadge token={fordToken} />
               </h1>
               <p className="mt-0.5 text-xs font-medium text-violet-400">Oportunidad #{reservation.oportunidadCode} - Cliente: <b>{reservation.cliente}</b> - Vehiculo: <b>{detail.marca} {detail.modelo} {detail.anio}</b></p>
             </div>
@@ -1311,6 +1314,14 @@ function SaveStateBadge({ state }) {
   return <span className={`rounded-md border px-2 py-1 text-xs font-bold ${tone}`}>{label}</span>;
 }
 function StatusBadge({ estado }) { return <span className="rounded-full bg-blue-100 px-2 py-1 align-middle text-xs font-bold text-blue-700">{estado}</span>; }
+function FordTokenBadge({ token }) {
+  const hasToken = isPresentValue(token);
+  return (
+    <span className={`rounded-full px-2 py-1 align-middle text-xs font-bold ${hasToken ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+      Token Ford: {hasToken ? token : "Sin registrar"}
+    </span>
+  );
+}
 
 function ReservationItemDialog({ dialog, options, onClose, onSubmit }) {
   const item = dialog.item;
@@ -1697,7 +1708,10 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
   const fechaDoc = formatDate(r.createdAt || r.created_at || r.fecha || new Date());
   const origenVenta = r.origenVenta || r.origen_venta || "";
   const campania = r.campania || "";
-  const idTexto = r.idLead || r.id_lead || r.leadId || "";
+  const isFordPdf = normalizeBrandName(r.marca || d.marca).includes("FORD");
+  const fordTokenTexto = isFordPdf ? (r.fordToken || r.tokenFord || r.ford_token || "") : "";
+  const idTexto = fordTokenTexto || r.idLead || r.id_lead || r.leadId || "";
+  const idLabel = fordTokenTexto ? "Token Ford" : "ID";
 
   const tipoComprobante = r.tipoComprobante || r.tipo_comprobante || d.tipoComprobante || "";
   const tipoPersona = r.tipoPersona || r.tipo_persona || d.tipoPersona || "NATURAL";
@@ -1827,11 +1841,11 @@ async function buildReservationPdf(pdf, { reservation, detail, accessories, gift
     put("Fecha", x + (headerCol * 2), 76, { bold: true, size: 7, max: 10 });
     put(fechaDoc, x + (headerCol * 3), 76, { size: 7, max: 14 });
     put("Origen de Venta", x + 2, 86, { bold: true, size: 7, max: 24 });
-    put(origenVenta, x + headerCol, 86, { size: 7, max: 24 });
-    put("ID", x + (headerCol * 1.5), 86, { bold: true, size: 7, max: 6 });
-    put(idTexto, x + (headerCol * 1.7), 86, { size: 7, max: 16 });
-    put("Campaña", x + (headerCol * 2), 86, { bold: true, size: 7, max: 16 });
-    put(campania, x + (headerCol * 3), 86, { size: 7, max: 24 });
+    put(origenVenta, x + 96, 86, { size: 7, max: 20 });
+    put(idLabel, x + 186, 86, { bold: true, size: 6.5, max: 18 });
+    put(idTexto, x + 244, 86, { size: 6.2, max: 36 });
+    put("Campaña", x + 404, 86, { bold: true, size: 7, max: 16 });
+    put(campania, x + 462, 86, { size: 7, max: 16 });
 
     pdf.setFillColor(...gray);
     pdf.rect(x, 89, w, 10, "F");

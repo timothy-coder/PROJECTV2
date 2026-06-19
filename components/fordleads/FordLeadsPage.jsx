@@ -88,6 +88,10 @@ function itemSearchText(item = {}) {
     .toLowerCase();
 }
 
+function uniqueOptions(values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
 export default function FordLeadsPage({ userPermissions = {} }) {
   const canSync = hasPerm(userPermissions, ["leads_ford", "sync"]);
   const canCreate = hasPerm(userPermissions, ["leads_ford", "create"]);
@@ -98,6 +102,10 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [typeStatus, setTypeStatus] = useState("");
   const [typeStatusOpen, setTypeStatusOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sentModelFilter, setSentModelFilter] = useState("");
+  const [sentAdvisorFilter, setSentAdvisorFilter] = useState("");
+  const [sentStartDate, setSentStartDate] = useState("");
+  const [sentEndDate, setSentEndDate] = useState("");
   const [tab, setTab] = useState("ford");
   const [items, setItems] = useState([]);
   const [sentItems, setSentItems] = useState([]);
@@ -120,16 +128,32 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every((id) => selectedLeadIds.includes(id));
   const filteredSentItems = useMemo(() => {
     const needle = searchTerm.trim().toLowerCase();
-    if (!needle) return sentItems;
-    return sentItems.filter((item) => [
-      item.oportunidadCodigo,
-      item.token,
-      item.clienteNombre,
-      item.email,
-      item.celular,
-      item.creadoPorNombre,
-    ].filter(Boolean).join(" ").toLowerCase().includes(needle));
-  }, [sentItems, searchTerm]);
+    const start = sentStartDate ? new Date(`${sentStartDate}T00:00:00`) : null;
+    const end = sentEndDate ? new Date(`${sentEndDate}T23:59:59`) : null;
+    return sentItems.filter((item) => {
+      const text = [
+        item.oportunidadCodigo,
+        item.token,
+        item.clienteNombre,
+        item.email,
+        item.celular,
+        item.creadoPorNombre,
+        item.asesorNombre,
+        item.modeloNombre,
+        item.version,
+        item.vehiculoNombre,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const itemDate = item.createdAt ? new Date(item.createdAt) : null;
+      const matchText = !needle || text.includes(needle);
+      const matchModel = !sentModelFilter || String(item.modeloNombre || "") === sentModelFilter;
+      const matchAdvisor = !sentAdvisorFilter || String(item.asesorNombre || "") === sentAdvisorFilter;
+      const matchStart = !start || (itemDate && itemDate >= start);
+      const matchEnd = !end || (itemDate && itemDate <= end);
+      return matchText && matchModel && matchAdvisor && matchStart && matchEnd;
+    });
+  }, [sentItems, searchTerm, sentAdvisorFilter, sentEndDate, sentModelFilter, sentStartDate]);
+  const sentModelOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.modeloNombre).filter(Boolean)), [sentItems]);
+  const sentAdvisorOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.asesorNombre).filter(Boolean)), [sentItems]);
 
   async function searchLeads({ silent = false } = {}) {
     if (!canSync) return;
@@ -311,12 +335,29 @@ export default function FordLeadsPage({ userPermissions = {} }) {
 
         {tab === "sent" ? (
           <div>
-            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_180px_180px_160px_160px_auto_auto]">
               <Field label="Buscar">
-                <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Token, oportunidad, cliente..." />
+                <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Token, oportunidad, cliente, modelo..." />
+              </Field>
+              <Field label="Modelo">
+                <NativeSelect value={sentModelFilter} onChange={(event) => setSentModelFilter(event.target.value)} options={[["", "Todos"], ...sentModelOptions.map((item) => [item, item])]} />
+              </Field>
+              <Field label="Asesor">
+                <NativeSelect value={sentAdvisorFilter} onChange={(event) => setSentAdvisorFilter(event.target.value)} options={[["", "Todos"], ...sentAdvisorOptions.map((item) => [item, item])]} />
+              </Field>
+              <Field label="Desde">
+                <Input type="date" value={sentStartDate} onChange={(event) => setSentStartDate(event.target.value)} />
+              </Field>
+              <Field label="Hasta">
+                <Input type="date" value={sentEndDate} onChange={(event) => setSentEndDate(event.target.value)} />
               </Field>
               <div className="flex items-end">
-                <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={loadSentLeads} disabled={sentLoading}>
+                <Button variant="outline" className="w-full border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => { setSearchTerm(""); setSentModelFilter(""); setSentAdvisorFilter(""); setSentStartDate(""); setSentEndDate(""); }}>
+                  Limpiar
+                </Button>
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" className="w-full border-violet-200 text-violet-700 hover:bg-violet-50" onClick={loadSentLeads} disabled={sentLoading}>
                   {sentLoading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                   Actualizar
                 </Button>
@@ -337,9 +378,10 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                       <th className="px-3 py-2">Oportunidad</th>
                       <th className="px-3 py-2">Token Ford</th>
                       <th className="px-3 py-2">Cliente</th>
+                      <th className="px-3 py-2">Modelo</th>
                       <th className="px-3 py-2">Contacto</th>
                       <th className="px-3 py-2">Estado</th>
-                      <th className="px-3 py-2">Creado por</th>
+                      <th className="px-3 py-2">Asesor</th>
                       <th className="px-3 py-2">Fecha</th>
                       <th className="px-3 py-2"></th>
                     </tr>
@@ -347,7 +389,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {sentLoading ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-10 text-center text-black">Cargando enviados...</td>
+                        <td colSpan={9} className="px-3 py-10 text-center text-black">Cargando enviados...</td>
                       </tr>
                     ) : null}
                     {!sentLoading && filteredSentItems.map((item) => (
@@ -355,20 +397,21 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                         <td className="px-3 py-2 font-bold text-violet-700">{item.oportunidadCodigo || "-"}</td>
                         <td className="max-w-[230px] truncate px-3 py-2 font-mono text-xs">{item.token || "-"}</td>
                         <td className="px-3 py-2">{item.clienteNombre || "-"}</td>
+                        <td className="px-3 py-2">{item.vehiculoNombre || item.modeloNombre || "-"}</td>
                         <td className="px-3 py-2">{item.email || item.celular || "-"}</td>
                         <td className="px-3 py-2">{item.isActualized ? "Actualizado" : "Pendiente"}</td>
-                        <td className="px-3 py-2">{item.creadoPorNombre || "-"}</td>
+                        <td className="px-3 py-2">{item.asesorNombre || item.creadoPorNombre || "-"}</td>
                         <td className="px-3 py-2">{formatFordDate(item.createdAt)}</td>
                         <td className="px-3 py-2 text-right">
-                          <div className="flex justify-end gap-1">
+                          <div className="flex justify-end gap-2">
                           {item.oportunidadId ? (
-                            <Link href={`/oportunidades/${item.oportunidadId}`} className="inline-flex size-7 items-center justify-center rounded-md text-violet-700 hover:bg-violet-50" title="Ver oportunidad">
-                              <Eye className="size-4" />
+                            <Link href={`/oportunidades/${item.oportunidadId}`} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50" title="Ver oportunidad">
+                              <Eye className="size-4" />Ver oportunidad
                             </Link>
                           ) : null}
                           {item.token ? (
-                            <Link href={`/leads-ford/${encodeURIComponent(item.token)}`} className="inline-flex size-7 items-center justify-center rounded-md border border-violet-200 text-violet-700 hover:bg-violet-50" title="Ver detalle Ford">
-                              <Eye className="size-4" />
+                            <Link href={`/leads-ford/${encodeURIComponent(item.token)}`} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50" title="Ver detalle Ford">
+                              <Eye className="size-4" />Ver Ford
                             </Link>
                           ) : null}
                           </div>
@@ -377,7 +420,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                     ))}
                     {!sentLoading && !filteredSentItems.length ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-10 text-center text-slate-600">No hay leads enviados desde el sistema.</td>
+                        <td colSpan={9} className="px-3 py-10 text-center text-slate-600">No hay leads enviados desde el sistema.</td>
                       </tr>
                     ) : null}
                   </tbody>
@@ -582,5 +625,13 @@ function Field({ label, children }) {
       <Label className="text-xs font-semibold uppercase text-black">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function NativeSelect({ value, onChange, options }) {
+  return (
+    <select value={value} onChange={onChange} className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-violet-400">
+      {options.map(([optionValue, label]) => <option key={optionValue || "all"} value={optionValue}>{label}</option>)}
+    </select>
   );
 }

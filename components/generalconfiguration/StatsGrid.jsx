@@ -12,7 +12,7 @@ const tones = {
 
 export function StatsGrid({ stats }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-4 gap-2 sm:gap-3">
       {statItems.map((item) => {
         const Icon = item.icon;
 
@@ -20,17 +20,17 @@ export function StatsGrid({ stats }) {
           <div
             key={item.key}
             className={cn(
-              "flex min-h-24 items-center justify-between rounded-lg border p-4",
+              "flex min-h-16 items-center justify-between rounded-lg border p-2 sm:min-h-24 sm:p-4",
               tones[item.tone]
             )}
           >
             <div>
-              <p className="text-xs font-semibold">{item.label}</p>
-              <p className="mt-2 text-2xl font-bold text-slate-950">
+              <p className="truncate text-[10px] font-semibold sm:text-xs">{item.label}</p>
+              <p className="mt-1 text-lg font-bold text-slate-950 sm:mt-2 sm:text-2xl">
                 {stats[item.key]}
               </p>
             </div>
-            <Icon className="size-9 opacity-30" />
+            <Icon className="hidden size-9 opacity-30 sm:block" />
           </div>
         );
       })}

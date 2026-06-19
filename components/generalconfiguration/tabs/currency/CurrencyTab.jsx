@@ -81,13 +81,13 @@ export function CurrencyTab({ tab, userPermissions }) {
   return (
     <>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
               <CircleDollarSign className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold leading-tight text-slate-950">Monedas e Impuestos</h2>
+              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">Monedas e Impuestos</h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
                 Configura las monedas y tasas de impuesto para tus operaciones
               </p>
@@ -97,9 +97,9 @@ export function CurrencyTab({ tab, userPermissions }) {
 
         <div className="mx-4 border-t border-slate-200" />
 
-        <div className="px-4 py-4">
+        <div className="px-3 py-3 sm:px-4 sm:py-4">
           <div className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white">
-            <div className="flex flex-col gap-3 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 bg-blue-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
                   <Globe2 className="size-5" />
@@ -112,16 +112,16 @@ export function CurrencyTab({ tab, userPermissions }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={reload} disabled={loading}>
+              <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={reload} disabled={loading}>
                   <RefreshCw className={cn("size-4", loading && "animate-spin")} />
                   {stats.total} total
                 </Button>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <span className="inline-flex h-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 sm:h-auto sm:rounded-full sm:px-3 sm:py-1">
                   {stats.activos} activas
                 </span>
                 {canCreate ? (
-                  <Button onClick={openCreate} className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Button onClick={openCreate} className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                     <Plus className="size-4" />
                     Nueva Moneda
                   </Button>
@@ -135,8 +135,8 @@ export function CurrencyTab({ tab, userPermissions }) {
               </div>
             ) : null}
 
-            <div className="p-4">
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="p-2 sm:p-4">
+              <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
                 <table className="w-full min-w-[760px] border-collapse text-left text-sm">
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                     <tr>
@@ -203,13 +203,38 @@ export function CurrencyTab({ tab, userPermissions }) {
                   </tbody>
                 </table>
               </div>
+              <div className="space-y-2 sm:hidden">
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+                    <Loader2 className="size-4 animate-spin" />Cargando monedas...
+                  </div>
+                ) : monedas.length ? (
+                  monedas.map((moneda) => (
+                    <div key={moneda.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-950">{moneda.codigo} · {moneda.nombre}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">ID: {moneda.id} · Simbolo: {moneda.simbolo}</p>
+                        </div>
+                        <Checkbox checked={moneda.isActive} disabled={!canEdit} onCheckedChange={() => toggleActive(moneda)} className="data-checked:border-blue-600 data-checked:bg-blue-600" />
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        {canEdit ? <Button variant="outline" size="icon" onClick={() => openEdit(moneda)} title="Editar moneda"><Edit3 className="size-4 text-orange-600" /></Button> : null}
+                        {canDelete ? <Button variant="outline" size="icon" onClick={() => openDelete(moneda)} title="Eliminar moneda"><Trash2 className="size-4 text-red-600" /></Button> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-sm text-slate-500">No hay monedas registradas.</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <div className="overflow-hidden rounded-lg border border-purple-200 border-l-4 border-l-purple-500 bg-white">
-            <div className="flex flex-col gap-3 bg-purple-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 bg-purple-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
               <div className="flex items-center gap-3">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-purple-600 text-white">
                   <Percent className="size-5" />
@@ -222,16 +247,16 @@ export function CurrencyTab({ tab, userPermissions }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={reloadTaxes} disabled={loadingTaxes}>
+              <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={reloadTaxes} disabled={loadingTaxes}>
                   <RefreshCw className={cn("size-4", loadingTaxes && "animate-spin")} />
                   {taxesStats.total} total
                 </Button>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <span className="inline-flex h-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 sm:h-auto sm:rounded-full sm:px-3 sm:py-1">
                   {taxesStats.activos} activos
                 </span>
                 {canCreateTax ? (
-                  <Button onClick={() => setTaxDialogMode("create")} className="bg-purple-600 text-white hover:bg-purple-700">
+                  <Button onClick={() => setTaxDialogMode("create")} className="w-full bg-purple-600 text-white hover:bg-purple-700 sm:w-auto">
                     <Plus className="size-4" />
                     Nuevo Impuesto
                   </Button>
@@ -245,8 +270,8 @@ export function CurrencyTab({ tab, userPermissions }) {
               </div>
             ) : null}
 
-            <div className="p-4">
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="p-2 sm:p-4">
+              <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
                 <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                     <tr>
@@ -328,6 +353,31 @@ export function CurrencyTab({ tab, userPermissions }) {
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div className="space-y-2 sm:hidden">
+                {loadingTaxes ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+                    <Loader2 className="size-4 animate-spin" />Cargando impuestos...
+                  </div>
+                ) : impuestos.length ? (
+                  impuestos.map((impuesto) => (
+                    <div key={impuesto.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-950">{impuesto.nombre}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">ID: {impuesto.id} · {Number(impuesto.porcentaje).toFixed(2)}%</p>
+                        </div>
+                        <Checkbox checked={impuesto.isActive} disabled={!canEditTax} onCheckedChange={() => toggleTaxActive(impuesto)} className="data-checked:border-purple-600 data-checked:bg-purple-600" />
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        {canEditTax ? <Button variant="outline" size="icon" onClick={() => { setSelectedImpuesto(impuesto); setTaxDialogMode("edit"); }} title="Editar impuesto"><Edit3 className="size-4 text-orange-600" /></Button> : null}
+                        {canDeleteTax ? <Button variant="outline" size="icon" onClick={() => { setSelectedImpuesto(impuesto); setTaxDialogMode("delete"); }} title="Eliminar impuesto"><Trash2 className="size-4 text-red-600" /></Button> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-sm text-slate-500">No hay impuestos registrados.</div>
+                )}
               </div>
             </div>
           </div>

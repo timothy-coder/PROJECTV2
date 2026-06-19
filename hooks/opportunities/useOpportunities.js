@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { opportunitiesApi } from "@/app/api/opportunities.api";
 
 export function useOpportunities(kind = "opportunity") {
-  const [data, setData] = useState({ opportunities: [], options: { clients: [], origins: [], suborigins: [], stages: [], users: [] }, currentUser: null });
+  const [data, setData] = useState({ opportunities: [], options: { clients: [], origins: [], suborigins: [], stages: [], users: [], closureReasons: [], quoteModels: [] }, currentUser: null });
   const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     setLoading(true);

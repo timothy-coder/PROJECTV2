@@ -38,21 +38,19 @@ export default function GeneralConfigurationPage({ userPermissions }) {
   }
 
   return (
-    <div className="min-w-0 rounded-lg bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="mb-4">
-        <h1 className="text-[22px] font-bold leading-tight text-slate-950">
-          Configuracion del sistema
-        </h1>
-      </div>
-
-      <section className="min-w-0 rounded-lg bg-white p-3 shadow-sm ring-1 ring-slate-200 sm:p-4">
+    <div className="min-w-0 bg-slate-50 p-2 text-slate-950 sm:rounded-lg sm:p-4">
+      <section className="min-w-0 rounded-lg bg-white p-2 shadow-sm ring-1 ring-slate-200 sm:p-4">
+        <div className="mb-3 px-1 sm:hidden">
+          <h1 className="text-base font-bold leading-tight text-violet-700">Configuracion general</h1>
+          <p className="mt-0.5 text-xs font-medium text-violet-400">Administra parametros del sistema</p>
+        </div>
         <ConfigurationTabs
           tabs={visibleTabs}
           activeTab={activeConfig.id}
           onChange={handleTabChange}
         />
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3 sm:mt-4 sm:space-y-4">
           {activeConfig.id === "centros" ? (
             <CentersTab
               tab={activeConfig}
@@ -97,7 +95,7 @@ export default function GeneralConfigurationPage({ userPermissions }) {
             <PlaceholderTab tab={activeConfig} />
           )}
 
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 text-blue-700">
+          <div className="hidden rounded-lg border border-blue-200 bg-blue-50 px-4 py-4 text-blue-700 sm:block">
             <div className="flex items-start gap-3">
               <Info className="mt-0.5 size-5 shrink-0" />
               <div className="min-w-0">

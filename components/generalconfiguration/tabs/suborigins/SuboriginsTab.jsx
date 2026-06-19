@@ -20,12 +20,12 @@ function StatCard({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={cn("flex min-h-24 items-center justify-between rounded-lg border p-4", tones[tone])}>
+    <div className={cn("flex min-h-16 items-center justify-between rounded-lg border p-2 sm:min-h-24 sm:p-4", tones[tone])}>
       <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="truncate text-[10px] font-semibold sm:text-xs">{label}</p>
+        <p className="mt-1 text-lg font-bold text-slate-950 sm:mt-3 sm:text-2xl">{value}</p>
       </div>
-      <Icon className="size-9 opacity-25" />
+      <Icon className="hidden size-9 opacity-25 sm:block" />
     </div>
   );
 }
@@ -74,13 +74,13 @@ export function SuboriginsTab({ tab, userPermissions }) {
   return (
     <>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
               <GitBranch className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold leading-tight text-slate-950">Suborigenes de Citas</h2>
+              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">Suborigenes de Citas</h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
                 Gestiona las subcategorias de origenes de citas
               </p>
@@ -90,15 +90,15 @@ export function SuboriginsTab({ tab, userPermissions }) {
 
         <div className="mx-4 border-t border-slate-200" />
 
-        <div className="grid gap-3 px-4 py-4 lg:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           <StatCard label="Total Suborigenes" value={stats.total} tone="blue" icon={GitBranch} />
           <StatCard label="Activos" value={stats.activos} tone="green" icon={CheckCircle2} />
           <StatCard label="Inactivos" value={stats.inactivos} tone="orange" icon={Zap} />
         </div>
 
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <div className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-blue-500 bg-white">
-            <div className="flex flex-col gap-3 bg-blue-50 px-4 py-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-3 bg-blue-50 px-3 py-3 lg:flex-row lg:items-end lg:justify-between lg:px-4">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
@@ -112,7 +112,7 @@ export function SuboriginsTab({ tab, userPermissions }) {
                   </div>
                 </div>
 
-                <div className="mt-3 w-full max-w-xs">
+                <div className="mt-3 w-full max-w-none sm:max-w-xs">
                   <SearchableSelect
                     value={selectedOrigenId}
                     options={origenOptions}
@@ -125,13 +125,13 @@ export function SuboriginsTab({ tab, userPermissions }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" onClick={reload} disabled={loading}>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={reload} disabled={loading}>
                   <RefreshCw className={cn("size-4", loading && "animate-spin")} />
                   Recargar
                 </Button>
                 {canCreate ? (
-                  <Button onClick={openCreate} className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Button onClick={openCreate} className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                     <Plus className="size-4" />
                     Nuevo
                   </Button>
@@ -145,7 +145,7 @@ export function SuboriginsTab({ tab, userPermissions }) {
               </div>
             ) : null}
 
-            <div className="space-y-2 p-4">
+            <div className="space-y-2 p-2 sm:p-4">
               {loading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
                   <Loader2 className="size-4 animate-spin" />
@@ -155,7 +155,7 @@ export function SuboriginsTab({ tab, userPermissions }) {
                 suborigenes.map((suborigen) => (
                   <div
                     key={suborigen.id}
-                    className="flex min-h-14 items-center justify-between gap-3 rounded-lg border border-blue-200 bg-white px-3 py-2.5"
+                    className="flex min-h-14 items-center justify-between gap-2 rounded-lg border border-blue-200 bg-white px-2.5 py-2.5 sm:gap-3 sm:px-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="size-2 shrink-0 rounded-full bg-blue-500" />
@@ -181,15 +181,13 @@ export function SuboriginsTab({ tab, userPermissions }) {
 
                     <div className="flex shrink-0 items-center gap-2">
                       {canEdit ? (
-                        <Button variant="outline" onClick={() => openEdit(suborigen)}>
+                        <Button variant="outline" size="icon" onClick={() => openEdit(suborigen)} title="Editar suborigen">
                           <Edit3 className="size-4 text-orange-600" />
-                          Editar
                         </Button>
                       ) : null}
                       {canDelete ? (
-                        <Button variant="outline" onClick={() => openDelete(suborigen)}>
+                        <Button variant="outline" size="icon" onClick={() => openDelete(suborigen)} title="Eliminar suborigen">
                           <Trash2 className="size-4 text-red-600" />
-                          Eliminar
                         </Button>
                       ) : null}
                     </div>

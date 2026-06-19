@@ -41,12 +41,12 @@ function StatCard({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={cn("flex min-h-24 items-center justify-between rounded-lg border p-4", tones[tone])}>
+    <div className={cn("flex min-h-16 items-center justify-between rounded-lg border p-2 sm:min-h-24 sm:p-4", tones[tone])}>
       <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="truncate text-[10px] font-semibold sm:text-xs">{label}</p>
+        <p className="mt-1 text-lg font-bold text-slate-950 sm:mt-3 sm:text-2xl">{value}</p>
       </div>
-      <Icon className="size-9 opacity-25" />
+      <Icon className="hidden size-9 opacity-25 sm:block" />
     </div>
   );
 }
@@ -90,16 +90,16 @@ export function RatesTab({ tab, userPermissions }) {
   return (
     <>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="grid gap-3 px-4 py-4 lg:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           <StatCard label="Total" value={stats.total} tone="blue" icon={CheckCircle2} />
           <StatCard label="Activas" value={stats.activas} tone="green" icon={Clock3} />
           <StatCard label="Inactivas" value={stats.inactivas} tone="slate" icon={AlertTriangle} />
           <StatCard label="Promedio" value={stats.promedio.toFixed(2)} tone="orange" icon={DollarSign} />
         </div>
 
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <div className={cn("overflow-hidden rounded-lg border border-slate-200 border-l-4 bg-white", view.border)}>
-            <div className={cn("flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", view.header)}>
+            <div className={cn("flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", view.header)}>
               <div className="flex min-w-0 items-center gap-3">
                 <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-md text-white", view.button)}>
                   <Icon className="size-5" />
@@ -110,14 +110,14 @@ export function RatesTab({ tab, userPermissions }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                 {canCreate ? (
-                  <Button onClick={openCreate} className={cn("text-white", view.button)}>
+                  <Button onClick={openCreate} className={cn("w-full text-white sm:w-auto", view.button)}>
                     <Plus className="size-4" />
                     Nueva Tarifa
                   </Button>
                 ) : null}
-                <Button variant="outline" onClick={reload} disabled={loading}>
+                <Button variant="outline" className="w-full sm:w-auto" onClick={reload} disabled={loading}>
                   {tarifas.length} tarifas
                 </Button>
               </div>
@@ -129,8 +129,8 @@ export function RatesTab({ tab, userPermissions }) {
               </div>
             ) : null}
 
-            <div className="p-4">
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="p-2 sm:p-4">
+              <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
                 <table className="w-full min-w-[760px] border-collapse text-left text-sm">
                   <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
                     <tr>
@@ -199,11 +199,40 @@ export function RatesTab({ tab, userPermissions }) {
                   </tbody>
                 </table>
               </div>
+              <div className="space-y-2 sm:hidden">
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+                    <Loader2 className="size-4 animate-spin" />Cargando tarifas...
+                  </div>
+                ) : tarifas.length ? (
+                  tarifas.map((tarifa) => (
+                    <div key={tarifa.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-950">{tarifa.nombre}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {tarifa.monedaSimbolo || "-"} {tarifa.monedaCodigo} · {Number(tarifa.precioHora).toFixed(2)} / hora
+                          </p>
+                        </div>
+                        <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold", tarifa.activo ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
+                          {tarifa.activo ? "Activa" : "Inactiva"}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        {canEdit ? <Button variant="outline" size="icon" onClick={() => openEdit(tarifa)} title="Editar tarifa"><Edit3 className="size-4 text-orange-600" /></Button> : null}
+                        {canDelete ? <Button variant="outline" size="icon" onClick={() => openDelete(tarifa)} title="Eliminar tarifa"><Trash2 className="size-4 text-red-600" /></Button> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-sm text-slate-500">No hay tarifas registradas.</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="px-4 pb-4">
+        <div className="hidden px-4 pb-4 sm:block">
           <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
             <p className="text-sm font-bold">Informacion importante:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs font-medium">

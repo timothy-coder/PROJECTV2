@@ -23,7 +23,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const data = useOpportunities(kind);
   const clientsData = useClients();
   const [view, setView] = useState("general");
-  const [filters, setFilters] = useState({ clienteId: "", origenId: "", etapaId: "", asignadoA: "", createdBy: "", time: "all" });
+  const [filters, setFilters] = useState({ clienteId: "", origenId: "", etapaId: "", asignadoA: "", createdBy: "", time: "all", cierreMotivoId: "", cotizacionModeloId: "" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [page, setPage] = useState(1);
@@ -55,7 +55,9 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
     const matchAssigned = !filters.asignadoA || item.asignadoA === Number(filters.asignadoA);
     const matchCreated = !filters.createdBy || item.createdBy === Number(filters.createdBy);
     const matchTime = filters.time === "all" || matchesTime(item.nextAgenda || item.createdAt, filters.time);
-    return matchClient && matchOrigin && matchStage && matchAssigned && matchCreated && matchTime;
+    const matchClosureReason = !filters.cierreMotivoId || (item.closureReasonIds || []).some((id) => Number(id) === Number(filters.cierreMotivoId));
+    const matchQuoteModel = !filters.cotizacionModeloId || (item.quoteModelIds || []).some((id) => Number(id) === Number(filters.cotizacionModeloId));
+    return matchClient && matchOrigin && matchStage && matchAssigned && matchCreated && matchTime && matchClosureReason && matchQuoteModel;
   }), [data.opportunities, filters]);
 
   const sortedFiltered = useMemo(() => sortOpportunities(filtered, sortConfig), [filtered, sortConfig]);
@@ -123,6 +125,8 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const originOptions = [{ value: "", label: "Todos" }, ...data.options.origins.map((item) => ({ value: item.id, label: item.name }))];
   const stageOptions = [{ value: "", label: "Todos" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))];
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
+  const closureReasonOptions = [{ value: "", label: "Todos" }, ...(data.options.closureReasons || []).map((item) => ({ value: item.id, label: item.detalle }))];
+  const quoteModelOptions = [{ value: "", label: "Todos" }, ...(data.options.quoteModels || []).map((item) => ({ value: item.id, label: item.name }))];
   const timeOptions = [{ value: "all", label: "Todas" }, { value: "day", label: "Hoy" }, { value: "week", label: "Semana" }, { value: "month", label: "Mes" }];
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => value && !(key === "time" && value === "all")).length;
 
@@ -155,13 +159,15 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
             <span>Filtros{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
             <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
-          <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:grid sm:grid-cols-2 md:grid-cols-6`}>
+          <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:grid sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8`}>
             <Field label="Cliente"><SearchableSelect value={filters.clienteId} options={clientOptions} onChange={(value) => handleFilterChange("clienteId", value)} /></Field>
             <Field label="Origen"><SearchableSelect value={filters.origenId} options={originOptions} onChange={(value) => handleFilterChange("origenId", value)} /></Field>
             <Field label="Etapa"><SearchableSelect value={filters.etapaId} options={stageOptions} onChange={(value) => handleFilterChange("etapaId", value)} /></Field>
             {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.asignadoA} options={userOptions} onChange={(value) => handleFilterChange("asignadoA", value)} /></Field> : null}
             {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => handleFilterChange("createdBy", value)} /></Field> : null}
             <Field label="Fecha Agenda"><SearchableSelect value={filters.time} options={timeOptions} onChange={(value) => handleFilterChange("time", value)} /></Field>
+            <Field label="Motivo cierre"><SearchableSelect value={filters.cierreMotivoId} options={closureReasonOptions} onChange={(value) => handleFilterChange("cierreMotivoId", value)} /></Field>
+            <Field label="Modelo cotizacion"><SearchableSelect value={filters.cotizacionModeloId} options={quoteModelOptions} onChange={(value) => handleFilterChange("cotizacionModeloId", value)} /></Field>
           </div>
         </section>
         <div className="mb-3 flex shrink-0 flex-wrap gap-2">

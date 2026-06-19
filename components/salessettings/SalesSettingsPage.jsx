@@ -60,7 +60,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
   const tabs = [
     ...(canViewBase ? [{ id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" }] : []),
     ...(canViewHours ? [{ id: "hours", label: "Horas" }] : []),
-    ...(canViewUserCounts ? [{ id: "user-counts", label: "Conteo Usuarios" }] : []),
+    ...(canViewUserCounts ? [{ id: "user-counts", label: "Usuarios Lead" }] : []),
     ...(canViewBase ? [{ id: "stages", label: "Etapas de Conversion" }, { id: "times", label: "Tiempos" }] : []),
     ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
     ...(canViewTemplates ? [{ id: "templates", label: "Plantillas" }] : []),
@@ -70,10 +70,13 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
   const canView = canViewBase || canViewHours || canViewUserCounts || canViewClosings || canViewTemplates;
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <h1 className="mb-4 text-2xl font-bold">Configuracion del sistema</h1>
+    <div className="min-w-0 bg-slate-50 p-2 text-slate-950 sm:p-4">
+      <div className="mb-3 px-1">
+        <h1 className="text-base font-bold leading-tight text-violet-700 sm:text-2xl sm:text-slate-950">Configuracion del sistema</h1>
+        <p className="mt-0.5 text-xs font-medium text-violet-400 sm:hidden">Administra agenda, etapas y plantillas</p>
+      </div>
       <div className="mb-3 overflow-x-auto rounded-lg bg-slate-100 p-1">
-        <div className="flex min-w-max gap-1">{tabs.map((item) => <button key={item.id} className={cn("h-8 rounded-md px-8 text-xs font-semibold text-slate-600", activeTab === item.id && "bg-white text-slate-950 shadow-sm")} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
+        <div className="flex min-w-max gap-1 pb-1">{tabs.map((item) => <button key={item.id} className={cn("h-8 min-w-32 shrink-0 rounded-md px-4 text-xs font-semibold text-slate-600 sm:min-w-40 sm:px-8", activeTab === item.id && "bg-white text-slate-950 shadow-sm")} onClick={() => setTab(item.id)}>{item.label}</button>)}</div>
       </div>
       {activeTab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
       {activeTab === "hours" ? <HoursTab data={data} canCreate={hourPerms.canCreate} canEdit={hourPerms.canEdit} canDelete={hourPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "hour", item })} /> : null}
@@ -94,26 +97,26 @@ function TemplatesTab({ perms }) {
   const selected = useMemo(() => data.templates.find((item) => String(item.id) === String(selectedId)) || data.templates[0], [data.templates, selectedId]);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <Header
         icon={FileText}
         title="Plantillas de Ventas"
         subtitle="Configura ficha tecnica, cotizacion y reserva con encabezado, pie, imagenes y marca de agua"
         action={perms.canCreate ? <Button onClick={() => setDialogOpen(true)}><Plus className="size-4" />Nueva plantilla</Button> : null}
       />
-      <div className="grid min-h-[640px] gap-4 lg:grid-cols-[280px_1fr]">
+      <div className="grid min-h-[520px] gap-3 sm:gap-4 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-bold text-slate-800">Documentos</p>
             <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">{data.templates.length}</span>
           </div>
-          <div className="space-y-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
             {data.templates.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setSelectedId(String(item.id))}
-                className={cn("w-full rounded-lg border bg-white p-3 text-left transition hover:border-blue-300", selected?.id === item.id && "border-blue-500 ring-2 ring-blue-100")}
+                className={cn("w-56 shrink-0 rounded-lg border bg-white p-3 text-left transition hover:border-blue-300 lg:w-full", selected?.id === item.id && "border-blue-500 ring-2 ring-blue-100")}
               >
                 <span className="block text-xs font-bold text-blue-700">{documentLabel(item.tipoDocumento)}</span>
                 <span className="mt-1 block truncate text-sm font-bold text-slate-900">{item.nombre}</span>
@@ -191,9 +194,9 @@ function TemplateEditor({ template, data, perms, onDeleted }) {
   }
 
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(360px,1fr)_320px]">
-      <div className="min-w-0 space-y-4">
-        <div className="rounded-lg border border-slate-200 p-3">
+    <div className="grid min-w-0 gap-3 sm:gap-4 xl:grid-cols-[minmax(360px,1fr)_320px]">
+      <div className="min-w-0 space-y-3 sm:space-y-4">
+        <div className="rounded-lg border border-slate-200 p-2.5 sm:p-3">
           <div className="grid gap-3 md:grid-cols-[160px_1fr]">
             <Field label="Tipo"><NativeSelect disabled={!perms.canEdit} value={draft.tipoDocumento} onChange={(e) => setDraft((v) => ({ ...v, tipoDocumento: e.target.value }))} options={[["FICHA_TECNICA", "Ficha tecnica"], ["COTIZACION", "Cotizacion"], ["RESERVA", "Reserva"]]} /></Field>
             <Field label="Nombre"><Input disabled={!perms.canEdit} value={draft.nombre} onChange={(e) => setDraft((v) => ({ ...v, nombre: e.target.value }))} /></Field>
@@ -202,9 +205,9 @@ function TemplateEditor({ template, data, perms, onDeleted }) {
             <Field label="Descripcion"><Input disabled={!perms.canEdit} value={draft.descripcion || ""} onChange={(e) => setDraft((v) => ({ ...v, descripcion: e.target.value }))} /></Field>
             <label className="flex items-end gap-2 pb-2 text-xs font-semibold text-slate-700"><Checkbox disabled={!perms.canEdit} checked={draft.isActive} onCheckedChange={(checked) => setDraft((v) => ({ ...v, isActive: Boolean(checked) }))} />Activa</label>
           </div>
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
-            {perms.canDelete ? <Button variant="destructive" onClick={async () => { await data.save({ action: "delete-template", id: draft.id }); onDeleted(); }}><Trash2 className="size-4" />Eliminar</Button> : null}
-            {perms.canEdit ? <Button onClick={saveTemplate}><Save className="size-4" />Guardar datos</Button> : null}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+            {perms.canDelete ? <Button className="w-full sm:w-auto" variant="destructive" onClick={async () => { await data.save({ action: "delete-template", id: draft.id }); onDeleted(); }}><Trash2 className="size-4" />Eliminar</Button> : null}
+            {perms.canEdit ? <Button className="w-full sm:w-auto" onClick={saveTemplate}><Save className="size-4" />Guardar datos</Button> : null}
           </div>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
@@ -279,7 +282,7 @@ function ScheduleTab({ data, canEdit, scope }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <Header icon={Calendar} title="Horario de Atencion" subtitle={subtitle} />
-      <div className="mb-4 grid gap-3 md:grid-cols-[220px_1fr_280px]">
+      <div className="mb-3 grid gap-2 sm:mb-4 sm:gap-3 md:grid-cols-[220px_1fr_280px]">
         <Field label="Centro de Atencion"><SearchableSelect value={selectedCenterId} options={centerOptions} placeholder="Seleccione centro" onChange={(value) => { const s = data.schedules.find((item) => String(item.centroId) === value); setCentroId(value); setDraft({ slot: s?.slotMinutes || 30, week: s?.week || defaultWeek() }); }} /></Field>
         <Field label="Duracion del Slot"><Input type="number" value={slot} onChange={(e) => setDraft((value) => ({ ...value, slot: e.target.value }))} /></Field>
         <div className="grid grid-cols-2 gap-2"><Mini label="Dias Activos" value={Object.values(week).filter((d) => d.active).length} /><Mini label="Horas/Semana" value={`${Object.values(week).filter((d) => d.active).length * 10}.0h`} /></div>
@@ -287,10 +290,10 @@ function ScheduleTab({ data, canEdit, scope }) {
       <div className="space-y-2">
         {days.map(([key, label]) => {
           const value = week[key] || { active: false, start: "08:00", end: "18:00" };
-          return <div key={key} className="flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between"><label className="flex items-center gap-2 font-bold"><Switch checked={value.active} onCheckedChange={(checked) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, active: Boolean(checked) } } }))} />{label}<span className="rounded-full bg-blue-600 px-2 py-1 text-xs text-white">{value.active ? "Activo" : "Inactivo"}</span></label><div className="flex gap-2"><Input type="time" value={value.start} onChange={(e) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, start: e.target.value } } }))} /><Input type="time" value={value.end} onChange={(e) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, end: e.target.value } } }))} /></div></div>;
+          return <div key={key} className="flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5 sm:flex-row sm:items-center sm:justify-between sm:p-3"><label className="flex items-center gap-2 text-sm font-bold"><Switch checked={value.active} onCheckedChange={(checked) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, active: Boolean(checked) } } }))} />{label}<span className="rounded-full bg-blue-600 px-2 py-1 text-[10px] text-white sm:text-xs">{value.active ? "Activo" : "Inactivo"}</span></label><div className="grid grid-cols-2 gap-2"><Input type="time" value={value.start} onChange={(e) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, start: e.target.value } } }))} /><Input type="time" value={value.end} onChange={(e) => setDraft((draftValue) => ({ ...draftValue, week: { ...week, [key]: { ...value, end: e.target.value } } }))} /></div></div>;
         })}
       </div>
-      {canEdit ? <div className="mt-3 flex justify-end"><Button disabled={!selectedCenterId} onClick={() => data.save({ resource: "schedule", centroId: selectedCenterId, slotMinutes: slot, week })}>Guardar Cambios</Button></div> : null}
+      {canEdit ? <div className="mt-3 flex justify-end"><Button className="w-full sm:w-auto" disabled={!selectedCenterId} onClick={() => data.save({ resource: "schedule", centroId: selectedCenterId, slotMinutes: slot, week })}>Guardar Cambios</Button></div> : null}
     </section>
   );
 }
@@ -311,13 +314,13 @@ function StageTab({ data, canCreate, canEdit, canDelete, openDialog }) {
     await data.save({ resource: "stage-order", items: items.map((item, index) => ({ id: item.id, sortOrder: index + 1 })) });
   };
   const toggleStage = (item, checked) => data.save({ resource: "stage", ...item, isActive: checked });
-  return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={Workflow} title="Etapas de Conversion" subtitle="Arrastra para reordenar las etapas en el flujo" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nueva Etapa</Button> : null} /><div className="mb-4 grid gap-3 md:grid-cols-3"><Stat label="Total de Etapas" value={data.stages.length} /><Stat label="Etapas Activas" value={active} tone="green" /><Stat label="Inactivas" value={data.stages.length - active} tone="slate" /></div><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={stageIds} strategy={verticalListSortingStrategy}><List>{data.stages.map((item) => <StageRow key={item.id} item={item} canDrag={canEdit} canEdit={canEdit} canDelete={canDelete} onToggle={(checked) => toggleStage(item, checked)} onEdit={() => openDialog(item)} onDelete={() => data.delete("stage", item.id)} />)}</List></SortableContext></DndContext></section>;
+  return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={Workflow} title="Etapas de Conversion" subtitle="Arrastra para reordenar las etapas en el flujo" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nueva Etapa</Button> : null} /><div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-3"><Stat label="Total de Etapas" value={data.stages.length} /><Stat label="Etapas Activas" value={active} tone="green" /><Stat label="Inactivas" value={data.stages.length - active} tone="slate" /></div><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}><SortableContext items={stageIds} strategy={verticalListSortingStrategy}><List>{data.stages.map((item) => <StageRow key={item.id} item={item} canDrag={canEdit} canEdit={canEdit} canDelete={canDelete} onToggle={(checked) => toggleStage(item, checked)} onEdit={() => openDialog(item)} onDelete={() => data.delete("stage", item.id)} />)}</List></SortableContext></DndContext></section>;
 }
 function HoursTab({ data, canCreate, canEdit, canDelete, openDialog }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <Header icon={Clock} title="Horas disponibles" subtitle="Configura las horas que se podran usar en la agenda de ventas" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nueva hora</Button> : null} />
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-3">
         <Stat label="Total de Horas" value={data.hours.length} />
         <Stat label="Primera Hora" value={data.hours[0]?.hora || "-"} tone="green" />
         <Stat label="Ultima Hora" value={data.hours[data.hours.length - 1]?.hora || "-"} tone="slate" />
@@ -346,18 +349,14 @@ function UserCountsTab({ data, canCreate, canEdit, canDelete }) {
     setDialogOpen(false);
   }
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <Header
         icon={Users}
-        title="Conteo de Usuarios"
+        title="Usuarios Lead"
         subtitle="Inicializa y administra el contador comercial de cada usuario"
         action={
           <div className="flex flex-wrap gap-2">
-            {canReset ? (
-              <Button variant="outline" onClick={() => data.save({ resource: "user-count-reset" })}>
-                <RotateCcw className="size-4" />Resetear a cero
-              </Button>
-            ) : null}
+            
             {canCreate ? (
               <Button onClick={() => setDialogOpen(true)}>
                 <Plus className="size-4" />Agregar usuario
@@ -366,10 +365,11 @@ function UserCountsTab({ data, canCreate, canEdit, canDelete }) {
           </div>
         }
       />
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
+      <div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-3">
         <Stat label="Usuarios agregados" value={totalUsers} />
         <Stat label="Registros creados" value={configured} tone="green" />
-        <Stat label="Conteo total" value={totalCount} tone="slate" />
+        <Stat label="
+         total" value={totalCount} tone="slate" />
       </div>
       <List>
         {data.userCounts.map((item) => (
@@ -433,11 +433,11 @@ function UserCountRow({ item, canDelete, data }) {
   );
 }
 function TimeTab({ data, canCreate, canEdit, canDelete, openDialog }) {
-  return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={Clock} title="Estados de Tiempo" subtitle="Configura los rangos de tiempo y codigos de color" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo Estado</Button> : null} /><div className="mb-4 grid gap-3 md:grid-cols-3"><Stat label="Total de Estados" value={data.times.length} /><Stat label="Rango Minimo" value={data.times.length ? Math.min(...data.times.map((t) => t.minutosDesde)) : 0} /><Stat label="Rango Maximo" value={data.times.length ? Math.max(...data.times.map((t) => t.minutosHasta)) : 0} /></div><List>{data.times.map((item) => <Row key={item.id} title={item.nombre} subtitle={`${item.minutosDesde} a ${item.minutosHasta} min - ${item.descripcion || ""}`} badges={[item.estado, item.colorHexadecimal]} color={item.colorHexadecimal} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("time", item.id) : null} />)}</List></section>;
+  return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={Clock} title="Estados de Tiempo" subtitle="Configura los rangos de tiempo y codigos de color" action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo Estado</Button> : null} /><div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-3"><Stat label="Total de Estados" value={data.times.length} /><Stat label="Rango Minimo" value={data.times.length ? Math.min(...data.times.map((t) => t.minutosDesde)) : 0} /><Stat label="Rango Maximo" value={data.times.length ? Math.max(...data.times.map((t) => t.minutosHasta)) : 0} /></div><List>{data.times.map((item) => <Row key={item.id} title={item.nombre} subtitle={`${item.minutosDesde} a ${item.minutosHasta} min - ${item.descripcion || ""}`} badges={[item.estado, item.colorHexadecimal]} color={item.colorHexadecimal} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("time", item.id) : null} />)}</List></section>;
 }
 function ClosingTab({ data, scope, canCreate, canEdit, canDelete, openDialog }) {
   const subtitle = scope === "ventas" ? "Gestiona los detalles y notas de cierres de ventas" : "Gestiona los detalles disponibles para cierres de PostVenta";
-  return <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
+  return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
 }
 
 function ElementCreateBar({ section, onCreate }) {
@@ -650,8 +650,23 @@ function EntityDialog({ state, onClose, onSubmit }) {
   );
 }
 
-function Header({ icon: Icon, title, subtitle, action }) { return <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-4"><div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-md bg-blue-600 text-white"><Icon className="size-5" /></div><div><h2 className="text-2xl font-bold">{title}</h2><p className="text-xs text-slate-500">{subtitle}</p></div></div>{action}</div>; }
-function List({ children }) { return <div className="space-y-2 rounded-lg border border-slate-200 p-3">{children}</div>; }
+function Header({ icon: Icon, title, subtitle, action }) {
+  return (
+    <div className="mb-3 flex flex-col gap-3 border-b border-slate-200 pb-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white sm:size-10">
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="truncate text-base font-bold sm:text-2xl">{title}</h2>
+          <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{subtitle}</p>
+        </div>
+      </div>
+      {action ? <div className="grid grid-cols-1 gap-2 sm:flex sm:justify-end">{action}</div> : null}
+    </div>
+  );
+}
+function List({ children }) { return <div className="space-y-2 rounded-lg border border-slate-200 p-2 sm:p-3">{children}</div>; }
 function StageRow({ item, canDrag, canEdit, canDelete, onToggle, onEdit, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: !canDrag });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -659,31 +674,45 @@ function StageRow({ item, canDrag, canEdit, canDelete, onToggle, onEdit, onDelet
     <div
       ref={setNodeRef}
       style={style}
-      className={cn("flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 transition hover:border-blue-300 hover:bg-blue-50/40", isDragging && "relative z-10 border-blue-400 bg-blue-50 shadow-lg")}
+      className={cn("flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 transition hover:border-blue-300 hover:bg-blue-50/40 sm:p-3", isDragging && "relative z-10 border-blue-400 bg-blue-50 shadow-lg")}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button type="button" className={cn("rounded p-1 text-slate-400", canDrag && "cursor-grab hover:bg-slate-100 active:cursor-grabbing")} {...attributes} {...listeners}>
           <GripVertical className="size-4 shrink-0" />
         </button>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bold">{item.nombre}</span>
-            <span className="rounded-full border bg-slate-50 px-2 py-1 text-xs text-slate-600"><span className="mr-1 inline-block size-2 rounded-full" style={{ background: item.color }} />{item.color}</span>
-            <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">#{item.sortOrder}</span>
+            <span className="truncate text-sm font-bold">{item.nombre}</span>
+            <span className="rounded-full border bg-slate-50 px-2 py-1 text-[10px] text-slate-600 sm:text-xs"><span className="mr-1 inline-block size-2 rounded-full" style={{ background: item.color }} />{item.color}</span>
+            <span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 sm:text-xs">#{item.sortOrder}</span>
           </div>
           <p className="mt-1 text-xs text-slate-500">{item.descripcion || 0}</p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        {canEdit ? <label className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><Switch checked={item.isActive} onCheckedChange={onToggle} />Activo</label> : <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{item.isActive ? "Activo" : "Inactivo"}</span>}
+      <div className="flex shrink-0 items-center gap-2">
+        {canEdit ? <label className="hidden items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 sm:flex"><Switch checked={item.isActive} onCheckedChange={onToggle} />Activo</label> : <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">{item.isActive ? "Activo" : "Inactivo"}</span>}
         {canEdit ? <Button variant="outline" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}
         {canDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}
       </div>
     </div>
   );
 }
-function Row({ title, subtitle, badges = [], color, onEdit, onDelete }) { return <div className="flex items-center justify-between rounded-lg border border-slate-200 p-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold">{title}</span>{color ? <span className="size-3 rounded-full" style={{ background: color }} /> : null}{badges.map((b) => <span key={b} className="rounded-full bg-slate-100 px-2 py-1 text-xs">{b}</span>)}</div>{subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}</div><div className="flex gap-2">{onEdit ? <Button variant="outline" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}{onDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}</div></div>; }
+function Row({ title, subtitle, badges = [], color, onEdit, onDelete }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-2.5 sm:p-3">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="truncate text-sm font-bold">{title}</span>
+          {color ? <span className="size-3 shrink-0 rounded-full" style={{ background: color }} /> : null}
+          {badges.map((b) => <span key={b} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] sm:text-xs">{b}</span>)}
+        </div>
+        {subtitle ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{subtitle}</p> : null}
+      </div>
+      <div className="flex shrink-0 gap-2">{onEdit ? <Button variant="outline" size="icon" onClick={onEdit}><Edit3 className="size-4" /></Button> : null}{onDelete ? <Button variant="destructive" size="icon" onClick={onDelete}><Trash2 className="size-4" /></Button> : null}</div>
+    </div>
+  );
+}
 function Field({ label, children }) { return <div className="space-y-1"><Label>{label}</Label>{children}</div>; }
-function Stat({ label, value, tone = "blue" }) { const tones = { blue:"border-blue-200 bg-blue-50", green:"border-emerald-200 bg-emerald-50", slate:"border-slate-200 bg-slate-50" }; return <div className={`rounded-lg border p-4 ${tones[tone]}`}><p className="text-xs font-bold text-blue-700">{label}</p><p className="mt-2 text-2xl font-bold">{value}</p></div>; }
-function Mini({ label, value }) { return <div className="rounded-lg border border-blue-200 bg-blue-50 p-3"><p className="text-xs text-blue-700">{label}</p><p className="text-xl font-bold text-blue-700">{value}</p></div>; }
+function Stat({ label, value, tone = "blue" }) { const tones = { blue:"border-blue-200 bg-blue-50", green:"border-emerald-200 bg-emerald-50", slate:"border-slate-200 bg-slate-50" }; return <div className={`rounded-lg border p-2 sm:p-4 ${tones[tone]}`}><p className="truncate text-[10px] font-bold text-blue-700 sm:text-xs">{label}</p><p className="mt-1 text-lg font-bold sm:mt-2 sm:text-2xl">{value}</p></div>; }
+function Mini({ label, value }) { return <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 sm:p-3"><p className="truncate text-[10px] text-blue-700 sm:text-xs">{label}</p><p className="text-base font-bold text-blue-700 sm:text-xl">{value}</p></div>; }
 function defaultWeek() { return Object.fromEntries(days.map(([key]) => [key, { active: true, start: "08:00", end: "18:00" }])); }

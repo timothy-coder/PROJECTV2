@@ -110,6 +110,7 @@ export async function GET(request) {
     let detailRows = [];
     let activityRows = [];
     let closureRows = [];
+    let quoteModelRows = [];
     if (ids.length) {
       const [details] = await pool.query(`SELECT * FROM ventas_oportunidades_detalles WHERE oportunidad_padre_id IN (?) ORDER BY created_at ASC`, [ids]);
       const [activities] = await pool.query(
@@ -121,16 +122,26 @@ export async function GET(request) {
         [ids]
       );
       const [closures] = await pool.query(
-        `SELECT c.oportunidad_id, c.detalle, c.created_at, cd.detalle AS clasificacion
+        `SELECT c.oportunidad_id, c.detalle, c.cierre_detalle_id, c.created_at, cd.detalle AS clasificacion
          FROM ventas_oportunidades_cierres c
          LEFT JOIN configuracion_ventas_cierres_detalle cd ON cd.id = c.cierre_detalle_id
          WHERE c.oportunidad_id IN (?)
          ORDER BY c.created_at ASC`,
         [ids]
       );
+      const [quoteModels] = await pool.query(
+        `SELECT DISTINCT q.oportunidad_id, p.modelo_id, mo.name AS modelo_nombre
+         FROM ventas_cotizaciones q
+         INNER JOIN ventas_precios p ON p.id = q.precio_id
+         INNER JOIN administracion_modelos mo ON mo.id = p.modelo_id
+         WHERE q.oportunidad_id IN (?)
+         ORDER BY mo.name ASC`,
+        [ids]
+      );
       detailRows = details;
       activityRows = activities;
       closureRows = closures;
+      quoteModelRows = quoteModels;
     }
     const [clients] = await pool.query(
       `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre, identificacion_fiscal
@@ -156,6 +167,14 @@ export async function GET(request) {
        WHERE activo = 1
        ORDER BY minutos_desde ASC`
     );
+    const [closureReasons] = await pool.query(`SELECT id, detalle FROM configuracion_ventas_cierres_detalle ORDER BY detalle ASC`);
+    const quoteModelOptions = Array.from(
+      new Map(
+        quoteModelRows
+          .filter((row) => row.modelo_id)
+          .map((row) => [Number(row.modelo_id), { id: Number(row.modelo_id), name: row.modelo_nombre || `Modelo ${row.modelo_id}` }])
+      ).values()
+    ).sort((a, b) => a.name.localeCompare(b.name));
     const stageTemps = stages.map((stage) => ({ id: stage.id, temp: Number(stage.descripcion || 0), order: Number(stage.sort_order || stage.id) }));
     const now = new Date();
     return NextResponse.json({
@@ -164,6 +183,7 @@ export async function GET(request) {
         const details = detailRows.filter((detail) => detail.oportunidad_padre_id === row.id);
         const activities = activityRows.filter((activity) => activity.oportunidad_id === row.id);
         const closures = closureRows.filter((closure) => closure.oportunidad_id === row.id);
+        const quoteModels = quoteModelRows.filter((quoteModel) => quoteModel.oportunidad_id === row.id);
         const currentOrder = Number(row.etapa_orden || row.etapasconversion_id);
         const temperature = stageTemps.filter((stage) => stage.order <= currentOrder).reduce((sum, stage) => sum + stage.temp, 0);
         const lastDetail = details.at(-1);
@@ -210,6 +230,10 @@ export async function GET(request) {
             color: timeState.color_hexadecimal,
             descripcion: timeState.descripcion || "",
           } : null,
+          closureReasonIds: closures.map((closure) => closure.cierre_detalle_id).filter(Boolean).map(Number),
+          closureReasons: closures.map((closure) => closure.clasificacion || closure.detalle || "").filter(Boolean),
+          quoteModelIds: quoteModels.map((quoteModel) => quoteModel.modelo_id).filter(Boolean).map(Number),
+          quoteModels: quoteModels.map((quoteModel) => quoteModel.modelo_nombre || "").filter(Boolean),
           detail: listDetail,
           temperature,
           details: details.map((detail) => ({ id: detail.id, fechaAgenda: datePart(detail.fecha_agenda), horaAgenda: timePart(detail.hora_agenda), createdAt: detail.created_at })),
@@ -222,6 +246,8 @@ export async function GET(request) {
         suborigins: suborigins.map((row) => ({ id: row.id, origenId: row.origen_id, name: row.name })),
         stages: stages.map((row) => ({ id: row.id, nombre: row.nombre, descripcion: Number(row.descripcion || 0), color: row.color || "#2563eb", sortOrder: row.sort_order || row.id })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+        closureReasons: closureReasons.map((row) => ({ id: row.id, detalle: row.detalle || "" })),
+        quoteModels: quoteModelOptions,
       },
     });
   } catch (error) {

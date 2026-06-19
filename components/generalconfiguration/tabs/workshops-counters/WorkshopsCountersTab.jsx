@@ -24,12 +24,12 @@ function SummaryCard({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={cn("flex min-h-24 items-center justify-between rounded-lg border p-4", tones[tone])}>
+    <div className={cn("flex min-h-16 items-center justify-between rounded-lg border p-2 sm:min-h-24 sm:p-4", tones[tone])}>
       <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="truncate text-[10px] font-semibold sm:text-xs">{label}</p>
+        <p className="mt-1 text-lg font-bold text-slate-950 sm:mt-3 sm:text-2xl">{value}</p>
       </div>
-      <Icon className="size-9 opacity-25" />
+      <Icon className="hidden size-9 opacity-25 sm:block" />
     </div>
   );
 }
@@ -68,7 +68,7 @@ function ItemPanel({
 
   return (
     <section className={cn("overflow-hidden rounded-lg border border-slate-200 border-l-4 bg-white", palette.border)}>
-      <div className={cn("flex items-center justify-between gap-3 px-4 py-3", palette.header)}>
+      <div className={cn("flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4", palette.header)}>
         <div className="flex min-w-0 items-center gap-3">
           <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-md", palette.icon)}>
             <Icon className="size-5" />
@@ -80,14 +80,14 @@ function ItemPanel({
         </div>
 
         {canCreate ? (
-          <Button onClick={onCreate} className={cn("text-white", palette.button)}>
+          <Button onClick={onCreate} className={cn("w-full text-white sm:w-auto", palette.button)}>
             <Plus className="size-4" />
             Nuevo
           </Button>
         ) : null}
       </div>
 
-      <div className="space-y-2 p-4">
+      <div className="space-y-2 p-2 sm:p-4">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
             <Loader2 className="size-4 animate-spin" />
@@ -97,7 +97,7 @@ function ItemPanel({
           items.map((item) => (
             <div
               key={item.id}
-              className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+              className="flex min-h-12 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2.5 sm:gap-3 sm:px-3"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span className={cn("size-2 shrink-0 rounded-full", palette.bullet)} />
@@ -207,13 +207,13 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
   return (
     <>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
               <Building2 className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold leading-tight text-slate-950">
+              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">
                 Talleres y Mostradores
               </h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
@@ -225,12 +225,12 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
 
         <div className="mx-4 border-t border-slate-200" />
 
-        <div className="px-4 py-4">
+        <div className="px-3 py-3 sm:px-4 sm:py-4">
           <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <label className="text-xs font-semibold text-slate-700">
               Centro
             </label>
-            <div className="mt-2 max-w-xs">
+            <div className="mt-2 max-w-none sm:max-w-xs">
               <SearchableSelect
               value={currentCentroId}
               options={centroOptions}
@@ -250,7 +250,7 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
           </div>
         ) : null}
 
-        <div className="grid gap-3 px-4 py-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           {canViewTalleres ? (
             <SummaryCard label="Total Talleres" value={stats.talleres} tone="blue" icon={Wrench} />
           ) : null}

@@ -83,10 +83,11 @@ function buildLeadPayloadFromOpportunity(row) {
   const documentType = documentTypeFromClient(row.tipo_identificacion);
   const model = fordModelFromOpportunity(row.modelo_nombre);
   const contactName = [row.nombre, row.apellido].filter(Boolean).join(" ").trim();
+  const vehicleName = [row.modelo_nombre, row.version].filter(Boolean).join(" ").trim();
   return {
     oportunidadId: row.id,
     oportunidadCodigo: row.oportunidad_id,
-    oportunidadTexto: `${row.oportunidad_id} - ${contactName || "Sin cliente"}`,
+    oportunidadTexto: [row.oportunidad_id, contactName || "Sin cliente", vehicleName].filter(Boolean).join(" - "),
     payload: {
       sourceHints: {
         contact: {
@@ -197,11 +198,23 @@ async function sentFordLeads(user) {
             o.oportunidad_id AS oportunidad_codigo,
             CONCAT(COALESCE(c.nombre, ''), ' ', COALESCE(c.apellido, '')) AS cliente_nombre,
             c.email, c.celular,
-            u.fullname AS creado_por_nombre
+            u.fullname AS creado_por_nombre,
+            asesor.fullname AS asesor_nombre,
+            mo.name AS modelo_nombre,
+            vp.version
      FROM ventas_oportunidad_tokens vot
      INNER JOIN ventas_oportunidades o ON o.id = vot.oportunidad_id
      INNER JOIN administracion_clientes c ON c.id = o.cliente_id
      LEFT JOIN administracion_usuarios u ON u.id = vot.created_by
+     LEFT JOIN administracion_usuarios asesor ON asesor.id = o.asignado_a
+     LEFT JOIN (
+       SELECT oportunidad_id, MAX(id) AS id
+       FROM ventas_cotizaciones
+       GROUP BY oportunidad_id
+     ) latest_quote ON latest_quote.oportunidad_id = o.id
+     LEFT JOIN ventas_cotizaciones vc ON vc.id = latest_quote.id
+     LEFT JOIN ventas_precios vp ON vp.id = vc.precio_id
+     LEFT JOIN administracion_modelos mo ON mo.id = vp.modelo_id
      ORDER BY vot.created_at DESC
      LIMIT 1000`
   );
@@ -215,6 +228,10 @@ async function sentFordLeads(user) {
     email: row.email || "",
     celular: row.celular || "",
     creadoPorNombre: row.creado_por_nombre || "",
+    asesorNombre: row.asesor_nombre || row.creado_por_nombre || "",
+    modeloNombre: row.modelo_nombre || "",
+    version: row.version || "",
+    vehiculoNombre: [row.modelo_nombre, row.version].filter(Boolean).join(" "),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

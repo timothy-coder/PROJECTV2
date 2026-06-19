@@ -26,12 +26,12 @@ function CenterStat({ label, value, tone, icon: Icon }) {
   };
 
   return (
-    <div className={`flex min-h-24 items-center justify-between rounded-lg border p-4 ${tones[tone]}`}>
+    <div className={`flex min-h-16 items-center justify-between rounded-lg border p-2 sm:min-h-24 sm:p-4 ${tones[tone]}`}>
       <div>
-        <p className="text-xs font-semibold">{label}</p>
-        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="truncate text-[10px] font-semibold sm:text-xs">{label}</p>
+        <p className="mt-1 text-lg font-bold text-slate-950 sm:mt-3 sm:text-2xl">{value}</p>
       </div>
-      <Icon className="size-9 opacity-25" />
+      <Icon className="hidden size-9 opacity-25 sm:block" />
     </div>
   );
 }
@@ -71,27 +71,27 @@ export function CentersTab({ tab, userPermissions }) {
   return (
     <>
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white">
               <Building2 className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-bold leading-tight text-slate-950">Centros</h2>
+              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">Centros</h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
                 Gestiona los centros de atencion disponibles
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             {canCreate ? (
-              <Button onClick={openCreate} className="bg-emerald-600 text-white hover:bg-emerald-700">
+              <Button onClick={openCreate} className="w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto">
                 <Plus className="size-4" />
                 Nuevo Centro
               </Button>
             ) : null}
-            <Button variant="outline" onClick={reload} disabled={loading}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={reload} disabled={loading}>
               <RefreshCw className={cn("size-4", loading && "animate-spin")} />
               {centros.length} centros
             </Button>
@@ -100,7 +100,7 @@ export function CentersTab({ tab, userPermissions }) {
 
         <div className="mx-4 border-t border-slate-200" />
 
-        <div className="grid gap-3 px-4 py-4 lg:grid-cols-2">
+        <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           <CenterStat
             label="Total de Centros"
             value={stats.total}
@@ -121,7 +121,7 @@ export function CentersTab({ tab, userPermissions }) {
           </div>
         ) : null}
 
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div className="flex items-center gap-2">
@@ -133,7 +133,7 @@ export function CentersTab({ tab, userPermissions }) {
               </span>
             </div>
 
-            <div className="space-y-2 p-3">
+            <div className="space-y-2 p-2 sm:p-3">
               {loading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
                   <Loader2 className="size-4 animate-spin" />
@@ -143,7 +143,7 @@ export function CentersTab({ tab, userPermissions }) {
                 centros.map((centro) => (
                   <div
                     key={centro.id}
-                    className="flex min-h-14 items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+                    className="flex min-h-14 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-2.5 sm:gap-3 sm:px-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">

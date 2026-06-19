@@ -159,6 +159,7 @@ export async function GET(_request, { params }) {
     const viewAll = canSeeAll(user);
     const [[reservation]] = await pool.query(
       `SELECT r.*, o.oportunidad_id AS oportunidad_code,
+              vot.token AS ford_token,
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
               c.id_lead, c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal, c.fecha_nacimiento,
               c.ocupacion, c.domicilio, c.nombre_comercial, c.nombreconyugue, c.dniconyugue,
@@ -167,6 +168,12 @@ export async function GET(_request, { params }) {
               u.fullname AS creado_por
        FROM ventas_reservas r
        LEFT JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
+       LEFT JOIN (
+         SELECT oportunidad_id, MAX(id) AS id
+         FROM ventas_oportunidad_tokens
+         GROUP BY oportunidad_id
+       ) latest_ford_token ON latest_ford_token.oportunidad_id=o.id
+       LEFT JOIN ventas_oportunidad_tokens vot ON vot.id=latest_ford_token.id
        LEFT JOIN administracion_clientes c ON c.id=o.cliente_id
        LEFT JOIN configuracion_origenes_citas og ON og.id=o.origen_id
        LEFT JOIN configuracion_suborigenes_citas so ON so.id=o.suborigen_id
@@ -304,6 +311,7 @@ export async function GET(_request, { params }) {
         observaciones: reservation.observaciones || "",
         oportunidadId: reservation.oportunidad_id,
         oportunidadCode: reservation.oportunidad_code || "-",
+        fordToken: reservation.ford_token || "",
         origenVenta: reservation.origen_nombre || "",
         campania: reservation.suborigen_nombre || "",
         createdAt: reservation.created_at,
