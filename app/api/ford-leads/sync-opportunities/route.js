@@ -14,12 +14,25 @@ function envValue(...names) {
   return "";
 }
 
-function defaultStartDate() {
-  return envValue("FORD_LEADS_START_DATE", "LEADS_START_DATE") || "2025-12-02T00:00:00Z";
+function limaDatePart() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return `${year}-${month}-${day}`;
 }
 
-function defaultEndDate() {
-  return envValue("FORD_LEADS_END_DATE", "LEADS_END_DATE") || "";
+function todayStartDate() {
+  return `${limaDatePart()}T00:00:00Z`;
+}
+
+function todayEndDate() {
+  return `${limaDatePart()}T23:59:59Z`;
 }
 
 function limaTimeParts() {
@@ -43,6 +56,15 @@ function minutesOfDay(value) {
 async function canRunBySchedule({ force = false, windowMinutes = 5 } = {}) {
   if (force) return { ok: true, currentTime: "", configured: [] };
   const [rows] = await pool.query(`SELECT id, hora FROM configuracion_horas ORDER BY hora ASC`);
+  if (!rows.length) {
+    const now = limaTimeParts();
+    return {
+      ok: true,
+      currentTime: `${String(now.hour).padStart(2, "0")}:${String(now.minute).padStart(2, "0")}`,
+      configured: [],
+      reason: "Sin horas configuradas: ejecucion cada 10 minutos habilitada.",
+    };
+  }
   const now = limaTimeParts();
   const current = now.hour * 60 + now.minute;
   const match = rows.some((row) => Math.abs(current - minutesOfDay(row.hora)) <= windowMinutes);
@@ -54,8 +76,15 @@ async function canRunBySchedule({ force = false, windowMinutes = 5 } = {}) {
 }
 
 async function authorize(request) {
-  const secret = envValue("FORD_SYNC_SECRET");
+  const secret = envValue("FORD_SYNC_SECRET", "CRON_SECRET");
   const headerSecret = request.headers.get("x-ford-sync-secret") || request.nextUrl.searchParams.get("secret");
+  const bearerSecret = String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (secret && bearerSecret === secret) {
+    const userId = Number(envValue("FORD_SYNC_USER_ID"));
+    if (userId) return { id: userId, permissions: {} };
+    const [[user]] = await pool.query(`SELECT id, permissions FROM administracion_usuarios WHERE is_active = 1 ORDER BY id ASC LIMIT 1`);
+    if (user) return { id: user.id, permissions: user.permissions ? JSON.parse(user.permissions) : {} };
+  }
   if (secret && headerSecret === secret) {
     const userId = Number(envValue("FORD_SYNC_USER_ID"));
     if (userId) return { id: userId, permissions: {} };
@@ -114,6 +143,18 @@ function splitName(name = "") {
   return { nombre: parts.slice(0, -1).join(" "), apellido: parts.at(-1) };
 }
 
+function firstWord(value = "") {
+  return String(value || "").trim().split(/\s+/).filter(Boolean)[0] || "";
+}
+
+function normalizeModelWord(value = "") {
+  return firstWord(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+}
+
 async function findOrCreateClient(connection, lead, userId) {
   const contact = lead.contact || {};
   const doc = contact.documentNumber || "";
@@ -168,6 +209,39 @@ async function pickAssignedUserByCount(connection) {
   return selected.usuario_id;
 }
 
+async function findModelByLeadVehicle(connection, lead) {
+  const leadModelWord = normalizeModelWord(lead.vehicle?.model);
+  if (!leadModelWord) return null;
+  const [rows] = await connection.query(
+    `SELECT id AS modelo_id, marca_id, name
+     FROM administracion_modelos
+     ORDER BY name ASC`
+  );
+  return rows.find((row) => normalizeModelWord(row.name) === leadModelWord) || null;
+}
+
+async function createClientInterestVehicleFromLead(connection, lead, clienteId) {
+  const model = await findModelByLeadVehicle(connection, lead);
+  if (!model?.modelo_id) return null;
+
+  const [[existing]] = await connection.query(
+    `SELECT id
+     FROM ventas_oportunidad_client_interest_vehicles
+     WHERE client_id = ? AND modelo_id = ? AND active = 1
+     LIMIT 1`,
+    [clienteId, model.modelo_id]
+  );
+  if (existing?.id) return existing.id;
+
+  const [result] = await connection.query(
+    `INSERT INTO ventas_oportunidad_client_interest_vehicles
+     (client_id, marca_id, modelo_id, anio_interes, source, active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'oportunidad', 1, NOW(), NOW())`,
+    [clienteId, model.marca_id || null, model.modelo_id, lead.vehicle?.year || null]
+  );
+  return result.insertId;
+}
+
 function fordPatchStatus(value, lossReason) {
   const status = String(value || "").trim();
   if (status === "Closed Lost" && !lossReason) return "Assigned";
@@ -195,32 +269,34 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
   const [[tokenRow]] = await connection.query(`SELECT id FROM ventas_oportunidad_tokens WHERE token = ? LIMIT 1`, [token]);
   if (tokenRow) return { skipped: true, reason: "Lead ya importado.", token };
 
-  const clienteId = await findOrCreateClient(connection, lead, userId);
+  const assignedUserId = await pickAssignedUserByCount(connection);
+  const ownerUserId = assignedUserId || userId;
+  const clienteId = await findOrCreateClient(connection, lead, ownerUserId);
   const { origenId, suborigenId } = await originIds(connection, lead);
   const etapaId = await stageId(connection);
   if (!origenId || !etapaId) return { skipped: true, reason: "Falta origen o etapa configurada.", token };
-  const assignedUserId = await pickAssignedUserByCount(connection);
 
   const code = await nextLfCode(connection);
   const [result] = await connection.query(
     `INSERT INTO ventas_oportunidades (cliente_id, origen_id, suborigen_id, etapasconversion_id, created_by, asignado_a, oportunidad_id)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [clienteId, origenId, suborigenId, etapaId, userId, assignedUserId, code]
+    [clienteId, origenId, suborigenId, etapaId, ownerUserId, assignedUserId, code]
   );
   const oportunidadId = result.insertId;
+  await createClientInterestVehicleFromLead(connection, lead, clienteId);
   await connection.query(
     `INSERT INTO ventas_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
      VALUES (?, ?, ?, ?)`,
-    [oportunidadId, etapaId, `Lead Ford importado: ${token}`, userId]
+    [oportunidadId, etapaId, `Lead Ford importado: ${token}`, ownerUserId]
   );
   await connection.query(
     `INSERT INTO ventas_oportunidad_tokens (oportunidad_id, token, is_actualized, created_by)
      VALUES (?, ?, 1, ?)`,
-    [oportunidadId, token, userId]
+    [oportunidadId, token, ownerUserId]
   );
   const changedAt = new Date().toISOString();
   await touchFordLeadModifiedDate(request, lead, changedAt);
-  return { id: oportunidadId, code, token, assignedUserId, lastModifiedDate: changedAt };
+  return { id: oportunidadId, code, token, assignedUserId, createdBy: ownerUserId, lastModifiedDate: changedAt };
 }
 
 async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {
@@ -228,8 +304,8 @@ async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {
   const data = await fordLeadsFetch("/leads", {
     request,
     search: {
-      startDate: searchParams.get("startDate") || defaultStartDate(),
-      endDate: searchParams.get("endDate") || defaultEndDate(),
+      startDate: todayStartDate(),
+      endDate: todayEndDate(),
       dealerCode: envValue("FORD_DEALER_CODE", "DEALER_CODE") || searchParams.get("dealerCode") || "",
       country: envValue("FORD_COUNTRY", "COUNTRY") || searchParams.get("country") || "",
       status: searchParams.get("status") || "open",

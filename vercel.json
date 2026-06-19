@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/ford-leads/sync-opportunities",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}

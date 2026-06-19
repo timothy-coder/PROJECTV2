@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronsUpDown, Eye, Filter, Loader2, MoreVertical, Send } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, ChevronsUpDown, Eye, Filter, Loader2, MoreVertical, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -19,7 +19,12 @@ const TYPE_STATUS_OPTIONS = [
 ];
 
 const CLOSED_TYPE_STATUS = new Set(["Closed Won", "Closed Lost"]);
-const DEFAULT_START_DATE = "2026-06-01T00:00:00";
+
+function todayStartDateTimeLocal() {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T00:00:00`;
+}
 
 function normalizeDateTime(value) {
   if (!value) return "";
@@ -92,12 +97,95 @@ function uniqueOptions(values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
+function sortDirectionFor(current, key) {
+  return current.key === key && current.direction === "asc" ? "desc" : "asc";
+}
+
+function isEmptySortValue(value) {
+  return value === null || value === undefined || String(value).trim() === "";
+}
+
+function isNumericSortValue(value) {
+  return /^-?\d+(\.\d+)?$/.test(String(value).trim());
+}
+
+function isDateSortValue(value) {
+  const text = String(value || "").trim();
+  return /(\d{4}-\d{2}-\d{2}|T|\d{1,2}\/\d{1,2}\/\d{2,4})/.test(text) && !Number.isNaN(new Date(text).getTime());
+}
+
+function compareSortValues(leftValue, rightValue) {
+  const leftEmpty = isEmptySortValue(leftValue);
+  const rightEmpty = isEmptySortValue(rightValue);
+  if (leftEmpty && rightEmpty) return 0;
+  if (leftEmpty) return 1;
+  if (rightEmpty) return -1;
+
+  if (isNumericSortValue(leftValue) && isNumericSortValue(rightValue)) {
+    return Number(leftValue) - Number(rightValue);
+  }
+
+  if (isDateSortValue(leftValue) && isDateSortValue(rightValue)) {
+    return new Date(leftValue).getTime() - new Date(rightValue).getTime();
+  }
+
+  return String(leftValue).localeCompare(String(rightValue), "es", { numeric: true, sensitivity: "base" });
+}
+
+function sortRows(rows, sortConfig, accessors) {
+  const accessor = accessors[sortConfig.key];
+  if (!accessor) return rows;
+  const direction = sortConfig.direction === "desc" ? -1 : 1;
+  return [...rows].sort((left, right) => {
+    const leftValue = accessor(left);
+    const rightValue = accessor(right);
+    const leftEmpty = isEmptySortValue(leftValue);
+    const rightEmpty = isEmptySortValue(rightValue);
+    if (leftEmpty && rightEmpty) return 0;
+    if (leftEmpty) return 1;
+    if (rightEmpty) return -1;
+    return compareSortValues(leftValue, rightValue) * direction;
+  });
+}
+
+function SortableHeader({ children, className = "px-3 py-2", onSort, sortConfig, sortKey }) {
+  const active = sortConfig.key === sortKey;
+  return (
+    <th className={className}>
+      <button type="button" className="inline-flex items-center gap-1 font-bold uppercase hover:text-violet-900" onClick={() => onSort(sortKey)}>
+        <span>{children}</span>
+        {active ? <span className="text-[10px]">{sortConfig.direction === "asc" ? "ASC" : "DESC"}</span> : <ArrowUpDown className="size-3 opacity-60" />}
+      </button>
+    </th>
+  );
+}
+
+const FORD_SORT_ACCESSORS = {
+  id: (item) => item.id,
+  status: (item) => item.status,
+  cliente: (item) => contactName(item.contact),
+  contacto: (item) => item.contact?.email || item.contact?.mobilePhone || item.contact?.phone,
+  vehiculo: (item) => vehicleName(item.vehicle),
+  modificado: (item) => item.lastModifiedDate || item.createdDate,
+};
+
+const SENT_SORT_ACCESSORS = {
+  oportunidad: (item) => item.oportunidadCodigo,
+  token: (item) => item.token,
+  cliente: (item) => item.clienteNombre,
+  modelo: (item) => item.vehiculoNombre || item.modeloNombre,
+  contacto: (item) => item.email || item.celular,
+  estado: (item) => (item.isActualized ? "Actualizado" : "Pendiente"),
+  asesor: (item) => item.asesorNombre || item.creadoPorNombre,
+  fecha: (item) => item.createdAt,
+};
+
 export default function FordLeadsPage({ userPermissions = {} }) {
   const canSync = hasPerm(userPermissions, ["leads_ford", "sync"]);
   const canCreate = hasPerm(userPermissions, ["leads_ford", "create"]);
   const canEdit = hasPerm(userPermissions, ["leads_ford", "edit"]);
 
-  const [startDate, setStartDate] = useState(DEFAULT_START_DATE);
+  const [startDate, setStartDate] = useState(() => todayStartDateTimeLocal());
   const [endDate, setEndDate] = useState("");
   const [typeStatus, setTypeStatus] = useState("");
   const [typeStatusOpen, setTypeStatusOpen] = useState(false);
@@ -117,6 +205,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileLeadMenu, setMobileLeadMenu] = useState(null);
+  const [fordSort, setFordSort] = useState({ key: "", direction: "asc" });
+  const [sentSort, setSentSort] = useState({ key: "", direction: "asc" });
 
   const status = useMemo(() => (CLOSED_TYPE_STATUS.has(typeStatus) ? "closed" : "open"), [typeStatus]);
   const filteredItems = useMemo(() => {
@@ -124,7 +214,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
     if (!needle) return items;
     return items.filter((item) => itemSearchText(item).includes(needle));
   }, [items, searchTerm]);
-  const visibleLeadIds = useMemo(() => filteredItems.map((item) => item.id).filter(Boolean), [filteredItems]);
+  const sortedItems = useMemo(() => sortRows(filteredItems, fordSort, FORD_SORT_ACCESSORS), [filteredItems, fordSort]);
+  const visibleLeadIds = useMemo(() => sortedItems.map((item) => item.id).filter(Boolean), [sortedItems]);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every((id) => selectedLeadIds.includes(id));
   const filteredSentItems = useMemo(() => {
     const needle = searchTerm.trim().toLowerCase();
@@ -152,8 +243,17 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       return matchText && matchModel && matchAdvisor && matchStart && matchEnd;
     });
   }, [sentItems, searchTerm, sentAdvisorFilter, sentEndDate, sentModelFilter, sentStartDate]);
+  const sortedSentItems = useMemo(() => sortRows(filteredSentItems, sentSort, SENT_SORT_ACCESSORS), [filteredSentItems, sentSort]);
   const sentModelOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.modeloNombre).filter(Boolean)), [sentItems]);
   const sentAdvisorOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.asesorNombre).filter(Boolean)), [sentItems]);
+
+  function handleFordSort(key) {
+    setFordSort((current) => ({ key, direction: sortDirectionFor(current, key) }));
+  }
+
+  function handleSentSort(key) {
+    setSentSort((current) => ({ key, direction: sortDirectionFor(current, key) }));
+  }
 
   async function searchLeads({ silent = false } = {}) {
     if (!canSync) return;
@@ -243,7 +343,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        params.set("startDate", normalizeDateTime(DEFAULT_START_DATE));
+        params.set("startDate", normalizeDateTime(todayStartDateTimeLocal()));
         params.set("status", "open");
           const data = await fetch(`/api/ford-leads?${params.toString()}`).then(readJson);
         if (!cancelled) {
@@ -375,14 +475,14 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                 <table className="min-w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-violet-50 text-left text-xs uppercase text-violet-700">
                     <tr>
-                      <th className="px-3 py-2">Oportunidad</th>
-                      <th className="px-3 py-2">Token Ford</th>
-                      <th className="px-3 py-2">Cliente</th>
-                      <th className="px-3 py-2">Modelo</th>
-                      <th className="px-3 py-2">Contacto</th>
-                      <th className="px-3 py-2">Estado</th>
-                      <th className="px-3 py-2">Asesor</th>
-                      <th className="px-3 py-2">Fecha</th>
+                      <SortableHeader sortKey="oportunidad" sortConfig={sentSort} onSort={handleSentSort}>Oportunidad</SortableHeader>
+                      <SortableHeader sortKey="token" sortConfig={sentSort} onSort={handleSentSort}>Token Ford</SortableHeader>
+                      <SortableHeader sortKey="cliente" sortConfig={sentSort} onSort={handleSentSort}>Cliente</SortableHeader>
+                      <SortableHeader sortKey="modelo" sortConfig={sentSort} onSort={handleSentSort}>Modelo</SortableHeader>
+                      <SortableHeader sortKey="contacto" sortConfig={sentSort} onSort={handleSentSort}>Contacto</SortableHeader>
+                      <SortableHeader sortKey="estado" sortConfig={sentSort} onSort={handleSentSort}>Estado</SortableHeader>
+                      <SortableHeader sortKey="asesor" sortConfig={sentSort} onSort={handleSentSort}>Asesor</SortableHeader>
+                      <SortableHeader sortKey="fecha" sortConfig={sentSort} onSort={handleSentSort}>Fecha</SortableHeader>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -392,7 +492,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                         <td colSpan={9} className="px-3 py-10 text-center text-black">Cargando enviados...</td>
                       </tr>
                     ) : null}
-                    {!sentLoading && filteredSentItems.map((item) => (
+                    {!sentLoading && sortedSentItems.map((item) => (
                       <tr key={item.id} className="hover:bg-violet-50/50">
                         <td className="px-3 py-2 font-bold text-violet-700">{item.oportunidadCodigo || "-"}</td>
                         <td className="max-w-[230px] truncate px-3 py-2 font-mono text-xs">{item.token || "-"}</td>
@@ -502,9 +602,9 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                     <th className="px-2 py-2">
                       <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Seleccionar visibles" />
                     </th>
-                    <th className="px-2 py-2">Id</th>
-                    <th className="px-2 py-2">Cliente</th>
-                    <th className="px-2 py-2">Vehiculo</th>
+                    <SortableHeader className="px-2 py-2" sortKey="id" sortConfig={fordSort} onSort={handleFordSort}>Id</SortableHeader>
+                    <SortableHeader className="px-2 py-2" sortKey="cliente" sortConfig={fordSort} onSort={handleFordSort}>Cliente</SortableHeader>
+                    <SortableHeader className="px-2 py-2" sortKey="vehiculo" sortConfig={fordSort} onSort={handleFordSort}>Vehiculo</SortableHeader>
                     <th className="px-2 py-2 text-right">Opciones</th>
                   </tr>
                 </thead>
@@ -514,7 +614,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                       <td colSpan={5} className="px-3 py-10 text-center text-black">Cargando leads...</td>
                     </tr>
                   ) : null}
-                  {!loading && filteredItems.map((item, index) => (
+                  {!loading && sortedItems.map((item, index) => (
                     <Fragment key={`${item.id || "lead-mobile"}-${index}`}>
                       <tr key={`${item.id || "lead-mobile"}-${index}`} className="hover:bg-violet-50/50">
                         <td className="px-2 py-2 align-top">
@@ -564,12 +664,12 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   <th className="px-3 py-2">
                     <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Seleccionar visibles" />
                   </th>
-                  <th className="px-3 py-2">Id</th>
-                  <th className="px-3 py-2">Estado</th>
-                  <th className="px-3 py-2">Cliente</th>
-                  <th className="px-3 py-2">Contacto</th>
-                  <th className="px-3 py-2">Vehiculo</th>
-                  <th className="px-3 py-2">Modificado</th>
+                  <SortableHeader sortKey="id" sortConfig={fordSort} onSort={handleFordSort}>Id</SortableHeader>
+                  <SortableHeader sortKey="status" sortConfig={fordSort} onSort={handleFordSort}>Estado</SortableHeader>
+                  <SortableHeader sortKey="cliente" sortConfig={fordSort} onSort={handleFordSort}>Cliente</SortableHeader>
+                  <SortableHeader sortKey="contacto" sortConfig={fordSort} onSort={handleFordSort}>Contacto</SortableHeader>
+                  <SortableHeader sortKey="vehiculo" sortConfig={fordSort} onSort={handleFordSort}>Vehiculo</SortableHeader>
+                  <SortableHeader sortKey="modificado" sortConfig={fordSort} onSort={handleFordSort}>Modificado</SortableHeader>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
@@ -579,7 +679,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                     <td colSpan={8} className="px-3 py-10 text-center text-black">Cargando leads...</td>
                   </tr>
                 ) : null}
-                {!loading && filteredItems.map((item, index) => (
+                {!loading && sortedItems.map((item, index) => (
                   <tr key={`${item.id || "lead"}-${index}`} className="hover:bg-violet-50/50">
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={Boolean(item.id && selectedLeadIds.includes(item.id))} onChange={() => toggleLeadSelection(item.id)} aria-label={`Seleccionar ${item.id || "lead"}`} />
