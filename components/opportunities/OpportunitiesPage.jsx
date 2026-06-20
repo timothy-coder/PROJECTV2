@@ -295,7 +295,7 @@ function GeneralView({
               <SortableHeader sortKey="etapaNombre" sortConfig={sortConfig} onSort={onSort}>Etapa</SortableHeader>
               <SortableHeader sortKey="asignadoANombre" sortConfig={sortConfig} onSort={onSort}>Asignado</SortableHeader>
               <SortableHeader sortKey="nextAgenda" sortConfig={sortConfig} onSort={onSort}>Proxima Agenda</SortableHeader>
-              <SortableHeader sortKey="timeStateNombre" sortConfig={sortConfig} onSort={onSort}>Tiempo</SortableHeader>
+              <SortableHeader sortKey="latestQuoteModelName" sortConfig={sortConfig} onSort={onSort}>Modelo</SortableHeader>
               <SortableHeader sortKey="temperature" sortConfig={sortConfig} onSort={onSort}>Temp.</SortableHeader>
               <SortableHeader sortKey="detail" sortConfig={sortConfig} onSort={onSort}>Detalle</SortableHeader>
               <th className="px-2 py-2 text-right">Acciones</th>
@@ -323,9 +323,12 @@ function GeneralView({
                   </td>
                   <td className="px-2 py-2">{item.origenNombre}</td>
                   <td className="px-2 py-2"><StageBadge item={item} /></td>
-                  <td className="max-w-[140px] px-2 py-2 leading-tight">{item.asignadoANombre}</td>
+                  <td className="max-w-[140px] px-2 py-2 leading-tight">
+                    <p>{item.asignadoANombre}</p>
+                    <div className="mt-1"><TimeStateBadge item={item} /></div>
+                  </td>
                   <td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td>
-                  <td className="px-2 py-2"><TimeStateBadge item={item} /></td>
+                  <td className="px-2 py-2 font-semibold">{item.latestQuoteModelName || "-"}</td>
                   <td className="px-2 py-2"><TemperatureBadge item={item} /></td>
                   <td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td>
                   <td className="px-2 py-2">
@@ -391,6 +394,7 @@ function compareOpportunityValue(a, b, key) {
   if (key === "createdAt" || key === "nextAgenda") return compareDates(a[key], b[key]);
   if (key === "temperature") return compareNumbers(a[key], b[key]);
   if (key === "timeStateNombre") return compareText(a.timeState?.nombre, b.timeState?.nombre);
+  if (key === "latestQuoteModelName") return compareText(a.latestQuoteModelName, b.latestQuoteModelName);
   return compareText(a[key], b[key]);
 }
 

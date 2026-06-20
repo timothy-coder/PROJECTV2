@@ -111,6 +111,7 @@ export async function GET(request) {
     let activityRows = [];
     let closureRows = [];
     let quoteModelRows = [];
+    let latestQuoteModelRows = [];
     if (ids.length) {
       const [details] = await pool.query(`SELECT * FROM ventas_oportunidades_detalles WHERE oportunidad_padre_id IN (?) ORDER BY created_at ASC`, [ids]);
       const [activities] = await pool.query(
@@ -138,10 +139,24 @@ export async function GET(request) {
          ORDER BY mo.name ASC`,
         [ids]
       );
+      const [latestQuoteModels] = await pool.query(
+        `SELECT q.oportunidad_id, p.modelo_id, mo.name AS modelo_nombre
+         FROM ventas_cotizaciones q
+         INNER JOIN (
+           SELECT oportunidad_id, MAX(id) AS id
+           FROM ventas_cotizaciones
+           WHERE oportunidad_id IN (?)
+           GROUP BY oportunidad_id
+         ) latest ON latest.id = q.id
+         INNER JOIN ventas_precios p ON p.id = q.precio_id
+         INNER JOIN administracion_modelos mo ON mo.id = p.modelo_id`,
+        [ids]
+      );
       detailRows = details;
       activityRows = activities;
       closureRows = closures;
       quoteModelRows = quoteModels;
+      latestQuoteModelRows = latestQuoteModels;
     }
     const [clients] = await pool.query(
       `SELECT id, CONCAT(COALESCE(nombre,''), ' ', COALESCE(apellido,'')) AS nombre, identificacion_fiscal
@@ -184,6 +199,7 @@ export async function GET(request) {
         const activities = activityRows.filter((activity) => activity.oportunidad_id === row.id);
         const closures = closureRows.filter((closure) => closure.oportunidad_id === row.id);
         const quoteModels = quoteModelRows.filter((quoteModel) => quoteModel.oportunidad_id === row.id);
+        const latestQuoteModel = latestQuoteModelRows.find((quoteModel) => quoteModel.oportunidad_id === row.id);
         const currentOrder = Number(row.etapa_orden || row.etapasconversion_id);
         const temperature = stageTemps.filter((stage) => stage.order <= currentOrder).reduce((sum, stage) => sum + stage.temp, 0);
         const lastDetail = details.at(-1);
@@ -234,6 +250,8 @@ export async function GET(request) {
           closureReasons: closures.map((closure) => closure.clasificacion || closure.detalle || "").filter(Boolean),
           quoteModelIds: quoteModels.map((quoteModel) => quoteModel.modelo_id).filter(Boolean).map(Number),
           quoteModels: quoteModels.map((quoteModel) => quoteModel.modelo_nombre || "").filter(Boolean),
+          latestQuoteModelId: latestQuoteModel?.modelo_id || null,
+          latestQuoteModelName: latestQuoteModel?.modelo_nombre || "",
           detail: listDetail,
           temperature,
           details: details.map((detail) => ({ id: detail.id, fechaAgenda: datePart(detail.fecha_agenda), horaAgenda: timePart(detail.hora_agenda), createdAt: detail.created_at })),
