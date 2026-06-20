@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Edit3, Eye, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Edit3, Eye, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,51 @@ function permissionKey(kind) {
   return kind === "lead" ? "leadspv" : "oportunidadespv";
 }
 
+function sortPostventaRows(items, sortConfig) {
+  const closedLast = (left, right) => Number(isClosedStage(left.etapaNombre)) - Number(isClosedStage(right.etapaNombre));
+  if (!sortConfig.key) return [...items].sort(closedLast);
+  const direction = sortConfig.direction === "desc" ? -1 : 1;
+  return [...items].sort((left, right) => closedLast(left, right) || comparePostventaValue(left, right, sortConfig.key) * direction);
+}
+
+function comparePostventaValue(left, right, key) {
+  if (key === "agendaAt") return compareDates(rowAgendaAt(left), rowAgendaAt(right));
+  if (key === "citaAt") return compareDates(rowCitaAt(left), rowCitaAt(right));
+  return compareText(left[key], right[key]);
+}
+
+function compareText(left, right) {
+  const leftEmpty = left === null || left === undefined || String(left).trim() === "";
+  const rightEmpty = right === null || right === undefined || String(right).trim() === "";
+  if (leftEmpty && rightEmpty) return 0;
+  if (leftEmpty) return 1;
+  if (rightEmpty) return -1;
+  return String(left).localeCompare(String(right), "es", { sensitivity: "base", numeric: true });
+}
+
+function compareDates(left, right) {
+  const leftTime = left ? new Date(left).getTime() : Number.NaN;
+  const rightTime = right ? new Date(right).getTime() : Number.NaN;
+  if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) return 0;
+  if (Number.isNaN(leftTime)) return 1;
+  if (Number.isNaN(rightTime)) return -1;
+  return leftTime - rightTime;
+}
+
+function rowAgendaAt(item) {
+  return item?.agendaDate ? `${item.agendaDate}T${item.agendaTime || "00:00"}` : "";
+}
+
+function rowCitaAt(item) {
+  return item?.citaFecha ? `${item.citaFecha}T${item.citaHora || "00:00"}` : "";
+}
+
 export default function PostventaOpportunitiesPage({ userPermissions, kind = "opportunity" }) {
   const data = usePostventaOpportunities(kind);
   const [query, setQuery] = useState("");
   const [stageId, setStageId] = useState("");
   const [timeStateId, setTimeStateId] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [mobileActionId, setMobileActionId] = useState(null);
   const [editDialog, setEditDialog] = useState({ open: false, item: null, detail: null });
@@ -37,14 +77,22 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     : { title: "Oportunidades PosVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };
   const rows = useMemo(() => {
     const text = query.trim().toLowerCase();
-    return data.opportunities.filter((item) => {
+    const filtered = data.opportunities.filter((item) => {
       const matchesText = !text || `${item.code} ${item.clienteNombre} ${item.vehiculoNombre} ${item.placa} ${item.vin || ""}`.toLowerCase().includes(text);
       const matchesStage = !stageId || Number(item.etapaId) === Number(stageId);
       const matchesTimeState = !timeStateId || Number(item.timeState?.id) === Number(timeStateId);
       return matchesText && matchesStage && matchesTimeState;
     });
-  }, [data.opportunities, query, stageId, timeStateId]);
+    return sortPostventaRows(filtered, sortConfig);
+  }, [data.opportunities, query, sortConfig, stageId, timeStateId]);
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta pagina.</div>;
+
+  function handleSort(key) {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  }
 
   async function openEdit(item) {
     const detail = await data.detail(item.id);
@@ -79,7 +127,17 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold text-slate-700">
-              <tr><th className="px-3 py-3">Codigo</th><th>Cliente</th><th>Vehiculo</th><th>Origen</th><th>Etapa</th><th>Asignado</th><th>Fecha agenda</th><th>Cita</th><th className="text-right">Acciones</th></tr>
+              <tr>
+                <SortableHeader sortKey="code" sortConfig={sortConfig} onSort={handleSort} className="px-3 py-3">Codigo</SortableHeader>
+                <SortableHeader sortKey="clienteNombre" sortConfig={sortConfig} onSort={handleSort}>Cliente</SortableHeader>
+                <SortableHeader sortKey="vehiculoNombre" sortConfig={sortConfig} onSort={handleSort}>Vehiculo</SortableHeader>
+                <SortableHeader sortKey="origenNombre" sortConfig={sortConfig} onSort={handleSort}>Origen</SortableHeader>
+                <SortableHeader sortKey="etapaNombre" sortConfig={sortConfig} onSort={handleSort}>Etapa</SortableHeader>
+                <SortableHeader sortKey="asignadoNombre" sortConfig={sortConfig} onSort={handleSort}>Asignado</SortableHeader>
+                <SortableHeader sortKey="agendaAt" sortConfig={sortConfig} onSort={handleSort}>Fecha agenda</SortableHeader>
+                <SortableHeader sortKey="citaAt" sortConfig={sortConfig} onSort={handleSort}>Cita</SortableHeader>
+                <th className="text-right">Acciones</th>
+              </tr>
             </thead>
             <tbody className="divide-y">
               {rows.map((item) => (
@@ -181,6 +239,18 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         />
       ) : null}
     </div>
+  );
+}
+
+function SortableHeader({ children, className = "", onSort, sortConfig, sortKey }) {
+  const active = sortConfig.key === sortKey;
+  return (
+    <th className={className}>
+      <button type="button" className={`inline-flex items-center gap-1 font-bold transition hover:text-violet-700 ${active ? "text-violet-700" : ""}`} onClick={() => onSort(sortKey)}>
+        <span>{children}</span>
+        {active ? <span className="text-[10px]">{sortConfig.direction === "asc" ? "ASC" : "DESC"}</span> : <ArrowUpDown className="size-3 text-slate-400" />}
+      </button>
+    </th>
   );
 }
 
