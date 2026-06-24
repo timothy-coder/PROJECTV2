@@ -98,6 +98,13 @@ function uniqueOptions(values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
+function skippedReasonText(skipped = []) {
+  const items = (Array.isArray(skipped) ? skipped : [])
+    .map((item) => `${item.token || item.leadId || "Lead"}: ${item.reason || "Sin motivo especificado"}`)
+    .filter(Boolean);
+  return items.length ? ` Motivo: ${items.join(" | ")}` : "";
+}
+
 function sortDirectionFor(current, key) {
   return current.key === key && current.direction === "asc" ? "desc" : "asc";
 }
@@ -333,7 +340,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       const created = data.created?.length || 0;
       const skipped = data.skipped?.length || 0;
       const total = data.total ?? created + skipped;
-      setMessage(total ? `Oportunidades creadas: ${created}. Omitidas: ${skipped}.` : "No se proceso ningun lead. Verifica que el ID exista en Ford.");
+      setMessage(total ? `Oportunidades creadas: ${created}. Omitidas: ${skipped}.${skippedReasonText(data.skipped)}` : "No se proceso ningun lead. Verifica que el ID exista en Ford.");
       setSelectedLeadIds([]);
     } catch (error) {
       setMessage(error.message);
@@ -361,7 +368,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       }).then(readJson);
       const created = data.created?.length || 0;
       const skipped = data.skipped?.length || 0;
-      setMessage(`ID ${cleanId}: oportunidades creadas ${created}. Omitidas ${skipped}.`);
+      setMessage(`ID ${cleanId}: oportunidades creadas ${created}. Omitidas ${skipped}.${skippedReasonText(data.skipped)}`);
       if (created) setManualLeadId("");
     } catch (error) {
       setMessage(error.message);
