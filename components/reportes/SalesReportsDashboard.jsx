@@ -186,7 +186,6 @@ export default function SalesReportsDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     fetch("/api/powerbi/data?limit=100000")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
@@ -361,15 +360,19 @@ function Donut({ data, field, active, onSelect }) {
   const denominator = total || 1;
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  const segments = data.map((entry, index) => {
+    const previous = data.slice(0, index).reduce((sum, item) => sum + (item.value / denominator) * circumference, 0);
+    return {
+      entry,
+      length: (entry.value / denominator) * circumference,
+      dashOffset: -previous,
+    };
+  });
   return (
     <div className="grid h-full grid-cols-[1fr_112px] items-center gap-2">
       <svg viewBox="0 0 160 160" className="h-full w-full">
         <circle cx="80" cy="80" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="28" />
-        {data.map((entry, index) => {
-          const length = (entry.value / denominator) * circumference;
-          const dashOffset = -offset;
-          offset += length;
+        {segments.map(({ entry, length, dashOffset }, index) => {
           return (
             <circle
               key={entry.name}
