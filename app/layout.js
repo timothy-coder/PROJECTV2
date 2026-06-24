@@ -18,9 +18,12 @@ export const metadata = {
   title: "One Solution",
   description: "One Solution",
   icons: {
-    icon: "/logonew.png",
-    shortcut: "/logonew.png",
-    apple: "/logonew.png",
+    icon: [
+      { url: "/logonew.png", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/logonew.png", type: "image/png" }],
   },
   other: {
     google: "notranslate",
