@@ -304,7 +304,8 @@ async function syncFordLeadsToOpportunities(request, { leadIds = [], manualLeadI
   const cleanManualLeadId = String(manualLeadId || "").trim();
   if (cleanManualLeadId) {
     const lead = await fordLeadsFetch(`/leads/${encodeURIComponent(cleanManualLeadId)}`, { request });
-    return [normalizeFordLeadResponse(lead)];
+    const normalized = normalizeFordLeadResponse(lead);
+    return [{ ...normalized, id: normalized.id || cleanManualLeadId }];
   }
 
   const selectedIds = Array.from(new Set((leadIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
@@ -312,7 +313,8 @@ async function syncFordLeadsToOpportunities(request, { leadIds = [], manualLeadI
     const leads = [];
     for (const leadId of selectedIds) {
       const lead = await fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request });
-      leads.push(normalizeFordLeadResponse(lead));
+      const normalized = normalizeFordLeadResponse(lead);
+      leads.push({ ...normalized, id: normalized.id || leadId });
     }
     return leads;
   }
