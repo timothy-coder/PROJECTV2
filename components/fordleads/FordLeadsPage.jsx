@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronsUpDown, Eye, Filter, Loader2, MoreVertical, Send } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, Eye, Filter, Hash, Loader2, MoreVertical, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -96,6 +96,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const canSync = hasPerm(userPermissions, ["leads_ford", "sync"]);
   const canCreate = hasPerm(userPermissions, ["leads_ford", "create"]);
   const canEdit = hasPerm(userPermissions, ["leads_ford", "edit"]);
+  const canManualImport = canSync || hasPerm(userPermissions, ["leads_ford", "manual_import"]);
 
   const [startDate, setStartDate] = useState(DEFAULT_START_DATE);
   const [endDate, setEndDate] = useState("");
@@ -112,6 +113,9 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [loading, setLoading] = useState(false);
   const [sentLoading, setSentLoading] = useState(false);
   const [importingOpportunities, setImportingOpportunities] = useState(false);
+  const [manualImporting, setManualImporting] = useState(false);
+  const [manualImportOpen, setManualImportOpen] = useState(false);
+  const [manualLeadId, setManualLeadId] = useState("");
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [message, setMessage] = useState("");
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
@@ -227,12 +231,41 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       }).then(readJson);
       const created = data.created?.length || 0;
       const skipped = data.skipped?.length || 0;
-      setMessage(`Oportunidades creadas: ${created}. Omitidas: ${skipped}.`);
+      const total = data.total ?? created + skipped;
+      setMessage(total ? `Oportunidades creadas: ${created}. Omitidas: ${skipped}.` : "No se proceso ningun lead. Verifica que el ID exista en Ford.");
       setSelectedLeadIds([]);
     } catch (error) {
       setMessage(error.message);
     } finally {
       setImportingOpportunities(false);
+    }
+  }
+
+  async function createOpportunityByManualId() {
+    if (!canManualImport) return;
+    const cleanId = manualLeadId.trim();
+    if (!cleanId) {
+      setMessage("Ingresa el ID del lead Ford.");
+      return;
+    }
+    setManualImporting(true);
+    setMessage("");
+    try {
+      const params = new URLSearchParams();
+      params.set("force", "1");
+      const data = await fetch(`/api/ford-leads/sync-opportunities?${params.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manualLeadId: cleanId }),
+      }).then(readJson);
+      const created = data.created?.length || 0;
+      const skipped = data.skipped?.length || 0;
+      setMessage(`ID ${cleanId}: oportunidades creadas ${created}. Omitidas ${skipped}.`);
+      if (created) setManualLeadId("");
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setManualImporting(false);
     }
   }
 
@@ -291,6 +324,11 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   Crear todos
                 </button>
               ) : null}
+              {canManualImport ? (
+                <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-semibold text-violet-700 hover:bg-violet-50" onClick={() => { setMobileActionsOpen(false); setManualImportOpen((value) => !value); }}>
+                  Registrar por ID
+                </button>
+              ) : null}
               {canCreate ? (
                 <Link href="/leads-ford/nuevo" className="block rounded-md px-3 py-2 font-semibold text-violet-700 hover:bg-violet-50" onClick={() => setMobileActionsOpen(false)}>
                   Agregar Lead
@@ -310,6 +348,12 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => createOpportunitiesNow({ selectedOnly: false })} disabled={importingOpportunities}>
               {importingOpportunities ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
               Crear todos
+            </Button>
+          ) : null}
+          {canManualImport ? (
+            <Button variant="outline" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => setManualImportOpen((value) => !value)}>
+              <Hash className="mr-2 size-4" />
+              Registrar por ID
             </Button>
           ) : null}
           {canCreate ? (
@@ -332,6 +376,31 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             Enviados desde sistema
           </Button>
         </div>
+
+        {canManualImport && manualImportOpen ? (
+          <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50/60 p-2">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+              <Field label="ID Lead Ford">
+                <Input
+                  value={manualLeadId}
+                  onChange={(event) => setManualLeadId(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") createOpportunityByManualId();
+                  }}
+                  placeholder="Ej: 00QHZ00000..."
+                  className="bg-white"
+                />
+              </Field>
+              <Button className="bg-violet-700 text-white hover:bg-violet-800" onClick={createOpportunityByManualId} disabled={manualImporting}>
+                {manualImporting ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+                Crear oportunidad
+              </Button>
+              <Button variant="outline" className="border-violet-200 bg-white text-violet-700 hover:bg-violet-50" onClick={() => { setManualImportOpen(false); setManualLeadId(""); }}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {tab === "sent" ? (
           <div>

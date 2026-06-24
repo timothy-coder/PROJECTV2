@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { fordLeadsFetch, normalizeFordLeadListResponse, normalizeFordLeadPatch } from "@/lib/fordLeads";
+import { fordLeadsFetch, normalizeFordLeadListResponse, normalizeFordLeadPatch, normalizeFordLeadResponse } from "@/lib/fordLeads";
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
@@ -223,7 +223,23 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
   return { id: oportunidadId, code, token, assignedUserId, lastModifiedDate: changedAt };
 }
 
-async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {
+async function syncFordLeadsToOpportunities(request, { leadIds = [], manualLeadId = "" } = {}) {
+  const cleanManualLeadId = String(manualLeadId || "").trim();
+  if (cleanManualLeadId) {
+    const lead = await fordLeadsFetch(`/leads/${encodeURIComponent(cleanManualLeadId)}`, { request });
+    return [normalizeFordLeadResponse(lead)];
+  }
+
+  const selectedIds = Array.from(new Set((leadIds || []).map((id) => String(id || "").trim()).filter(Boolean)));
+  if (selectedIds.length) {
+    const leads = [];
+    for (const leadId of selectedIds) {
+      const lead = await fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request });
+      leads.push(normalizeFordLeadResponse(lead));
+    }
+    return leads;
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const data = await fordLeadsFetch("/leads", {
     request,
@@ -237,8 +253,7 @@ async function syncFordLeadsToOpportunities(request, { leadIds = [] } = {}) {
     },
   });
   const leads = normalizeFordLeadListResponse(data);
-  const selectedIds = new Set((leadIds || []).map((id) => String(id)));
-  return selectedIds.size ? leads.filter((lead) => selectedIds.has(String(lead.id))) : leads;
+  return leads;
 }
 
 export async function POST(request) {
@@ -255,7 +270,7 @@ export async function POST(request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const leads = await syncFordLeadsToOpportunities(request, { leadIds: body.leadIds || [] });
+    const leads = await syncFordLeadsToOpportunities(request, { leadIds: body.leadIds || [], manualLeadId: body.manualLeadId || "" });
     const created = [];
     const skipped = [];
     await connection.beginTransaction();
