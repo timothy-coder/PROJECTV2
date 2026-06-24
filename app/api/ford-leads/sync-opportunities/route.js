@@ -62,7 +62,7 @@ async function canRunBySchedule({ force = false, windowMinutes = 5 } = {}) {
       ok: true,
       currentTime: `${String(now.hour).padStart(2, "0")}:${String(now.minute).padStart(2, "0")}`,
       configured: [],
-      reason: "Sin horas configuradas: ejecucion cada 10 minutos habilitada.",
+      reason: "Sin horas configuradas: ejecucion cada 5 minutos habilitada.",
     };
   }
   const now = limaTimeParts();
