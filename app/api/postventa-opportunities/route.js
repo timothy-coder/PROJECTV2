@@ -103,7 +103,7 @@ export async function GET(request) {
        ) cita ON cita.oportunidadespv_id=o.id
        WHERE o.oportunidad_id LIKE ?
        ${canAll ? "" : "AND (o.created_by=? OR o.asignado_a=?)"}
-       ORDER BY o.updated_at DESC`,
+       ORDER BY CASE WHEN LOWER(e.nombre) LIKE '%cerrad%' THEN 1 ELSE 0 END ASC, o.updated_at DESC`,
       canAll ? [`${config.prefix}-%`] : [`${config.prefix}-%`, user.id, user.id]
     );
     const [stages] = await pool.query(`SELECT id,nombre,descripcion,color,sort_order FROM configuracion_posventa_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`);
