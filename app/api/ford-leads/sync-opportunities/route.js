@@ -79,17 +79,24 @@ async function authorize(request) {
   const secret = envValue("FORD_SYNC_SECRET", "CRON_SECRET");
   const headerSecret = request.headers.get("x-ford-sync-secret") || request.nextUrl.searchParams.get("secret");
   const bearerSecret = String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (secret && bearerSecret === secret) {
+  const cronHeader = request.headers.get("x-vercel-cron");
+  const userAgent = request.headers.get("user-agent") || "";
+  const isVercelCron = process.env.VERCEL === "1" && (cronHeader === "1" || /vercel-cron/i.test(userAgent));
+  const systemUser = async () => {
     const userId = Number(envValue("FORD_SYNC_USER_ID"));
     if (userId) return { id: userId, permissions: {} };
     const [[user]] = await pool.query(`SELECT id, permissions FROM administracion_usuarios WHERE is_active = 1 ORDER BY id ASC LIMIT 1`);
     if (user) return { id: user.id, permissions: user.permissions ? JSON.parse(user.permissions) : {} };
+    return null;
+  };
+  if (secret && bearerSecret === secret) {
+    return systemUser();
   }
   if (secret && headerSecret === secret) {
-    const userId = Number(envValue("FORD_SYNC_USER_ID"));
-    if (userId) return { id: userId, permissions: {} };
-    const [[user]] = await pool.query(`SELECT id, permissions FROM administracion_usuarios WHERE is_active = 1 ORDER BY id ASC LIMIT 1`);
-    if (user) return { id: user.id, permissions: user.permissions ? JSON.parse(user.permissions) : {} };
+    return systemUser();
+  }
+  if (isVercelCron) {
+    return systemUser();
   }
 
   const user = await getCurrentUser();
