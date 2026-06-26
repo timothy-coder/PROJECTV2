@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, ChevronDown, Edit3, Eye, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -56,15 +56,25 @@ function rowCitaAt(item) {
 }
 
 export default function PostventaOpportunitiesPage({ userPermissions, kind = "opportunity" }) {
-  const data = usePostventaOpportunities(kind);
   const [query, setQuery] = useState("");
   const [stageId, setStageId] = useState("");
   const [timeStateId, setTimeStateId] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [mobileActionId, setMobileActionId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [editDialog, setEditDialog] = useState({ open: false, item: null, detail: null });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
+  const tableContainerRef = useRef(null);
+  const paginationRef = useRef(null);
+  const apiFilters = useMemo(() => ({
+    page,
+    limit,
+    q: query,
+    stageId,
+  }), [limit, page, query, stageId]);
+  const data = usePostventaOpportunities(kind, apiFilters);
   const perm = permissionKey(kind);
   const canViewAll = Boolean(hasPerm(userPermissions, [perm, "viewall"]) || data.currentUser?.canViewAll);
   const canView = Boolean(hasPerm(userPermissions, [perm, "view"]) || canViewAll);
@@ -76,15 +86,41 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     ? { title: "Leads PosVenta", subtitle: "Gestiona los leads de PosVenta" }
     : { title: "Oportunidades PosVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };
   const rows = useMemo(() => {
-    const text = query.trim().toLowerCase();
     const filtered = data.opportunities.filter((item) => {
-      const matchesText = !text || `${item.code} ${item.clienteNombre} ${item.vehiculoNombre} ${item.placa} ${item.vin || ""}`.toLowerCase().includes(text);
-      const matchesStage = !stageId || Number(item.etapaId) === Number(stageId);
       const matchesTimeState = !timeStateId || Number(item.timeState?.id) === Number(timeStateId);
-      return matchesText && matchesStage && matchesTimeState;
+      return matchesTimeState;
     });
     return sortPostventaRows(filtered, sortConfig);
-  }, [data.opportunities, query, sortConfig, stageId, timeStateId]);
+  }, [data.opportunities, sortConfig, timeStateId]);
+  const meta = data.meta || { total: rows.length, page, limit, pages: 1 };
+
+  useEffect(() => {
+    function updateLimit() {
+      const height = window.visualViewport?.height || window.innerHeight || 800;
+      const tableTop = tableContainerRef.current?.getBoundingClientRect().top || 260;
+      const paginationHeight = paginationRef.current?.getBoundingClientRect().height || 44;
+      const headerHeight = 42;
+      const bottomGap = 18;
+      const isMobile = window.matchMedia("(max-width: 767px)").matches;
+      const rowHeight = isMobile ? 70 : 50;
+      const availableRowsHeight = height - tableTop - paginationHeight - headerHeight - bottomGap;
+      const nextLimit = Math.max(4, Math.min(100, Math.floor(availableRowsHeight / rowHeight)));
+      setLimit((current) => {
+        if (current === nextLimit) return current;
+        setPage(1);
+        return nextLimit;
+      });
+    }
+
+    const frame = window.requestAnimationFrame(updateLimit);
+    window.addEventListener("resize", updateLimit);
+    window.visualViewport?.addEventListener("resize", updateLimit);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateLimit);
+      window.visualViewport?.removeEventListener("resize", updateLimit);
+    };
+  }, []);
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta pagina.</div>;
 
   function handleSort(key) {
@@ -100,30 +136,57 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-4 text-slate-950">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-base font-bold leading-tight text-violet-700">{copy.title}</h1>
-          <p className="mt-0.5 text-xs font-medium text-violet-400">{copy.subtitle} {canViewAll ? "- Vista completa" : "- Mi vista"}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={data.reload}><RefreshCw className="size-4" />Actualizar</Button>
-          {canCreate && canOpenMaintenance ? <Button className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => { window.location.href = "/proximosmantenimientos"; }}><Plus className="size-4" />Desde mantenimiento</Button> : null}
-        </div>
-      </header>
-      <section className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
-        <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
-          Filtros
-          <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
-        </button>
-        <div className={`${filtersOpen ? "grid" : "hidden"} gap-3 md:grid md:grid-cols-[320px_220px_220px_120px]`}>
-          <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input className="pl-9" placeholder="Buscar cliente, vehiculo o VIN..." value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-          <SearchableSelect value={stageId} options={[{ value: "", label: "Todas las etapas" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setStageId} />
-          <SearchableSelect value={timeStateId} options={[{ value: "", label: "Todos los estados de tiempo" }, ...(data.options.timeStates || []).map((item) => ({ value: item.id, label: item.nombre }))]} onChange={setTimeStateId} />
-          <Button variant="outline" onClick={() => { setQuery(""); setStageId(""); setTimeStateId(""); }}>Limpiar</Button>
-        </div>
-      </section>
-      <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
+    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
+      <div className="sticky top-0 z-30 mb-3 border-b border-violet-100 bg-slate-50/95 pb-3 backdrop-blur">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-bold leading-tight text-violet-700">{copy.title}</h1>
+            <p className="mt-0.5 text-xs font-medium text-violet-400">{copy.subtitle} {canViewAll ? "- Vista completa" : "- Mi vista"}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={data.reload}><RefreshCw className="size-4" />Actualizar</Button>
+            {canCreate && canOpenMaintenance ? <Button className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => { window.location.href = "/proximosmantenimientos"; }}><Plus className="size-4" />Desde mantenimiento</Button> : null}
+          </div>
+        </header>
+        <section className="rounded-lg border bg-white p-3 shadow-sm">
+          <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
+            Filtros
+            <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
+          </button>
+          <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 md:grid md:grid-cols-[minmax(220px,1fr)_210px_210px_110px]`}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar cliente, vehiculo o VIN..."
+                value={query}
+                onChange={(event) => {
+                  setPage(1);
+                  setQuery(event.target.value);
+                }}
+              />
+            </div>
+            <SearchableSelect
+              value={stageId}
+              options={[{ value: "", label: "Todas las etapas" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))]}
+              onChange={(value) => {
+                setPage(1);
+                setStageId(value);
+              }}
+            />
+            <SearchableSelect
+              value={timeStateId}
+              options={[{ value: "", label: "Todos los estados de tiempo" }, ...(data.options.timeStates || []).map((item) => ({ value: item.id, label: item.nombre }))]}
+              onChange={(value) => {
+                setPage(1);
+                setTimeStateId(value);
+              }}
+            />
+            <Button variant="outline" onClick={() => { setQuery(""); setStageId(""); setTimeStateId(""); setPage(1); }}>Limpiar</Button>
+          </div>
+        </section>
+      </div>
+      <section ref={tableContainerRef} className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold text-slate-700">
@@ -214,6 +277,20 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
           </table>
         </div>
       </section>
+      <div ref={paginationRef} className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="font-medium text-slate-500">
+          Pagina {meta.page || page} de {meta.pages || 1}
+        </span>
+        <span className="font-semibold text-slate-600">{meta.total || 0} registros</span>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" disabled={data.loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+            Anterior
+          </Button>
+          <Button type="button" variant="outline" disabled={data.loading || page >= Number(meta.pages || 1)} onClick={() => setPage((current) => current + 1)}>
+            Siguiente
+          </Button>
+        </div>
+      </div>
       {editDialog.open ? (
         <EditOpportunityDialog
           state={editDialog}

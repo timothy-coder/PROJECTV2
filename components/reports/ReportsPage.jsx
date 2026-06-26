@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { BarChart3, CalendarClock, Car, ClipboardList, Database, FileText, Search, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarClock, Car, ClipboardList, Database, FileText, Search, ShieldCheck, Wrench } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import SalesReportsDashboard from "@/components/reportes/SalesReportsDashboard";
+import PostventaReportsDashboard from "@/components/reportes/PostventaReportsDashboard";
 import { hasPerm } from "@/lib/permissions";
 
 const REPORTS = [
@@ -13,20 +17,20 @@ const REPORTS = [
     title: "Power BI Ventas",
     description: "Oportunidades, cotizaciones, reservas, clientes y unidades.",
     category: "Ventas",
-    href: "/api/powerbi/data",
+    dashboard: "ventas",
     icon: Database,
     permissions: [["oportunidades", "viewall"], ["cotizacion", "viewall"], ["reservas", "viewall"]],
-    badge: "API",
+    badge: "Dashboard",
   },
   {
     id: "posventa-powerbi",
     title: "Power BI Posventa",
     description: "Ordenes, oportunidades, mantenimientos y cotizaciones de posventa.",
     category: "Posventa",
-    href: "/api/powerbi/posventa/data",
+    dashboard: "posventa",
     icon: Wrench,
     permissions: [["oportunidadespv", "viewall"], ["ordenespv", "viewall"]],
-    badge: "API",
+    badge: "Dashboard",
   },
   {
     id: "reservas",
@@ -99,6 +103,7 @@ function canSeeReport(userPermissions, report) {
 export default function ReportsPage({ userPermissions = {} }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todos");
+  const [activeDashboard, setActiveDashboard] = useState("");
 
   const visibleReports = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -116,6 +121,52 @@ export default function ReportsPage({ userPermissions = {} }) {
       posventa: allowed.filter((report) => report.category === "Posventa").length,
     };
   }, [userPermissions]);
+
+  if (activeDashboard) {
+    const title = activeDashboard === "ventas" ? "Power BI Ventas" : "Power BI Posventa";
+    return (
+      <main className="min-h-full bg-slate-50 text-slate-950">
+        <header className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h1 className="text-base font-bold leading-tight text-violet-700">{title}</h1>
+              <p className="mt-0.5 text-xs font-medium text-violet-400">Dashboard interactivo de reportes</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => setActiveDashboard("ventas")}
+                variant={activeDashboard === "ventas" ? "default" : "outline"}
+                size="lg"
+                className={activeDashboard === "ventas" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 bg-white text-violet-700"}
+              >
+                Ventas
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setActiveDashboard("posventa")}
+                variant={activeDashboard === "posventa" ? "default" : "outline"}
+                size="lg"
+                className={activeDashboard === "posventa" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 bg-white text-violet-700"}
+              >
+                Posventa
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setActiveDashboard("")}
+                variant="outline"
+                size="lg"
+                className="border-slate-200 bg-white text-slate-700"
+              >
+                <ArrowLeft className="size-4" /> Volver
+              </Button>
+            </div>
+          </div>
+        </header>
+        {activeDashboard === "ventas" ? <SalesReportsDashboard /> : <PostventaReportsDashboard />}
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-full bg-slate-50 p-3 text-slate-950 sm:p-4">
@@ -143,18 +194,20 @@ export default function ReportsPage({ userPermissions = {} }) {
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
             {CATEGORIES.map((item) => (
-              <button
+              <Button
                 key={item}
                 type="button"
                 onClick={() => setCategory(item)}
-                className={`h-8 shrink-0 rounded-md border px-3 text-xs font-bold transition ${
+                variant={category === item ? "default" : "outline"}
+                size="lg"
+                className={`shrink-0 ${
                   category === item
-                    ? "border-violet-700 bg-violet-700 text-white"
+                    ? "bg-violet-700 text-white hover:bg-violet-800"
                     : "border-violet-200 bg-white text-violet-700 hover:bg-violet-50"
                 }`}
               >
                 {item}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -162,7 +215,7 @@ export default function ReportsPage({ userPermissions = {} }) {
 
       <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {visibleReports.map((report) => (
-          <ReportCard key={report.id} report={report} />
+          <ReportCard key={report.id} report={report} onOpenDashboard={setActiveDashboard} />
         ))}
         {!visibleReports.length ? (
           <div className="rounded-lg border border-dashed bg-white p-6 text-center text-sm font-semibold text-slate-500 md:col-span-2 xl:col-span-3">
@@ -183,28 +236,44 @@ function Stat({ label, value }) {
   );
 }
 
-function ReportCard({ report }) {
+function ReportCard({ report, onOpenDashboard }) {
   const Icon = report.icon;
+  const openButton = report.dashboard ? (
+    <Button
+      type="button"
+      onClick={() => onOpenDashboard(report.dashboard)}
+      variant="outline"
+      size="lg"
+      className="border-violet-200 text-violet-700 hover:bg-violet-50"
+    >
+      Abrir
+    </Button>
+  ) : (
+    <Link href={report.href} className="inline-flex h-8 items-center justify-center rounded-md border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50">
+      Abrir
+    </Link>
+  );
+
   return (
-    <article className="rounded-lg border bg-white p-3 shadow-sm transition hover:border-violet-200 hover:shadow-md">
-      <div className="flex items-start gap-3">
+    <Card size="sm" className="bg-white shadow-sm transition hover:ring-violet-200 hover:shadow-md">
+      <CardHeader className="grid-cols-[auto_1fr_auto] items-start gap-3">
         <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-violet-50 text-violet-700">
           <Icon className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h2 className="text-sm font-bold leading-tight text-slate-900">{report.title}</h2>
-            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{report.badge}</span>
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{report.description}</p>
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700">{report.category}</span>
-            <Link href={report.href} className="inline-flex h-8 items-center justify-center rounded-md border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50">
-              Abrir
-            </Link>
+            <CardTitle className="text-sm font-bold leading-tight text-slate-900">{report.title}</CardTitle>
           </div>
         </div>
-      </div>
-    </article>
+        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{report.badge}</span>
+      </CardHeader>
+      <CardContent>
+        <p className="line-clamp-2 text-xs leading-snug text-slate-500">{report.description}</p>
+      </CardContent>
+      <CardFooter className="justify-between gap-2">
+        <span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700">{report.category}</span>
+        {openButton}
+      </CardFooter>
+    </Card>
   );
 }

@@ -1,7 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Expand, Loader2, RotateCcw } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Funnel,
+  FunnelChart,
+  LabelList,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const COLORS = ["#188ff2", "#df3f4f", "#1429a6", "#ec6a2e", "#8b0fa8", "#d83eb5", "#6e48c7", "#1ea34a", "#e4bd00", "#0f766e"];
 const STAGE_COLORS = ["#ee6b2f", "#209947", "#e3bb00", "#d9435d", "#7148c7", "#188ff2", "#8b0fa8"];
@@ -28,6 +52,18 @@ function monthLabel(key) {
   const [year, month] = key.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("es-PE", { year: "numeric", month: "long" });
+}
+
+function yearKey(value) {
+  return dateKey(value).slice(0, 4);
+}
+
+function dayNumber(key) {
+  return String(Number(String(key || "").slice(8, 10)) || "");
+}
+
+function monthNameFromNumber(month) {
+  return new Date(2026, Number(month) - 1, 1).toLocaleDateString("es-PE", { month: "long" });
 }
 
 function daysBetween(startValue, endValue) {
@@ -95,6 +131,7 @@ function buildOpportunityRecords(rows) {
       createdAt: base.fechacreacionoportunidad,
       day: dateKey(base.fechacreacionoportunidad),
       month: monthKey(base.fechacreacionoportunidad),
+      year: yearKey(base.fechacreacionoportunidad),
       advisor: clean(base.usuarionombreasignadoaoportunidad || base.usuarioasignadoaoportunidad, "Sin asesor"),
       creator: clean(base.usuarionombrecreadoroportunidad || base.usuariocreadoroportunidad, "Sin creador"),
       client: clean(base.nombreapelidocomlpetoclietne),
@@ -165,12 +202,60 @@ function lineByDayAndAdvisor(records) {
   });
 }
 
+function buildDateTree(records) {
+  const years = new Map();
+  records.forEach((record) => {
+    if (!record.year || !record.month || !record.day) return;
+    if (!years.has(record.year)) years.set(record.year, new Map());
+    const months = years.get(record.year);
+    const month = record.month.slice(5, 7);
+    if (!months.has(month)) months.set(month, new Set());
+    months.get(month).add(record.day);
+  });
+  return Array.from(years.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([year, months]) => ({
+      year,
+      months: Array.from(months.entries())
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([month, days]) => ({
+          month,
+          key: `${year}-${month}`,
+          label: monthNameFromNumber(month),
+          days: Array.from(days).sort().map((day) => ({ key: day, label: dayNumber(day) })),
+        })),
+    }));
+}
+
+function buildModelTree(records) {
+  const map = new Map();
+  records.forEach((record) => {
+    if (!map.has(record.model)) map.set(record.model, new Set());
+    map.get(record.model).add(record.modelVersion);
+  });
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([model, versions]) => ({
+      model,
+      versions: Array.from(versions).sort().map((version) => ({ key: version, label: version.replace(`${model} / `, "") || version })),
+    }));
+}
+
 function filterRecords(records, filters, chartFilters) {
   return records.filter((record) => {
+    const matchesDate =
+      !filters.dateValue ||
+      (filters.dateLevel === "year" && record.year === filters.dateValue) ||
+      (filters.dateLevel === "month" && record.month === filters.dateValue) ||
+      (filters.dateLevel === "day" && record.day === filters.dateValue);
+    const matchesModel =
+      !filters.modelValue ||
+      (filters.modelLevel === "model" && record.model === filters.modelValue) ||
+      (filters.modelLevel === "version" && record.modelVersion === filters.modelValue);
     const basic =
-      (!filters.month || record.month === filters.month) &&
+      matchesDate &&
       (!filters.advisor || record.advisor === filters.advisor) &&
-      (!filters.modelVersion || record.modelVersion === filters.modelVersion) &&
+      matchesModel &&
       (!filters.stage || record.stage === filters.stage);
     const chart = Object.entries(chartFilters).every(([field, value]) => !value || record[field] === value);
     return basic && chart;
@@ -181,8 +266,9 @@ export default function SalesReportsDashboard() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [filters, setFilters] = useState({ month: "", advisor: "", modelVersion: "", stage: "" });
+  const [filters, setFilters] = useState({ dateLevel: "", dateValue: "", advisor: "", modelLevel: "", modelValue: "", stage: "" });
   const [chartFilters, setChartFilters] = useState({});
+  const [focusChart, setFocusChart] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +300,8 @@ export default function SalesReportsDashboard() {
     modelVersions: groupCount(records, "modelVersion", 100).map((item) => item.name).sort((a, b) => a.localeCompare(b)),
     stages: groupCount(records, "stage", 100).map((item) => item.name),
   }), [records]);
+  const dateTree = useMemo(() => buildDateTree(records), [records]);
+  const modelTree = useMemo(() => buildModelTree(records), [records]);
 
   const kpis = useMemo(() => {
     const prospectDays = uniqueCount(filteredRecords.map((item) => item.day)) || 1;
@@ -252,7 +340,7 @@ export default function SalesReportsDashboard() {
   }
 
   function clearAll() {
-    setFilters({ month: "", advisor: "", modelVersion: "", stage: "" });
+    setFilters({ dateLevel: "", dateValue: "", advisor: "", modelLevel: "", modelValue: "", stage: "" });
     setChartFilters({});
   }
 
@@ -266,28 +354,41 @@ export default function SalesReportsDashboard() {
           <div className="text-center text-2xl font-black leading-5 text-white">Hub<br /><span className="text-slate-300">CRM</span></div>
         </aside>
         <main className="min-w-0 p-2">
-          <section className="mb-2 grid gap-2 rounded-sm bg-[#8798a3] p-3 md:grid-cols-[220px_220px_220px_170px_1fr_92px]">
-            <FilterBox label="Fecha" value={filters.month} onChange={(value) => setFilters((current) => ({ ...current, month: value }))} options={[["", "Todas"], ...selectable.months.map((item) => [item, monthLabel(item)])]} />
+          <Card className="mb-2 gap-2 bg-[#8798a3] p-3 py-3">
+          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[260px_220px_260px_170px_1fr_92px]">
+            <DateTreeFilter
+              valueLevel={filters.dateLevel}
+              value={filters.dateValue}
+              tree={dateTree}
+              onChange={(dateLevel, dateValue) => setFilters((current) => ({ ...current, dateLevel, dateValue }))}
+            />
             <FilterBox label="Asesor" value={filters.advisor} onChange={(value) => setFilters((current) => ({ ...current, advisor: value }))} options={[["", "Todas"], ...selectable.advisors.map((item) => [item, item])]} />
-            <FilterBox label="Modelo / Version" value={filters.modelVersion} onChange={(value) => setFilters((current) => ({ ...current, modelVersion: value }))} options={[["", "Todas"], ...selectable.modelVersions.map((item) => [item, item])]} />
+            <ModelTreeFilter
+              valueLevel={filters.modelLevel}
+              value={filters.modelValue}
+              tree={modelTree}
+              onChange={(modelLevel, modelValue) => setFilters((current) => ({ ...current, modelLevel, modelValue }))}
+            />
             <FilterBox label="Etapa" value={filters.stage} onChange={(value) => setFilters((current) => ({ ...current, stage: value }))} options={[["", "Todas"], ...selectable.stages.map((item) => [item, item])]} />
             <div className="flex items-end justify-end">
-              <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-white px-3 text-sm font-bold text-violet-700 shadow-sm hover:bg-violet-50" onClick={clearAll}>
+              <Button type="button" variant="outline" size="lg" className="h-9 w-full bg-white text-violet-700 shadow-sm hover:bg-violet-50 sm:w-auto" onClick={clearAll}>
                 <RotateCcw className="size-4" /> Limpiar
-              </button>
+              </Button>
             </div>
             <div className="rounded-md bg-white p-2 text-center shadow-sm">
               <p className="text-[10px] font-bold text-slate-500">Uso Plataforma</p>
               <p className="text-2xl font-bold">{formatNumber(kpis.platformUse, 0)} %</p>
             </div>
           </section>
+          </Card>
 
           {message ? <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{message}</div> : null}
           {loading ? (
-            <div className="flex h-[70svh] items-center justify-center rounded-md bg-white">
+            <Card className="flex h-[70svh] items-center justify-center bg-white">
               <Loader2 className="mr-2 size-5 animate-spin text-violet-700" />
               <span className="font-semibold">Cargando reportes...</span>
-            </div>
+              <Skeleton className="absolute mt-16 h-2 w-48" />
+            </Card>
           ) : (
             <>
               <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-11">
@@ -305,19 +406,26 @@ export default function SalesReportsDashboard() {
               </section>
 
               <section className="grid gap-2 xl:grid-cols-[1.25fr_1fr_1fr_1fr_.78fr]">
-                <Panel title="Oportunidad por Modelo"><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Etapas"><StageBars data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Modelo por Asesor"><StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} /></Panel>
-                <Panel title="Tipo de Cliente"><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Motivo de Cierre"><ReasonBars data={charts.closureReason} active={chartFilters.closureReason} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Oportunidad por Modelo" summary={chartSummary(charts.model, "modelo")} onFocus={() => setFocusChart("model")}><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Modelo por Asesor" summary={stackSummary(charts.advisorModel)} onFocus={() => setFocusChart("advisorModel")}><StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} /></Panel>
+                <Panel title="Tipo de Cliente" summary={chartSummary(charts.clientType, "tipo")} onFocus={() => setFocusChart("clientType")}><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Motivo de Cierre" summary={chartSummary(charts.closureReason, "motivo")} onFocus={() => setFocusChart("closureReason")}><ReasonBars data={charts.closureReason} active={chartFilters.closureReason} onSelect={toggleChartFilter} /></Panel>
               </section>
 
               <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
-                <Panel title="Prospectos por Dia y Asesor"><DayAdvisorLine data={charts.dayAdvisor} /></Panel>
-                <Panel title="Origen con Campañas"><Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Ciudad Origen"><Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Tipo de Combustible"><Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Prospectos por Dia y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} /></Panel>
+                <Panel title="Origen con Campañas" summary={chartSummary(charts.campaign, "origen")} onFocus={() => setFocusChart("campaign")}><Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Ciudad Origen" summary={chartSummary(charts.city, "ciudad")} onFocus={() => setFocusChart("city")}><Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Tipo de Combustible" summary={chartSummary(charts.fuel, "combustible")} onFocus={() => setFocusChart("fuel")}><Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} /></Panel>
               </section>
+              <FocusChartDialog
+                chartKey={focusChart}
+                charts={charts}
+                chartFilters={chartFilters}
+                onClose={() => setFocusChart(null)}
+                onSelect={toggleChartFilter}
+              />
             </>
           )}
         </main>
@@ -327,75 +435,251 @@ export default function SalesReportsDashboard() {
 }
 
 function FilterBox({ label, value, onChange, options }) {
+  const emptyValue = "Todos";
   return (
-    <label className="rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
-      <span className="mb-1 block text-sm font-bold">{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="h-8 w-full bg-slate-200 px-2 text-xs font-medium text-slate-700 outline-none">
-        {options.map(([optionValue, optionLabel]) => <option key={optionValue || "all"} value={optionValue}>{optionLabel}</option>)}
-      </select>
-    </label>
+    <div className="rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
+      <Label className="mb-1 block text-sm font-bold text-slate-900">{label}</Label>
+      <Select value={value || emptyValue} onValueChange={(nextValue) => onChange(nextValue === emptyValue ? "" : nextValue)}>
+        <SelectTrigger className="h-8 w-full bg-slate-100 text-xs font-medium text-slate-700">
+          <SelectValue placeholder="Todas" />
+        </SelectTrigger>
+        <SelectContent align="start" className="max-h-72">
+          {options.map(([optionValue, optionLabel]) => <SelectItem key={optionValue || emptyValue} value={optionValue || emptyValue}>{optionLabel || emptyValue}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
   );
+}
+
+function TreeFilterShell({ label, display, children, onClear }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <Label className="block text-sm font-bold text-slate-900">{label}</Label>
+        <button type="button" className="text-[10px] font-bold text-slate-500 hover:text-violet-700" onClick={onClear}>Limpiar</button>
+      </div>
+      <button type="button" className="flex h-8 w-full items-center justify-between bg-slate-100 px-2 text-left text-xs font-medium text-slate-700" onClick={() => setOpen((current) => !current)}>
+        <span className="truncate">{display}</span>
+        <ChevronDown className={`size-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div className="absolute left-2 right-2 top-[68px] z-50 max-h-72 overflow-auto rounded-md border border-slate-300 bg-[#d2d2d2] p-2 text-xs shadow-xl">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DateTreeFilter({ valueLevel, value, tree, onChange }) {
+  const [openYears, setOpenYears] = useState({});
+  const [openMonths, setOpenMonths] = useState({});
+  const display = dateTreeDisplay(valueLevel, value);
+  return (
+    <TreeFilterShell label="Fecha" display={display} onClear={() => onChange("", "")}>
+      {tree.map((year) => (
+        <div key={year.year} className="space-y-1">
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setOpenYears((current) => ({ ...current, [year.year]: !(current[year.year] ?? true) }))}>
+              {(openYears[year.year] ?? true) ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            </button>
+            <button type="button" className="inline-flex items-center gap-2" onClick={() => onChange("year", year.year)}>
+              <span className={`size-3 border ${valueLevel === "year" && value === year.year ? "bg-slate-700" : "bg-transparent"}`} />
+              <span className="font-semibold">{year.year}</span>
+            </button>
+          </div>
+          {(openYears[year.year] ?? true) ? (
+            <div className="ml-5 space-y-1">
+              {year.months.map((month) => (
+                <div key={month.key}>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setOpenMonths((current) => ({ ...current, [month.key]: !(current[month.key] ?? true) }))}>
+                      {(openMonths[month.key] ?? true) ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                    </button>
+                    <button type="button" className="inline-flex items-center gap-2" onClick={() => onChange("month", month.key)}>
+                      <span className={`size-3 border ${valueLevel === "month" && value === month.key ? "bg-slate-700" : "bg-transparent"}`} />
+                      <span>{month.label}</span>
+                    </button>
+                  </div>
+                  {(openMonths[month.key] ?? true) ? (
+                    <div className="ml-8 grid gap-1">
+                      {month.days.map((day) => (
+                        <button key={day.key} type="button" className="inline-flex items-center gap-2 text-left" onClick={() => onChange("day", day.key)}>
+                          <span className={`size-3 border ${valueLevel === "day" && value === day.key ? "bg-slate-700" : "bg-transparent"}`} />
+                          <span>{day.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </TreeFilterShell>
+  );
+}
+
+function ModelTreeFilter({ valueLevel, value, tree, onChange }) {
+  const [openModels, setOpenModels] = useState({});
+  const display = !value ? "Todas" : valueLevel === "model" ? value : value;
+  return (
+    <TreeFilterShell label="Modelo / Version" display={display} onClear={() => onChange("", "")}>
+      {tree.map((model) => (
+        <div key={model.model} className="space-y-1">
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setOpenModels((current) => ({ ...current, [model.model]: !(current[model.model] ?? true) }))}>
+              {(openModels[model.model] ?? true) ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            </button>
+            <button type="button" className="inline-flex min-w-0 items-center gap-2" onClick={() => onChange("model", model.model)}>
+              <span className={`size-3 shrink-0 border ${valueLevel === "model" && value === model.model ? "bg-slate-700" : "bg-transparent"}`} />
+              <span className="truncate font-semibold">{model.model}</span>
+            </button>
+          </div>
+          {(openModels[model.model] ?? true) ? (
+            <div className="ml-8 grid gap-1">
+              {model.versions.map((version) => (
+                <button key={version.key} type="button" className="inline-flex min-w-0 items-center gap-2 text-left" onClick={() => onChange("version", version.key)}>
+                  <span className={`size-3 shrink-0 border ${valueLevel === "version" && value === version.key ? "bg-slate-700" : "bg-transparent"}`} />
+                  <span className="truncate">{version.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </TreeFilterShell>
+  );
+}
+
+function dateTreeDisplay(level, value) {
+  if (!value) return "Todas";
+  if (level === "year") return `${value} (Año)`;
+  if (level === "month") return monthLabel(value);
+  if (level === "day") return value.split("-").reverse().join("/");
+  return "Todas";
 }
 
 function Kpi({ title, value }) {
   return (
-    <div className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+    <Card className="gap-0 overflow-hidden bg-white py-0 shadow-sm">
       <div className="bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-center text-xs font-black text-white">{title}</div>
-      <div className="flex h-14 items-center justify-center text-2xl font-bold">{value || "-"}</div>
-    </div>
+      <CardContent className="flex h-14 items-center justify-center px-2 text-xl font-bold sm:text-2xl">{value || "-"}</CardContent>
+    </Card>
   );
 }
 
-function Panel({ title, children }) {
+function Panel({ title, children, summary, onFocus }) {
   return (
-    <div className="min-h-[230px] overflow-hidden rounded-md border border-slate-400 bg-white shadow-sm">
-      <div className="bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-right text-xs font-black text-white">{title}</div>
-      <div className="h-[250px] p-2">{children}</div>
-    </div>
+    <Card className="min-h-[270px] gap-0 overflow-hidden bg-white py-0 shadow-sm ring-slate-400">
+      <CardHeader className="grid grid-cols-[1fr_auto] items-center bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1">
+        <CardTitle className="text-right text-xs font-black text-white">{title}</CardTitle>
+        {onFocus ? (
+          <button type="button" className="ml-2 inline-flex size-5 items-center justify-center rounded-sm bg-white/15 text-white hover:bg-white/25" title="Modo enfoque" onClick={onFocus}>
+            <Expand className="size-3.5" />
+          </button>
+        ) : null}
+      </CardHeader>
+      <CardContent className="p-2">
+        <div className="h-[220px]">{children}</div>
+        <p className="mt-2 line-clamp-2 border-t border-slate-100 pt-2 text-[10px] font-semibold leading-tight text-slate-600">{summary || "Sin datos suficientes para resumir."}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FocusChartDialog({ chartKey, charts, chartFilters, onClose, onSelect }) {
+  if (!chartKey) return null;
+  const config = {
+    model: {
+      title: "Oportunidad por Modelo",
+      summary: chartSummary(charts.model, "modelo"),
+      content: <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={onSelect} />,
+    },
+    stage: {
+      title: "Etapas",
+      summary: chartSummary(charts.stage, "etapa"),
+      content: <StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={onSelect} />,
+    },
+    advisorModel: {
+      title: "Modelo por Asesor",
+      summary: stackSummary(charts.advisorModel),
+      content: <StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} />,
+    },
+    clientType: {
+      title: "Tipo de Cliente",
+      summary: chartSummary(charts.clientType, "tipo"),
+      content: <Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={onSelect} />,
+    },
+    closureReason: {
+      title: "Motivo de Cierre",
+      summary: chartSummary(charts.closureReason, "motivo"),
+      content: <ReasonBars data={charts.closureReason} active={chartFilters.closureReason} onSelect={onSelect} />,
+    },
+    dayAdvisor: {
+      title: "Prospectos por Dia y Asesor",
+      summary: lineSummary(charts.dayAdvisor),
+      content: <DayAdvisorLine data={charts.dayAdvisor} />,
+    },
+    campaign: {
+      title: "Origen con Campañas",
+      summary: chartSummary(charts.campaign, "origen"),
+      content: <Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={onSelect} />,
+    },
+    city: {
+      title: "Ciudad Origen",
+      summary: chartSummary(charts.city, "ciudad"),
+      content: <Donut data={charts.city} field="city" active={chartFilters.city} onSelect={onSelect} />,
+    },
+    fuel: {
+      title: "Tipo de Combustible",
+      summary: chartSummary(charts.fuel, "combustible"),
+      content: <Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={onSelect} />,
+    },
+  }[chartKey];
+  if (!config) return null;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] max-w-[min(96vw,1180px)] overflow-hidden bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-slate-200 px-5 py-4">
+          <DialogTitle className="text-base font-bold text-violet-700">{config.title}</DialogTitle>
+          <DialogDescription>{config.summary}</DialogDescription>
+        </DialogHeader>
+        <div className="h-[min(72svh,680px)] p-4">
+          {config.content}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function Donut({ data, field, active, onSelect }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  const denominator = total || 1;
-  const radius = 58;
-  const circumference = 2 * Math.PI * radius;
-  const segments = data.map((entry, index) => {
-    const previous = data.slice(0, index).reduce((sum, item) => sum + (item.value / denominator) * circumference, 0);
-    return {
-      entry,
-      length: (entry.value / denominator) * circumference,
-      dashOffset: -previous,
-    };
-  });
   return (
     <div className="grid h-full grid-cols-[1fr_112px] items-center gap-2">
-      <svg viewBox="0 0 160 160" className="h-full w-full">
-        <circle cx="80" cy="80" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="28" />
-        {segments.map(({ entry, length, dashOffset }, index) => {
-          return (
-            <circle
-              key={entry.name}
-              cx="80"
-              cy="80"
-              r={radius}
-              fill="none"
-              stroke={COLORS[index % COLORS.length]}
-              strokeWidth="28"
-              strokeDasharray={`${Math.max(0, length - 2)} ${circumference}`}
-              strokeDashoffset={dashOffset}
-              strokeLinecap="butt"
-              opacity={!active || active === entry.name ? 1 : 0.25}
-              className="cursor-pointer"
-              transform="rotate(-90 80 80)"
-              onClick={() => onSelect(field, entry.name)}
-            />
-          );
-        })}
-        <circle cx="80" cy="80" r="34" fill="white" />
-        <text x="80" y="78" textAnchor="middle" className="fill-slate-900 text-[18px] font-bold">{total}</text>
-        <text x="80" y="94" textAnchor="middle" className="fill-slate-500 text-[8px]">Total</text>
-      </svg>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Tooltip formatter={(value) => [value, "Total"]} />
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            innerRadius="48%"
+            outerRadius="76%"
+            paddingAngle={1}
+            onClick={(entry) => onSelect(field, entry.name)}
+          >
+            {data.map((entry, index) => (
+              <Cell key={entry.name} fill={COLORS[index % COLORS.length]} opacity={!active || active === entry.name ? 1 : 0.25} className="cursor-pointer" />
+            ))}
+          </Pie>
+          <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[18px] font-bold">{total}</text>
+          <text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[8px]">Total</text>
+        </PieChart>
+      </ResponsiveContainer>
       <div className="max-h-full space-y-1 overflow-y-auto pr-1">
         {data.map((entry, index) => (
           <button key={entry.name} type="button" className="grid w-full grid-cols-[10px_1fr_auto] items-center gap-1 text-left text-[10px]" onClick={() => onSelect(field, entry.name)}>
@@ -409,96 +693,100 @@ function Donut({ data, field, active, onSelect }) {
   );
 }
 
-function StageBars({ data, active, onSelect }) {
-  const max = Math.max(...data.map((item) => item.value), 1);
+function chartSummary(data, label) {
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const top = data[0];
+  if (!top || !total) return "Sin registros para este grafico.";
+  const percent = (Number(top.value || 0) / total) * 100;
+  return `Mayor ${label}: ${top.name} con ${top.value} (${formatNumber(percent, 1)}% de ${total}).`;
+}
+
+function stackSummary(data) {
+  if (!data.length) return "Sin registros por asesor.";
+  const totals = data.map((row) => ({
+    name: row.advisor,
+    value: Object.entries(row).filter(([key]) => key !== "advisor").reduce((sum, [, value]) => sum + Number(value || 0), 0),
+  })).sort((a, b) => b.value - a.value);
+  return totals[0]?.value ? `Asesor con mas oportunidades: ${totals[0].name} (${totals[0].value}).` : "Sin registros por asesor.";
+}
+
+function lineSummary(data) {
+  if (!data.length) return "Sin registros por dia.";
+  const totals = data.map((row) => ({
+    name: row.day,
+    value: Object.entries(row).filter(([key]) => key !== "day").reduce((sum, [, value]) => sum + Number(value || 0), 0),
+  })).sort((a, b) => b.value - a.value);
+  return totals[0]?.value ? `Dia con mas prospectos: ${totals[0].name} (${totals[0].value}).` : "Sin registros por dia.";
+}
+
+function StageFunnel({ data, active, onSelect }) {
   return (
-    <div className="flex h-full flex-col justify-center gap-2">
-      {data.map((entry, index) => (
-        <button key={entry.name} type="button" className="grid grid-cols-[82px_1fr] items-center gap-2 text-left" onClick={() => onSelect("stage", entry.name)}>
-          <span className="truncate text-[11px] text-slate-600">{entry.name}</span>
-          <span className="relative h-7 bg-slate-100">
-            <span className="flex h-full items-center justify-center text-xs font-bold text-white" style={{ width: `${Math.max(10, (entry.value / max) * 100)}%`, backgroundColor: STAGE_COLORS[index % STAGE_COLORS.length], opacity: !active || active === entry.name ? 1 : 0.3 }}>
-              {entry.value}
-            </span>
-          </span>
-        </button>
-      ))}
-    </div>
+    <ResponsiveContainer width="100%" height="100%">
+      <FunnelChart margin={{ top: 10, right: 8, bottom: 10, left: 8 }}>
+        <Tooltip />
+        <Funnel dataKey="value" data={data} nameKey="name" isAnimationActive onClick={(entry) => onSelect("stage", entry.name)}>
+          <LabelList position="right" fill="#475569" stroke="none" dataKey="name" fontSize={11} />
+          <LabelList position="center" fill="#ffffff" stroke="none" dataKey="value" fontSize={12} fontWeight={700} />
+          {data.map((entry, index) => (
+            <Cell key={entry.name} fill={STAGE_COLORS[index % STAGE_COLORS.length]} opacity={!active || active === entry.name ? 1 : 0.3} className="cursor-pointer" />
+          ))}
+        </Funnel>
+      </FunnelChart>
+    </ResponsiveContainer>
   );
 }
 
 function StackedAdvisor({ data, models }) {
-  const max = Math.max(...data.map((row) => models.reduce((sum, model) => sum + Number(row[model] || 0), 0)), 1);
+  const activeModels = models.slice(0, 5);
   return (
-    <div className="flex h-full items-end justify-around gap-3 px-2 pt-4">
-      {data.map((row) => {
-        const total = models.reduce((sum, model) => sum + Number(row[model] || 0), 0);
-        return (
-          <div key={row.advisor} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
-            <div className="flex w-10 flex-col justify-end overflow-hidden bg-slate-100" style={{ height: `${Math.max(8, (total / max) * 78)}%` }}>
-              {models.slice(0, 5).map((model, index) => {
-                const value = Number(row[model] || 0);
-                if (!value) return null;
-                return <div key={model} title={`${model}: ${value}`} style={{ height: `${(value / total) * 100}%`, backgroundColor: COLORS[index % COLORS.length] }} />;
-              })}
-            </div>
-            <span className="mt-2 line-clamp-2 text-center text-[10px] leading-tight text-slate-600">{row.advisor}</span>
-          </div>
-        );
-      })}
-    </div>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 12, right: 8, bottom: 24, left: -24 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="advisor" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={42} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <Tooltip />
+        {activeModels.map((model, index) => (
+          <Bar key={model} dataKey={model} stackId="modelos" fill={COLORS[index % COLORS.length]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
 function ReasonBars({ data, active, onSelect }) {
+  const max = Math.max(...data.map((item) => item.value), 1);
   return (
-    <div className="space-y-2 pt-1">
-      {data.map((item, index) => (
-        <button key={item.name} type="button" className="block w-full text-left" onClick={() => onSelect("closureReason", item.name)}>
-          <div className="mb-1 truncate text-xs font-bold text-slate-700">{item.name}</div>
-          <div className="h-10 bg-slate-100">
-            <div className="flex h-full items-center px-2 text-xs font-bold text-white" style={{ width: `${Math.max(8, (item.value / Math.max(...data.map((row) => row.value), 1)) * 100)}%`, backgroundColor: COLORS[index % COLORS.length], opacity: !active || active === item.name ? 1 : 0.3 }}>
-              {item.value}
-            </div>
-          </div>
-        </button>
-      ))}
-    </div>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} layout="vertical" margin={{ top: 8, right: 12, bottom: 8, left: 2 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" domain={[0, max]} hide />
+        <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11 }} />
+        <Tooltip />
+        <Bar dataKey="value" radius={[0, 6, 6, 0]} onClick={(entry) => onSelect("closureReason", entry.name)}>
+          {data.map((item, index) => (
+            <Cell key={item.name} fill={COLORS[index % COLORS.length]} opacity={!active || active === item.name ? 1 : 0.3} className="cursor-pointer" />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
 function DayAdvisorLine({ data }) {
   const advisors = data.length ? Object.keys(data[0]).filter((key) => key !== "day") : [];
-  const width = 520;
-  const height = 190;
-  const pad = 24;
-  const max = Math.max(...data.flatMap((row) => advisors.map((advisor) => Number(row[advisor] || 0))), 1);
-  const xFor = (index) => data.length <= 1 ? pad : pad + (index * (width - pad * 2)) / (data.length - 1);
-  const yFor = (value) => height - pad - (Number(value || 0) * (height - pad * 2)) / max;
   return (
     <div className="flex h-full flex-col">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-h-0 flex-1">
-        {[0, 0.25, 0.5, 0.75, 1].map((step) => (
-          <line key={step} x1={pad} x2={width - pad} y1={pad + step * (height - pad * 2)} y2={pad + step * (height - pad * 2)} stroke="#e2e8f0" strokeDasharray="4 4" />
-        ))}
-        {data.map((row, index) => (
-          <text key={row.day} x={xFor(index)} y={height - 5} textAnchor="middle" className="fill-slate-500 text-[9px]">{row.day}</text>
-        ))}
-        {advisors.map((advisor, advisorIndex) => {
-          const points = data.map((row, index) => `${xFor(index)},${yFor(row[advisor])}`).join(" ");
-          return (
-            <g key={advisor}>
-              <polyline points={points} fill="none" stroke={COLORS[advisorIndex % COLORS.length]} strokeWidth="3" />
-              {data.map((row, index) => (
-                <g key={`${advisor}-${row.day}`}>
-                  <circle cx={xFor(index)} cy={yFor(row[advisor])} r="4" fill={COLORS[advisorIndex % COLORS.length]} />
-                  {row[advisor] ? <text x={xFor(index)} y={yFor(row[advisor]) - 8} textAnchor="middle" className="fill-slate-600 text-[10px]">{row[advisor]}</text> : null}
-                </g>
-              ))}
-            </g>
-          );
-        })}
-      </svg>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: -18 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
+          <Tooltip />
+          {advisors.map((advisor, index) => (
+            <Line key={advisor} type="monotone" dataKey={advisor} stroke={COLORS[index % COLORS.length]} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-3 text-[10px]">
         {advisors.map((advisor, index) => (
           <span key={advisor} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{advisor}</span>

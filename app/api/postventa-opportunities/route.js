@@ -30,6 +30,12 @@ function timePart(value) {
   return String(value).slice(11, 16) || String(value).slice(0, 5);
 }
 
+function intParam(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number)) return fallback;
+  return Math.min(Math.max(number, min), max);
+}
+
 async function nextCode(connection, prefix) {
   const year = new Date().getFullYear();
   const [rows] = await connection.query(
@@ -67,14 +73,37 @@ export async function GET(request) {
       return NextResponse.json({ message: `No tienes permiso para ver ${config.label}.` }, { status: 403 });
     }
     const canAll = canSeeAll(user, config.permission);
-    const [rows] = await pool.query(
-      `SELECT o.*, CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
-              v.placas, v.vin, v.anio, ma.name AS marca_nombre, mo.name AS modelo_nombre,
-              og.name AS origen_nombre, so.name AS suborigen_nombre,
-              e.nombre AS etapa_nombre, e.color AS etapa_color, e.descripcion AS temperatura,
-              cu.fullname AS creado_por_nombre, au.fullname AS asignado_a_nombre,
-              d.fecha_agenda, d.hora_agenda,
-              cita.id AS cita_id, cita.start_at AS cita_start_at, cita.estado AS cita_estado
+    const searchParams = request.nextUrl.searchParams;
+    const page = intParam(searchParams.get("page"), 1, 1, 999999);
+    const limit = intParam(searchParams.get("limit"), 10, 1, 100);
+    const offset = (page - 1) * limit;
+    const query = String(searchParams.get("q") || "").trim();
+    const stageId = String(searchParams.get("stageId") || "").trim();
+    const where = ["o.oportunidad_id LIKE ?"];
+    const whereParams = [`${config.prefix}-%`];
+
+    if (!canAll) {
+      where.push("(o.created_by=? OR o.asignado_a=?)");
+      whereParams.push(user.id, user.id);
+    }
+
+    if (query) {
+      const like = `%${query}%`;
+      where.push(`(o.oportunidad_id LIKE ?
+        OR CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) LIKE ?
+        OR v.placas LIKE ?
+        OR v.vin LIKE ?
+        OR ma.name LIKE ?
+        OR mo.name LIKE ?)`);
+      whereParams.push(like, like, like, like, like, like);
+    }
+
+    if (stageId) {
+      where.push("o.etapasconversionpv_id = ?");
+      whereParams.push(Number(stageId));
+    }
+
+    const fromSql = `
        FROM posventa_oportunidades o
        INNER JOIN administracion_clientes c ON c.id=o.cliente_id
        INNER JOIN administracion_vehiculos v ON v.id=o.vehiculo_id
@@ -101,10 +130,21 @@ export async function GET(request) {
          ) latest_cita
          WHERE latest_cita.rn=1
        ) cita ON cita.oportunidadespv_id=o.id
-       WHERE o.oportunidad_id LIKE ?
-       ${canAll ? "" : "AND (o.created_by=? OR o.asignado_a=?)"}
-       ORDER BY CASE WHEN LOWER(e.nombre) LIKE '%cerrad%' THEN 1 ELSE 0 END ASC, o.updated_at DESC`,
-      canAll ? [`${config.prefix}-%`] : [`${config.prefix}-%`, user.id, user.id]
+       WHERE ${where.join(" AND ")}`;
+
+    const [[countRow]] = await pool.query(`SELECT COUNT(*) AS total ${fromSql}`, whereParams);
+    const [rows] = await pool.query(
+      `SELECT o.*, CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+              v.placas, v.vin, v.anio, ma.name AS marca_nombre, mo.name AS modelo_nombre,
+              og.name AS origen_nombre, so.name AS suborigen_nombre,
+              e.nombre AS etapa_nombre, e.color AS etapa_color, e.descripcion AS temperatura,
+              cu.fullname AS creado_por_nombre, au.fullname AS asignado_a_nombre,
+              d.fecha_agenda, d.hora_agenda,
+              cita.id AS cita_id, cita.start_at AS cita_start_at, cita.estado AS cita_estado
+       ${fromSql}
+       ORDER BY CASE WHEN LOWER(e.nombre) LIKE '%cerrad%' THEN 1 ELSE 0 END ASC, o.updated_at DESC
+       LIMIT ? OFFSET ?`,
+      [...whereParams, limit, offset]
     );
     const [stages] = await pool.query(`SELECT id,nombre,descripcion,color,sort_order FROM configuracion_posventa_etapasconversion WHERE is_active=1 ORDER BY COALESCE(sort_order,id) ASC`);
     const [origins] = await pool.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
@@ -119,6 +159,12 @@ export async function GET(request) {
     const now = new Date();
     return NextResponse.json({
       currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll },
+      meta: {
+        total: Number(countRow?.total || 0),
+        page,
+        limit,
+        pages: Math.max(1, Math.ceil(Number(countRow?.total || 0) / limit)),
+      },
       opportunities: rows.map((row) => {
         const agendaDate = datePart(row.fecha_agenda);
         const agendaTime = timePart(row.hora_agenda);

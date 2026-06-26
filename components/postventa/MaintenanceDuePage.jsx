@@ -178,6 +178,13 @@ export default function MaintenanceDuePage({ userPermissions }) {
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            onClick={() => router.push("/proximosmantenimientos/vehiculos-sin-oportunidad")}
+          >
+            <Search className="size-4" />
+            Vehiculos sin oportunidad
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleRecalculateMaintenance}
             disabled={recalculating}
           >
