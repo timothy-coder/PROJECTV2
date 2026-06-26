@@ -334,7 +334,7 @@ export default function PostventaReportsDashboard() {
           <div className="text-center text-2xl font-black leading-5 text-white">Hub<br /><span className="text-slate-300">CRM</span></div>
         </aside>
         <main className="min-w-0 p-2">
-          <Card className="mb-2 gap-2 bg-[#8798a3] p-3 py-3">
+          <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
           <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[260px_220px_260px_170px_1fr]">
             <DateTreeFilter valueLevel={filters.dateLevel} value={filters.dateValue} tree={dateTree} onChange={(dateLevel, dateValue) => setFilters((current) => ({ ...current, dateLevel, dateValue }))} />
             <FilterBox label="Asesor" value={filters.advisor} onChange={(value) => setFilters((current) => ({ ...current, advisor: value }))} options={[["", "Todas"], ...selectable.advisors.map((item) => [item, item])]} />
@@ -414,7 +414,7 @@ function FilterBox({ label, value, onChange, options }) {
 function TreeFilterShell({ label, display, children, onClear }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
+    <div className="relative z-50 rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
       <div className="mb-1 flex items-center justify-between gap-2">
         <Label className="block text-sm font-bold text-slate-900">{label}</Label>
         <button type="button" className="text-[10px] font-bold text-slate-500 hover:text-violet-700" onClick={onClear}>Limpiar</button>
@@ -423,7 +423,7 @@ function TreeFilterShell({ label, display, children, onClear }) {
         <span className="truncate">{display}</span>
         <ChevronDown className={`size-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {open ? <div className="absolute left-2 right-2 top-[68px] z-50 max-h-72 overflow-auto rounded-md border border-slate-300 bg-[#d2d2d2] p-2 text-xs shadow-xl">{children}</div> : null}
+      {open ? <div className="absolute left-2 right-2 top-[68px] z-[999] max-h-72 overflow-auto rounded-md border border-slate-300 bg-[#d2d2d2] p-2 text-xs shadow-xl">{children}</div> : null}
     </div>
   );
 }
