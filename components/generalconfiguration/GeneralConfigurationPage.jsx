@@ -13,6 +13,7 @@ import { MotivesTab } from "@/components/generalconfiguration/tabs/motives/Motiv
 import { OriginsTab } from "@/components/generalconfiguration/tabs/origins/OriginsTab";
 import { PlaceholderTab } from "@/components/generalconfiguration/tabs/PlaceholderTab";
 import { RatesTab } from "@/components/generalconfiguration/tabs/rates/RatesTab";
+import { RolesTab } from "@/components/generalconfiguration/tabs/roles/RolesTab";
 import { SuboriginsTab } from "@/components/generalconfiguration/tabs/suborigins/SuboriginsTab";
 import { WorkshopsCountersTab } from "@/components/generalconfiguration/tabs/workshops-counters/WorkshopsCountersTab";
 
@@ -83,6 +84,11 @@ export default function GeneralConfigurationPage({ userPermissions }) {
             />
           ) : activeConfig.id === "links" ? (
             <LinksTab
+              tab={activeConfig}
+              userPermissions={userPermissions}
+            />
+          ) : activeConfig.id === "roles" ? (
+            <RolesTab
               tab={activeConfig}
               userPermissions={userPermissions}
             />

@@ -9,6 +9,7 @@ import {
   MapPin,
   MessageSquareText,
   Package,
+  ShieldCheck,
 } from "lucide-react";
 
 export const configurationTabs = [
@@ -129,6 +130,15 @@ export const configurationTabs = [
       create: ["configuracion_links", "create"],
       edit: ["configuracion_links", "edit"],
       delete: ["configuracion_links", "delete"],
+    },
+  },
+  {
+    id: "roles",
+    label: "Roles",
+    icon: ShieldCheck,
+    perm: ["configuracion_roles", "view"],
+    actions: {
+      create: ["configuracion_roles", "create"],
     },
   },
   {

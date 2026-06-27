@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowLeft, BarChart3, CalendarClock, Car, ClipboardList, Database, FileText, Search, ShieldCheck, Wrench } from "lucide-react";
+import { BarChart3, CalendarClock, Car, ClipboardList, Database, FileText, Search, ShieldCheck, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import SalesReportsDashboard from "@/components/reportes/SalesReportsDashboard";
-import PostventaReportsDashboard from "@/components/reportes/PostventaReportsDashboard";
 import { hasPerm } from "@/lib/permissions";
 
 const REPORTS = [
@@ -17,7 +15,7 @@ const REPORTS = [
     title: "Power BI Ventas",
     description: "Oportunidades, cotizaciones, reservas, clientes y unidades.",
     category: "Ventas",
-    dashboard: "ventas",
+    href: "/reportes/ventas",
     icon: Database,
     permissions: [["oportunidades", "viewall"], ["cotizacion", "viewall"], ["reservas", "viewall"]],
     badge: "Dashboard",
@@ -27,7 +25,7 @@ const REPORTS = [
     title: "Power BI Posventa",
     description: "Ordenes, oportunidades, mantenimientos y cotizaciones de posventa.",
     category: "Posventa",
-    dashboard: "posventa",
+    href: "/reportes/posventa",
     icon: Wrench,
     permissions: [["oportunidadespv", "viewall"], ["ordenespv", "viewall"]],
     badge: "Dashboard",
@@ -103,7 +101,6 @@ function canSeeReport(userPermissions, report) {
 export default function ReportsPage({ userPermissions = {} }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todos");
-  const [activeDashboard, setActiveDashboard] = useState("");
 
   const visibleReports = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -121,52 +118,6 @@ export default function ReportsPage({ userPermissions = {} }) {
       posventa: allowed.filter((report) => report.category === "Posventa").length,
     };
   }, [userPermissions]);
-
-  if (activeDashboard) {
-    const title = activeDashboard === "ventas" ? "Power BI Ventas" : "Power BI Posventa";
-    return (
-      <main className="min-h-full bg-slate-50 text-slate-950">
-        <header className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur sm:px-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h1 className="text-base font-bold leading-tight text-violet-700">{title}</h1>
-              <p className="mt-0.5 text-xs font-medium text-violet-400">Dashboard interactivo de reportes</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                onClick={() => setActiveDashboard("ventas")}
-                variant={activeDashboard === "ventas" ? "default" : "outline"}
-                size="lg"
-                className={activeDashboard === "ventas" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 bg-white text-violet-700"}
-              >
-                Ventas
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setActiveDashboard("posventa")}
-                variant={activeDashboard === "posventa" ? "default" : "outline"}
-                size="lg"
-                className={activeDashboard === "posventa" ? "bg-violet-700 text-white hover:bg-violet-800" : "border-violet-200 bg-white text-violet-700"}
-              >
-                Posventa
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setActiveDashboard("")}
-                variant="outline"
-                size="lg"
-                className="border-slate-200 bg-white text-slate-700"
-              >
-                <ArrowLeft className="size-4" /> Volver
-              </Button>
-            </div>
-          </div>
-        </header>
-        {activeDashboard === "ventas" ? <SalesReportsDashboard /> : <PostventaReportsDashboard />}
-      </main>
-    );
-  }
 
   return (
     <main className="min-h-full bg-slate-50 p-3 text-slate-950 sm:p-4">
@@ -215,7 +166,7 @@ export default function ReportsPage({ userPermissions = {} }) {
 
       <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {visibleReports.map((report) => (
-          <ReportCard key={report.id} report={report} onOpenDashboard={setActiveDashboard} />
+          <ReportCard key={report.id} report={report} />
         ))}
         {!visibleReports.length ? (
           <div className="rounded-lg border border-dashed bg-white p-6 text-center text-sm font-semibold text-slate-500 md:col-span-2 xl:col-span-3">
@@ -236,19 +187,9 @@ function Stat({ label, value }) {
   );
 }
 
-function ReportCard({ report, onOpenDashboard }) {
+function ReportCard({ report }) {
   const Icon = report.icon;
-  const openButton = report.dashboard ? (
-    <Button
-      type="button"
-      onClick={() => onOpenDashboard(report.dashboard)}
-      variant="outline"
-      size="lg"
-      className="border-violet-200 text-violet-700 hover:bg-violet-50"
-    >
-      Abrir
-    </Button>
-  ) : (
+  const openButton = (
     <Link href={report.href} className="inline-flex h-8 items-center justify-center rounded-md border border-violet-200 px-3 text-xs font-bold text-violet-700 hover:bg-violet-50">
       Abrir
     </Link>

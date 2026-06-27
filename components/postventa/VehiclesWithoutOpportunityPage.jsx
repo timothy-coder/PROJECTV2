@@ -6,6 +6,7 @@ import { ArrowLeft, Eye, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/app/api/client";
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { PostventaOpportunityDialog } from "@/components/postventa/PostventaOpportunityDialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,9 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
   const [appliedQuery, setAppliedQuery] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const [brandFilter, setBrandFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [options, setOptions] = useState({ brands: [], models: [] });
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 10, pages: 1 });
   const [loading, setLoading] = useState(true);
@@ -46,8 +50,23 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
       limit: String(limit),
     });
     if (appliedQuery.trim()) next.set("q", appliedQuery.trim());
+    if (brandFilter) next.set("brand", brandFilter);
+    if (modelFilter) next.set("model", modelFilter);
     return next.toString();
-  }, [appliedQuery, limit, page]);
+  }, [appliedQuery, brandFilter, limit, modelFilter, page]);
+
+  const visibleModels = useMemo(() => {
+    if (!brandFilter) return options.models || [];
+    return (options.models || []).filter((item) => String(item.brand || "").toLowerCase() === brandFilter.toLowerCase());
+  }, [brandFilter, options.models]);
+  const brandOptions = useMemo(
+    () => [{ value: "", label: "Todas las marcas" }, ...(options.brands || []).map((brand) => ({ value: brand, label: brand }))],
+    [options.brands]
+  );
+  const modelOptions = useMemo(
+    () => [{ value: "", label: "Todos los modelos" }, ...visibleModels.map((model) => ({ value: model.name, label: model.name }))],
+    [visibleModels]
+  );
 
   useEffect(() => {
     function updateLimit() {
@@ -93,6 +112,7 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
           const nextRows = Array.isArray(payload?.rows) ? payload.rows : [];
           setRows(nextRows.map(mapNoOpportunityVehicle));
           setMeta(payload?.meta || { total: nextRows.length, page, limit, pages: 1 });
+          setOptions(payload?.options || { brands: [], models: [] });
         })
         .catch((error) => {
           if (!cancelled) toast.error(error.message || "No se pudo cargar vehiculos sin oportunidad.");
@@ -124,6 +144,14 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
     setAppliedQuery(query);
   }
 
+  function clearFilters() {
+    setQuery("");
+    setAppliedQuery("");
+    setBrandFilter("");
+    setModelFilter("");
+    setPage(1);
+  }
+
   if (!canView) {
     return (
       <div className="rounded-lg bg-white p-4 text-sm text-slate-700">
@@ -146,7 +174,7 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
       </header>
 
       <section className="rounded-lg border bg-white p-3 shadow-sm sm:p-4">
-        <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_110px]">
+        <div className="mb-3 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_210px_210px_110px_100px]">
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -159,9 +187,33 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
               }}
             />
           </div>
+          <SearchableSelect
+            value={brandFilter}
+            options={brandOptions}
+            placeholder="Todas las marcas"
+            searchPlaceholder="Buscar marca..."
+            onChange={(value) => {
+              setBrandFilter(value);
+              setModelFilter("");
+              setPage(1);
+            }}
+          />
+          <SearchableSelect
+            value={modelFilter}
+            options={modelOptions}
+            placeholder="Todos los modelos"
+            searchPlaceholder="Buscar modelo..."
+            onChange={(value) => {
+              setModelFilter(value);
+              setPage(1);
+            }}
+          />
           <Button type="button" variant="outline" onClick={applySearch} disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
             Buscar
+          </Button>
+          <Button type="button" variant="outline" onClick={clearFilters} disabled={loading}>
+            Limpiar
           </Button>
         </div>
 
@@ -170,13 +222,16 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
         </p>
 
         <div ref={tableContainerRef} className="hidden max-w-full overflow-x-auto rounded-lg border sm:block">
-          <table className="w-full min-w-[820px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[1120px] table-fixed text-left text-sm">
             <thead className="bg-slate-100 text-xs font-bold text-slate-700">
               <tr>
-                <th className="w-[260px] px-3 py-3">Cliente</th>
-                <th className="w-[280px]">Vehiculo</th>
-                <th className="w-[150px]">Placa / VIN</th>
-                <th className="w-[140px]">Ult. mantenimiento</th>
+                <th className="w-[220px] px-3 py-3">Cliente</th>
+                <th className="w-[240px]">Vehiculo</th>
+                <th className="w-[130px]">Placa / VIN</th>
+                <th className="w-[130px]">Ult. mantenimiento</th>
+                <th className="w-[140px]">Prox. Mantenimiento</th>
+                <th className="w-[130px]">Tipo de prediccion</th>
+                <th className="w-[110px]">Dias restantes</th>
                 <th className="w-[150px] text-right">Acciones</th>
               </tr>
             </thead>
@@ -200,6 +255,13 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
                     <p className="mt-1 truncate text-xs text-slate-500">{item.vin || "-"}</p>
                   </td>
                   <td className="align-top">{formatDate(item.historialMantenimientos?.[0]?.fechaVisitaTaller) || "-"}</td>
+                  <td className="align-top">{formatDate(item.proximoMantenimiento) || "-"}</td>
+                  <td className="align-top">{item.tipoPrediccion || "-"}</td>
+                  <td className="align-top">
+                    <span className={item.diasRestantes !== null && Number(item.diasRestantes) < 0 ? "font-bold text-red-600" : "font-semibold text-slate-700"}>
+                      {formatDays(item.diasRestantes)}
+                    </span>
+                  </td>
                   <td className="px-3 text-right align-top">
                     <Button size="sm" variant="outline" className="mr-1" onClick={() => setVehicleDetail(item)}>
                       <Eye className="size-4" />
@@ -216,7 +278,7 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
               ))}
               {!rows.length ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-slate-500">
+                  <td colSpan={8} className="py-10 text-center text-slate-500">
                     {loading ? "Cargando..." : "No hay vehiculos sin oportunidad para mostrar"}
                   </td>
                 </tr>
@@ -237,6 +299,9 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
               <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-slate-500">
                 <span>Placa: <b className="text-slate-700">{item.placas || "-"}</b></span>
                 <span>Km: <b className="text-slate-700">{item.kilometraje || "-"}</b></span>
+                <span>Prox.: <b className="text-slate-700">{formatDate(item.proximoMantenimiento) || "-"}</b></span>
+                <span>Pred.: <b className="text-slate-700">{item.tipoPrediccion || "-"}</b></span>
+                <span>Dias: <b className={item.diasRestantes !== null && Number(item.diasRestantes) < 0 ? "text-red-600" : "text-slate-700"}>{formatDays(item.diasRestantes)}</b></span>
                 <span className="col-span-2 truncate">VIN: {item.vin || "-"}</span>
               </div>
               <div className="mt-3 flex justify-end gap-2">
@@ -311,6 +376,9 @@ function mapNoOpportunityVehicle(row) {
     oportunidadId: null,
     oportunidadCodigo: "",
     oportunidades: [],
+    proximoMantenimiento: row.proximo_mantenimiento || "",
+    tipoPrediccion: row.tipo_prediccion || "",
+    diasRestantes: row.dias_restantes === null || row.dias_restantes === undefined ? null : Number(row.dias_restantes),
     cliente: {
       nombreCompleto: clienteNombre,
       celular: row.cliente_celular || "",
@@ -369,6 +437,9 @@ function VehicleInfoDialog({ item, onClose }) {
           <Info label="VIN" value={item.vin} />
           <Info label="Kilometraje" value={item.kilometraje} />
           <Info label="Ultimo mantenimiento" value={formatDate(item.historialMantenimientos?.[0]?.fechaVisitaTaller)} />
+          <Info label="Prox. mantenimiento" value={formatDate(item.proximoMantenimiento)} />
+          <Info label="Tipo de prediccion" value={item.tipoPrediccion} />
+          <Info label="Dias restantes" value={formatDays(item.diasRestantes)} />
         </div>
       </DialogContent>
     </Dialog>
@@ -389,4 +460,11 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
   return date.toLocaleDateString("es-PE");
+}
+
+function formatDays(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return `${Math.round(number)} dias`;
 }

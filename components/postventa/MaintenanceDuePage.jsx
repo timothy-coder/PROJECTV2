@@ -325,7 +325,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
         </p>
 
         <div ref={tableContainerRef} className="hidden max-w-full overflow-x-auto rounded-lg border sm:block">
-          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
+          <table className="w-full min-w-[970px] table-fixed text-left text-sm">
             <thead className="bg-slate-100 text-xs font-bold text-slate-700">
               <tr>
                 <th className="w-[260px] px-3 py-3">Cliente</th>
@@ -333,7 +333,6 @@ export default function MaintenanceDuePage({ userPermissions }) {
                 <th className="w-[130px]">Prox. Mantenimiento</th>
                 <th className="w-[120px]">Tipo de prediccion</th>
                 <th className="w-[110px]">Dias restantes</th>
-                <th className="w-[110px]">Recordatorio</th>
                 <th className="w-[105px]">Estado</th>
                 <th className="w-[130px]">Fecha agendada</th>
                 <th className="w-[145px] text-right">Acciones</th>
@@ -381,16 +380,6 @@ export default function MaintenanceDuePage({ userPermissions }) {
                   </td>
 
                   <td>
-                    {item.recordatorio ? (
-                      <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
-                        {formatDate(item.recordatorio)}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">-</span>
-                    )}
-                  </td>
-
-                  <td>
                     <ReminderBadge value={item.estadoRecordatorio} motivo={item.cierreMotivo} />
                   </td>
 
@@ -419,7 +408,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
               {!rows.length ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-500">
+                  <td colSpan={8} className="py-10 text-center text-slate-500">
                     {data.loading ? "Cargando..." : "No hay vehiculos para mostrar"}
                   </td>
                 </tr>

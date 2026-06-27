@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, KeyRound, UserRound } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Mail, Phone, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,12 +36,17 @@ function PasswordInput({ id, value, onChange, placeholder, autoComplete }) {
 }
 
 export default function ProfilePage({ user }) {
+  const [contactForm, setContactForm] = useState({
+    email: user?.email || "",
+    phone: user?.phone || "",
+  });
   const [form, setForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
   const [saving, setSaving] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
 
   const initials = (user?.fullname || user?.username || "Usuario")
     .split(/\s+/)
@@ -53,6 +58,39 @@ export default function ProfilePage({ user }) {
 
   const updateField = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const updateContactField = (field) => (event) => {
+    setContactForm((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const handleContactSubmit = async (event) => {
+    event.preventDefault();
+
+    setSavingContact(true);
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(contactForm),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.message || "No se pudo actualizar el perfil.");
+      }
+
+      setContactForm({
+        email: data.email || "",
+        phone: data.phone || "",
+      });
+      toast.success("Datos de contacto actualizados.");
+    } catch (error) {
+      toast.error(error?.message || "No se pudo actualizar el perfil.");
+    } finally {
+      setSavingContact(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -105,7 +143,7 @@ export default function ProfilePage({ user }) {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Mi perfil</h1>
-            <p className="text-sm text-slate-500">Actualiza solo tu contrasena de acceso.</p>
+            <p className="text-sm text-slate-500">Actualiza tus datos de contacto y tu contrasena de acceso.</p>
           </div>
         </section>
 
@@ -127,13 +165,51 @@ export default function ProfilePage({ user }) {
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-[11px] font-semibold uppercase text-slate-500">Correo</p>
-              <p className="mt-1 text-sm font-semibold">{user?.email || "-"}</p>
+              <p className="mt-1 text-sm font-semibold">{contactForm.email || "-"}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[11px] font-semibold uppercase text-slate-500">Telefono</p>
+              <p className="mt-1 text-sm font-semibold">{contactForm.phone || "-"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2">
               <p className="text-[11px] font-semibold uppercase text-slate-500">Rol</p>
               <p className="mt-1 text-sm font-semibold">{user?.role?.name || "-"}</p>
             </div>
           </CardContent>
+        </Card>
+
+        <Card className="border border-slate-200 bg-white shadow-sm">
+          <CardHeader className="border-b border-slate-100">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <Mail className="h-5 w-5 text-indigo-600" />
+              Datos de contacto
+            </CardTitle>
+          </CardHeader>
+          <form onSubmit={handleContactSubmit}>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Correo</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="email" type="email" value={contactForm.email} onChange={updateContactField("email")} className="h-10 pl-9 text-sm" placeholder="correo@empresa.com" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefono</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input id="phone" value={contactForm.phone} onChange={updateContactField("phone")} className="h-10 pl-9 text-sm" placeholder="Telefono o celular" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end border-t border-slate-100 pt-4">
+                <Button type="submit" disabled={savingContact} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                  {savingContact ? "Guardando..." : "Guardar contacto"}
+                </Button>
+              </div>
+            </CardContent>
+          </form>
         </Card>
 
         <Card className="border border-slate-200 bg-white shadow-sm">

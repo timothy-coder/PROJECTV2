@@ -339,6 +339,10 @@ export default function SalesReportsDashboard() {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
   }
 
+  function toggleAdvisorFilter(advisor) {
+    setFilters((current) => ({ ...current, advisor: current.advisor === advisor ? "" : advisor }));
+  }
+
   function clearAll() {
     setFilters({ dateLevel: "", dateValue: "", advisor: "", modelLevel: "", modelValue: "", stage: "" });
     setChartFilters({});
@@ -414,7 +418,7 @@ export default function SalesReportsDashboard() {
               </section>
 
               <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
-                <Panel title="Prospectos por Dia y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} /></Panel>
+                <Panel title="Prospectos por Dia y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} activeAdvisor={filters.advisor} onSelectAdvisor={toggleAdvisorFilter} /></Panel>
                 <Panel title="Origen con Campañas" summary={chartSummary(charts.campaign, "origen")} onFocus={() => setFocusChart("campaign")}><Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Ciudad Origen" summary={chartSummary(charts.city, "ciudad")} onFocus={() => setFocusChart("city")}><Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Combustible" summary={chartSummary(charts.fuel, "combustible")} onFocus={() => setFocusChart("fuel")}><Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} /></Panel>
@@ -423,8 +427,10 @@ export default function SalesReportsDashboard() {
                 chartKey={focusChart}
                 charts={charts}
                 chartFilters={chartFilters}
+                activeAdvisor={filters.advisor}
                 onClose={() => setFocusChart(null)}
                 onSelect={toggleChartFilter}
+                onSelectAdvisor={toggleAdvisorFilter}
               />
             </>
           )}
@@ -590,7 +596,7 @@ function Panel({ title, children, summary, onFocus }) {
   );
 }
 
-function FocusChartDialog({ chartKey, charts, chartFilters, onClose, onSelect }) {
+function FocusChartDialog({ chartKey, charts, chartFilters, activeAdvisor, onClose, onSelect, onSelectAdvisor }) {
   if (!chartKey) return null;
   const config = {
     model: {
@@ -621,7 +627,7 @@ function FocusChartDialog({ chartKey, charts, chartFilters, onClose, onSelect })
     dayAdvisor: {
       title: "Prospectos por Dia y Asesor",
       summary: lineSummary(charts.dayAdvisor),
-      content: <DayAdvisorLine data={charts.dayAdvisor} />,
+      content: <DayAdvisorLine data={charts.dayAdvisor} activeAdvisor={activeAdvisor} onSelectAdvisor={onSelectAdvisor} />,
     },
     campaign: {
       title: "Origen con Campañas",
@@ -772,7 +778,7 @@ function ReasonBars({ data, active, onSelect }) {
   );
 }
 
-function DayAdvisorLine({ data }) {
+function DayAdvisorLine({ data, activeAdvisor, onSelectAdvisor }) {
   const advisors = data.length ? Object.keys(data[0]).filter((key) => key !== "day") : [];
   return (
     <div className="flex h-full flex-col">
@@ -783,13 +789,32 @@ function DayAdvisorLine({ data }) {
           <YAxis tick={{ fontSize: 10 }} />
           <Tooltip />
           {advisors.map((advisor, index) => (
-            <Line key={advisor} type="monotone" dataKey={advisor} stroke={COLORS[index % COLORS.length]} strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            <Line
+              key={advisor}
+              type="monotone"
+              dataKey={advisor}
+              stroke={COLORS[index % COLORS.length]}
+              strokeWidth={activeAdvisor === advisor ? 3.5 : 2.5}
+              opacity={!activeAdvisor || activeAdvisor === advisor ? 1 : 0.25}
+              dot={{ r: activeAdvisor === advisor ? 4 : 3, className: "cursor-pointer", onClick: () => onSelectAdvisor?.(advisor) }}
+              activeDot={{ r: 6, className: "cursor-pointer", onClick: () => onSelectAdvisor?.(advisor) }}
+              className="cursor-pointer"
+              onClick={() => onSelectAdvisor?.(advisor)}
+            />
           ))}
         </LineChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap justify-center gap-3 text-[10px]">
         {advisors.map((advisor, index) => (
-          <span key={advisor} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />{advisor}</span>
+          <button
+            key={advisor}
+            type="button"
+            className={`inline-flex items-center gap-1 rounded-sm px-1 py-0.5 font-semibold ${activeAdvisor === advisor ? "bg-violet-100 text-violet-700" : "text-slate-600 hover:bg-slate-100"}`}
+            onClick={() => onSelectAdvisor?.(advisor)}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length], opacity: !activeAdvisor || activeAdvisor === advisor ? 1 : 0.25 }} />
+            {advisor}
+          </button>
         ))}
       </div>
     </div>

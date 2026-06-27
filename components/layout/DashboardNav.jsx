@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, ChevronLeft, LogOut, UserRound } from "lucide-react";
+import { Bell, Menu, ChevronLeft, LogOut, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -25,6 +25,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function getInitials(user) {
@@ -126,6 +127,201 @@ function getActiveGroupKey(menu, pathname) {
     }
   }
   return "";
+}
+
+function typeClasses(type) {
+  if (type === "success") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (type === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (type === "error") return "border-red-200 bg-red-50 text-red-700";
+  return "border-blue-200 bg-blue-50 text-blue-700";
+}
+
+function formatNotificationDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  return date.toLocaleString("es-PE", { dateStyle: "short", timeStyle: "short" });
+}
+
+function NotificationsButton({ collapsed = false }) {
+  const pageSize = 10;
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [meta, setMeta] = useState({ page: 1, pages: 1, total: 0 });
+
+  async function loadNotifications(nextPage = 1, reset = true) {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/notifications?limit=${pageSize}&page=${nextPage}`, { credentials: "include" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "No se pudieron cargar las notificaciones.");
+      setUnread(Number(payload.unread || 0));
+      setNotifications((current) => (reset ? payload.notifications || [] : [...current, ...(payload.notifications || [])]));
+      setMeta(payload.meta || { page: nextPage, pages: 1, total: payload.notifications?.length || 0 });
+    } catch (error) {
+      toast.error(error?.message || "No se pudieron cargar las notificaciones.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleScroll(event) {
+    const element = event.currentTarget;
+    const nearBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 24;
+    if (!nearBottom || loading || Number(meta.page || 1) >= Number(meta.pages || 1)) return;
+    loadNotifications(Number(meta.page || 1) + 1, false);
+  }
+
+  async function markAsRead(notificationId) {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ notificationId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "No se pudo marcar como leida.");
+      setNotifications((current) => current.map((item) => Number(item.id) === Number(notificationId) ? { ...item, read: true } : item));
+      setUnread((current) => Math.max(0, current - 1));
+    } catch (error) {
+      toast.error(error?.message || "No se pudo marcar como leida.");
+    }
+  }
+
+  async function markAllAsRead() {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ all: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "No se pudieron marcar como leidas.");
+      setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+      setUnread(0);
+    } catch (error) {
+      toast.error(error?.message || "No se pudieron marcar como leidas.");
+    }
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadNotifications();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const button = (
+    <button
+      type="button"
+      title="Notificaciones"
+      className={`relative inline-flex items-center justify-center rounded-lg border border-white/10 text-slate-100 transition hover:bg-white/10 ${collapsed ? "h-11 w-full" : "h-8 gap-2 px-2 text-xs font-medium"}`}
+      onClick={() => {
+        setOpen(true);
+        loadNotifications(1, true);
+      }}
+    >
+      <Bell className={collapsed ? "size-5" : "size-3.5"} />
+      {!collapsed ? <span>Notificaciones</span> : null}
+      {unread > 0 ? (
+        <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white">
+          {unread > 99 ? "99+" : unread}
+        </span>
+      ) : null}
+    </button>
+  );
+
+  return (
+    <>
+      {collapsed ? (
+        <Tooltip>
+          <TooltipTrigger render={button} />
+          <TooltipContent side="right" align="center" sideOffset={10} className="bg-slate-950 text-white">
+            Notificaciones
+          </TooltipContent>
+        </Tooltip>
+      ) : button}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[88svh] max-w-[min(94vw,620px)] overflow-hidden bg-white p-0 text-slate-950">
+          <DialogHeader className="border-b border-slate-200 px-5 py-4 pr-12">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <DialogTitle className="flex items-center gap-2 text-base font-bold text-violet-700">
+                  <Bell className="size-4" />
+                  Notificaciones
+                </DialogTitle>
+                <DialogDescription className="mt-0.5">{unread} sin leer</DialogDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {unread > 0 ? (
+                  <button type="button" className="inline-flex h-8 w-fit shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50" onClick={markAllAsRead}>
+                    Marcar leidas
+                  </button>
+                ) : null}
+                <Link
+                  href="/notificaciones"
+                  className="inline-flex h-8 w-fit shrink-0 items-center justify-center rounded-md border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100"
+                  onClick={() => setOpen(false)}
+                >
+                  Ver todas
+                </Link>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="max-h-[68svh] space-y-2 overflow-y-auto p-4" onScroll={handleScroll}>
+            {loading && !notifications.length ? <div className="py-8 text-center text-sm font-semibold text-slate-500">Cargando...</div> : null}
+            {!loading && notifications.map((item) => (
+              <a
+                key={item.id}
+                href={item.url || "#"}
+                className={`block rounded-lg border p-3 transition hover:shadow-sm ${item.read ? "border-slate-200 bg-white" : typeClasses(item.type)}`}
+                onClick={(event) => {
+                  if (!item.url) event.preventDefault();
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-bold">{item.title}</p>
+                  {!item.read ? <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">Nuevo</span> : null}
+                </div>
+                <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-snug text-slate-600">{item.message}</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-semibold text-slate-400">{formatNotificationDate(item.createdAt)}</p>
+                  {!item.read ? (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        markAsRead(item.id);
+                      }}
+                    >
+                      Marcar leida
+                    </button>
+                  ) : null}
+                </div>
+              </a>
+            ))}
+            {!loading && !notifications.length ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center">
+                <div className="mx-auto grid size-10 place-items-center rounded-full bg-violet-50 text-violet-700">
+                  <Bell className="size-4" />
+                </div>
+                <p className="mt-3 text-sm font-bold text-slate-700">No tienes notificaciones.</p>
+                <p className="mt-1 text-xs font-medium text-slate-400">Cuando llegue un aviso aparecera aqui.</p>
+              </div>
+            ) : null}
+            {loading && notifications.length ? (
+              <div className="py-3 text-center text-xs font-semibold text-slate-400">Cargando mas...</div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function CollapsedNavIcon({ href, label, active, children }) {
@@ -285,6 +481,7 @@ export default function DashboardNav({ title = "Dashboard", user }) {
             <p className="text-sm font-semibold text-white truncate">{title}</p>
             <p className="text-[11px] text-slate-400 truncate">{pathname}</p>
           </div>
+          <NotificationsButton />
         </div>
       </div>
     );
@@ -312,32 +509,35 @@ export default function DashboardNav({ title = "Dashboard", user }) {
         </div>
 
         <TooltipProvider delay={0}>
-        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2">
-          {/* HOME */}
-          <CollapsedNavIcon
-            href={HOME_ITEM.to}
-            label={HOME_ITEM.label}
-            active={homeActive}
-          >
-            {HOME_ITEM.icon ? <HOME_ITEM.icon className="w-5 h-5" /> : null}
-          </CollapsedNavIcon>
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2">
+            {/* HOME */}
+            <CollapsedNavIcon
+              href={HOME_ITEM.to}
+              label={HOME_ITEM.label}
+              active={homeActive}
+            >
+              {HOME_ITEM.icon ? <HOME_ITEM.icon className="w-5 h-5" /> : null}
+            </CollapsedNavIcon>
 
-          {/* Icon-only */}
-          {iconItems.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.to || pathname.startsWith(item.to + "/");
-            return (
-              <CollapsedNavIcon
-                key={item.to}
-                href={item.to}
-                label={item.label}
-                active={active}
-              >
-                {Icon ? <Icon className="w-5 h-5" /> : null}
-              </CollapsedNavIcon>
-            );
-          })}
-        </div>
+            {/* Icon-only */}
+            {iconItems.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.to || pathname.startsWith(item.to + "/");
+              return (
+                <CollapsedNavIcon
+                  key={item.to}
+                  href={item.to}
+                  label={item.label}
+                  active={active}
+                >
+                  {Icon ? <Icon className="w-5 h-5" /> : null}
+                </CollapsedNavIcon>
+              );
+            })}
+          </div>
+          <div className="shrink-0 px-2 pb-2">
+            <NotificationsButton collapsed />
+          </div>
         </TooltipProvider>
         <UserBox user={user} collapsed />
       </aside>
@@ -371,6 +571,9 @@ export default function DashboardNav({ title = "Dashboard", user }) {
         onNavigate={onNavigate}
         activeGroupKey={activeGroupKey}
       />
+      <div className="shrink-0 px-3 pb-3">
+        <NotificationsButton />
+      </div>
       <UserBox user={user} onNavigate={onNavigate} />
     </aside>
   );

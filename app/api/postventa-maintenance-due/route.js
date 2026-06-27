@@ -83,6 +83,84 @@ function pickProximo(today, candidates) {
   return { date: valid[0].date, calculo: valid[0].calculo };
 }
 
+async function getPostventaAdvisorRoleId(connection) {
+  const [[role]] = await connection.query(
+    `SELECT id
+     FROM configuracion_roles
+     WHERE BINARY TRIM(name) = BINARY ?
+     LIMIT 1`,
+    ["Asesor de Posventa"]
+  );
+  return role?.id || null;
+}
+
+async function createMaintenanceReminderNotification(connection, roleId, vehicle, days, sendDate) {
+  const proximo = vehicle.proximoMantenimiento || "";
+  if (!roleId || !proximo || !sendDate) return;
+
+  const url = `/proximosmantenimientos?vehiculoId=${vehicle.id}&proximo=${encodeURIComponent(proximo)}&dias=${Number(days)}`;
+  const [[existing]] = await connection.query(
+    `SELECT id FROM notificaciones WHERE url = ? LIMIT 1`,
+    [url]
+  );
+  if (existing?.id) return;
+
+  const titulo = "Recordatorio de mantenimiento";
+  const mensaje = `El vehiculo ${vehicle.vehiculo} del cliente ${vehicle.clienteNombre} tiene proximo mantenimiento el ${proximo}. Faltan ${Number(days)} dias.`;
+  const [result] = await connection.query(
+    `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_at, updated_at)
+     VALUES (?, ?, 'warning', 'wrench', ?, ?, ?)`,
+    [titulo, mensaje, url, sendDate, sendDate]
+  );
+  await connection.query(
+    `INSERT IGNORE INTO notificacion_roles (notificacion_id, role_id)
+     VALUES (?, ?)`,
+    [result.insertId, roleId]
+  );
+}
+
+async function notifyDueFrequencyReminders(connection, frequencies) {
+  const days = [...new Set(frequencies.map((item) => Number(item.dias)).filter((item) => Number.isFinite(item) && item >= 0))];
+  if (!days.length) return;
+
+  const roleId = await getPostventaAdvisorRoleId(connection);
+  if (!roleId) return;
+
+  const [vehicles] = await connection.query(
+    `SELECT
+        v.id,
+        v.fecha_ultima_visita AS proximo_mantenimiento,
+        CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+        CONCAT_WS(' - ', mo.name, ma.name) AS vehiculo_nombre,
+        v.placas,
+        v.vin,
+        DATEDIFF(v.fecha_ultima_visita, CURDATE()) AS dias_restantes
+     FROM administracion_vehiculos v
+     INNER JOIN administracion_clientes c ON c.id = v.cliente_id
+     LEFT JOIN administracion_marcas ma ON ma.id = v.marca_id
+     LEFT JOIN administracion_modelos mo ON mo.id = v.modelo_id
+     WHERE v.deleted_at IS NULL
+       AND v.fecha_ultima_visita IS NOT NULL
+       AND DATEDIFF(v.fecha_ultima_visita, CURDATE()) >= 0
+     ORDER BY v.fecha_ultima_visita ASC, v.id ASC`,
+  );
+
+  for (const vehicle of vehicles) {
+    for (const frequencyDays of days) {
+      const [[sendRow]] = await connection.query(
+        `SELECT DATE_SUB(?, INTERVAL ? DAY) AS send_date`,
+        [datePart(vehicle.proximo_mantenimiento), frequencyDays]
+      );
+      await createMaintenanceReminderNotification(connection, roleId, {
+        id: vehicle.id,
+        clienteNombre: String(vehicle.cliente_nombre || "").trim() || "-",
+        vehiculo: vehicle.vehiculo_nombre || vehicle.placas || vehicle.vin || "-",
+        proximoMantenimiento: datePart(vehicle.proximo_mantenimiento),
+      }, frequencyDays, datePart(sendRow?.send_date));
+    }
+  }
+}
+
 function intParam(value, fallback, min, max) {
   const number = Number(value);
   if (!Number.isInteger(number)) return fallback;
@@ -120,6 +198,7 @@ export async function GET(request) {
     const [frequencies] = await pool.query(
       `SELECT id,dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
     );
+    await notifyDueFrequencyReminders(pool, frequencies);
     const maxFrequencyDays = Math.max(0, ...frequencies.map((item) => Number(item.dias || 0)));
 
     const where = ["v.deleted_at IS NULL"];
@@ -418,7 +497,7 @@ export async function GET(request) {
                 ? "Pendiente contacto"
                 : "Programado";
 
-      unique.set(row.id, {
+      const vehicleRecord = {
         id: row.id,
         clienteId: row.cliente_id,
         clienteNombre: row.cliente_nombre.trim(),
@@ -467,7 +546,9 @@ export async function GET(request) {
         oportunidadCodigo: row.oportunidad_codigo || "",
         fechaAgendada: row.fecha_agenda ? `${datePart(row.fecha_agenda)} ${String(row.hora_agenda || "").slice(0, 5)}` : "",
         oportunidades: opportunitiesByVehicleId.get(row.id) || [],
-      });
+      };
+
+      unique.set(row.id, vehicleRecord);
     }
 
     const [origins] = await pool.query(
