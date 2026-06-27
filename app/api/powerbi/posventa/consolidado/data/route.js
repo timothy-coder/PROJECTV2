@@ -325,18 +325,22 @@ export async function GET(request) {
       ...vehicles.rows.map(normalizeVehicleWithoutOpportunityRow),
     ];
 
-    return NextResponse.json({
-      data,
-      meta: {
-        total: data.length,
-        oportunidades: {
-          total: opportunities.length,
-          limit: oportunidadesLimit,
-          offset: oportunidadesOffset,
+    if (withMeta) {
+      return NextResponse.json({
+        rows: data,
+        meta: {
+          total: data.length,
+          oportunidades: {
+            total: opportunities.length,
+            limit: oportunidadesLimit,
+            offset: oportunidadesOffset,
+          },
+          vehiculosSinOportunidad: vehicles.meta,
         },
-        vehiculosSinOportunidad: vehicles.meta,
-      },
-    });
+      });
+    }
+
+    return NextResponse.json(data);
   } catch (error) {
     console.error("Error loading consolidated PostVenta Power BI data:", error);
     return NextResponse.json({ message: "No se pudo cargar la data consolidada de PostVenta." }, { status: 500 });
