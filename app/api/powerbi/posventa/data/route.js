@@ -45,7 +45,7 @@ function canReadPowerBiPosventaData(user) {
   );
 }
 
-const POWERBI_POSVENTA_QUERY = `
+export const POWERBI_POSVENTA_QUERY = `
 SELECT
   o.created_at AS fechacreacionoportunidadpv,
   o.updated_at AS fechaactualizacionoportunidadpv,
