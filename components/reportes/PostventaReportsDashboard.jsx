@@ -22,7 +22,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const COLORS = ["#188ff2", "#df3f4f", "#1429a6", "#ec6a2e", "#8b0fa8", "#d83eb5", "#6e48c7", "#1ea34a", "#e4bd00", "#0f766e"];
 const EMPTY = "(En blanco)";
@@ -350,11 +349,7 @@ export default function PostventaReportsDashboard() {
 
           {message ? <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{message}</div> : null}
           {loading ? (
-            <Card className="flex h-[70svh] items-center justify-center bg-white">
-              <Loader2 className="mr-2 size-5 animate-spin text-violet-700" />
-              <span className="font-semibold">Cargando reportes...</span>
-              <Skeleton className="absolute mt-16 h-2 w-48" />
-            </Card>
+            <ReportsLoadingState />
           ) : (
             <>
               <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-5 xl:grid-cols-11">
@@ -391,6 +386,48 @@ export default function PostventaReportsDashboard() {
         </main>
       </div>
     </div>
+  );
+}
+
+function ReportsLoadingState() {
+  const letters = "HUBCRM".split("");
+  return (
+    <Card className="flex h-[70svh] items-center justify-center overflow-hidden bg-gradient-to-b from-[#4c16f2] to-[#7b16f2]">
+      <div className="text-center">
+        <div className="mb-5 flex items-center justify-center gap-2 text-white">
+          <Loader2 className="size-5 animate-spin" />
+          <span className="text-sm font-black uppercase tracking-[0.28em] text-white/85">Cargando reportes</span>
+        </div>
+        <div className="flex items-center justify-center gap-1.5 text-5xl font-black sm:text-6xl">
+          {letters.map((letter, index) => (
+            <span
+              key={letter}
+              className={`inline-block ${index < 3 ? "text-white" : "text-slate-300"}`}
+              style={{
+                animation: "hubcrm-wave 2.8s ease-in-out infinite",
+                animationDelay: `${index * 0.2}s`,
+              }}
+            >
+              {letter}
+            </span>
+          ))}
+        </div>
+        <p className="mt-4 text-xs font-semibold text-white/65">Preparando indicadores y graficos</p>
+      </div>
+      <style jsx>{`
+        @keyframes hubcrm-wave {
+          0% {
+            transform: translateY(12px);
+          }
+          50% {
+            transform: translateY(-12px);
+          }
+          100% {
+            transform: translateY(12px);
+          }
+        }
+      `}</style>
+    </Card>
   );
 }
 

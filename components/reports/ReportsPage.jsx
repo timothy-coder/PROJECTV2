@@ -12,7 +12,7 @@ import { hasPerm } from "@/lib/permissions";
 const REPORTS = [
   {
     id: "ventas-powerbi",
-    title: "Power BI Ventas",
+    title: "One Solution",
     description: "Oportunidades, cotizaciones, reservas, clientes y unidades.",
     category: "Ventas",
     href: "/reportes/ventas",
@@ -22,7 +22,7 @@ const REPORTS = [
   },
   {
     id: "posventa-powerbi",
-    title: "Power BI Posventa",
+    title: "One Solution",
     description: "Ordenes, oportunidades, mantenimientos y cotizaciones de posventa.",
     category: "Posventa",
     href: "/reportes/posventa",

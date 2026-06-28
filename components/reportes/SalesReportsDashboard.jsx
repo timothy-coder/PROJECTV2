@@ -382,6 +382,7 @@ export default function SalesReportsDashboard() {
   const [focusChart, setFocusChart] = useState(null);
   const [blankModelOpen, setBlankModelOpen] = useState(false);
   const [blankCityOpen, setBlankCityOpen] = useState(false);
+  const [blankFuelOpen, setBlankFuelOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -469,6 +470,7 @@ export default function SalesReportsDashboard() {
   }, [countedRecords]);
   const blankModelRecords = useMemo(() => filteredRecords.filter((record) => !hasRealValue(record.model)), [filteredRecords]);
   const blankCityRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.city)), [countedRecords]);
+  const blankFuelRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.fuel)), [countedRecords]);
 
   function toggleChartFilter(field, value) {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
@@ -577,7 +579,15 @@ export default function SalesReportsDashboard() {
                 >
                   <Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} />
                 </Panel>
-                <Panel title="Tipo de Combustible" summary={chartSummary(charts.fuel, "combustible")} onFocus={() => setFocusChart("fuel")}><Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} /></Panel>
+                <Panel
+                  title="Tipo de Combustible"
+                  summary={blankAwareChartSummary(charts.fuel, "combustible", blankFuelRecords.length, "cotizaciones tienen combustible en blanco y no se cuentan en el gráfico.")}
+                  onFocus={() => setFocusChart("fuel")}
+                  alertCount={blankFuelRecords.length}
+                  onAlert={() => setBlankFuelOpen(true)}
+                >
+                  <Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} />
+                </Panel>
               </section>
               <FocusChartDialog
                 chartKey={focusChart}
@@ -591,6 +601,14 @@ export default function SalesReportsDashboard() {
               />
               <BlankModelDialog open={blankModelOpen} records={blankModelRecords} onClose={() => setBlankModelOpen(false)} />
               <BlankCityDialog open={blankCityOpen} records={blankCityRecords} onClose={() => setBlankCityOpen(false)} />
+              <BlankFieldDialog
+                open={blankFuelOpen}
+                records={blankFuelRecords}
+                title="Cotizaciones sin tipo de combustible"
+                description="Estos registros no se cuentan en el gráfico de combustible. Corrige el combustible en el precio o cotización asociada."
+                emptyText="No hay cotizaciones con combustible en blanco."
+                onClose={() => setBlankFuelOpen(false)}
+              />
             </>
           )}
         </main>
@@ -963,6 +981,12 @@ function cityChartSummary(data, blankCount) {
   return `${base} Alerta: ${blankCount} clientes tienen ciudad pendiente de actualizar.`;
 }
 
+function blankAwareChartSummary(data, label, blankCount, message) {
+  const base = chartSummary(data, label);
+  if (!blankCount) return base;
+  return `${base} Alerta: ${blankCount} ${message}`;
+}
+
 function BlankModelDialog({ open, records, onClose }) {
   if (!open) return null;
   return (
@@ -1075,6 +1099,60 @@ function BlankCityDialog({ open, records, onClose }) {
   );
 }
 
+function BlankFieldDialog({ open, records, title, description, emptyText, onClose }) {
+  if (!open) return null;
+  return (
+    <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-hidden bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-red-200 bg-red-50 px-5 py-4">
+          <DialogTitle className="flex items-center gap-2 text-base font-bold text-red-700">
+            <AlertTriangle className="size-4" />
+            {title}
+          </DialogTitle>
+          <DialogDescription className="text-red-700">{description}</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[72svh] overflow-auto p-3">
+          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+            <thead className="sticky top-0 bg-white text-slate-500">
+              <tr>
+                <th className="border-b px-3 py-2">Código</th>
+                <th className="border-b px-3 py-2">Cliente</th>
+                <th className="border-b px-3 py-2">Modelo</th>
+                <th className="border-b px-3 py-2">Asesor</th>
+                <th className="border-b px-3 py-2">Etapa</th>
+                <th className="border-b px-3 py-2 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {records.map((record) => (
+                <tr key={record.id} className="bg-red-50/35 text-slate-800">
+                  <td className="px-3 py-2 font-bold text-red-700">{record.code}</td>
+                  <td className="px-3 py-2">{record.client}</td>
+                  <td className="px-3 py-2">{record.modelVersion || record.model}</td>
+                  <td className="px-3 py-2">{record.advisor}</td>
+                  <td className="px-3 py-2">{record.stage}</td>
+                  <td className="px-3 py-2 text-right">
+                    <a className="font-bold text-violet-700 hover:underline" href={`/oportunidades/${record.id}`}>
+                      Abrir
+                    </a>
+                  </td>
+                </tr>
+              ))}
+              {!records.length ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center font-semibold text-slate-500">
+                    {emptyText}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function stackSummary(data) {
   if (!data.length) return "Sin registros por asesor.";
   const totals = data.map((row) => ({
@@ -1098,21 +1176,51 @@ function StageFunnel({ data, active, onSelect }) {
   const percentData = data.map((item) => ({
     ...item,
     percent: total ? (Number(item.value || 0) / total) * 100 : 0,
+    countLabel: `${formatNumber(item.value)} de ${formatNumber(total)}`,
     percentLabel: `${formatNumber(total ? (Number(item.value || 0) / total) * 100 : 0, 1)}%`,
   }));
   return (
     <ResponsiveContainer width="100%" height="100%">
       <FunnelChart margin={{ top: 10, right: 8, bottom: 10, left: 8 }}>
-        <Tooltip itemSorter={() => 0} formatter={(value) => [`${formatNumber(value, 1)}%`, "Porcentaje"]} />
+        <Tooltip
+          itemSorter={() => 0}
+          formatter={(value, name, item) => [
+            `${formatNumber(item?.payload?.value)} de ${formatNumber(total)} / ${formatNumber(value, 1)}%`,
+            "Etapa",
+          ]}
+        />
         <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect("stage", entry.name)}>
           <LabelList position="right" fill="#475569" stroke="none" dataKey="name" fontSize={11} />
-          <LabelList position="center" fill="#ffffff" stroke="none" dataKey="percentLabel" fontSize={12} fontWeight={700} />
+          <LabelList content={<StageCenterLabel />} />
           {percentData.map((entry, index) => (
             <Cell key={entry.name} fill={STAGE_COLORS[index % STAGE_COLORS.length]} opacity={!active || active === entry.name ? 1 : 0.3} className="cursor-pointer" />
           ))}
         </Funnel>
       </FunnelChart>
     </ResponsiveContainer>
+  );
+}
+
+function StageCenterLabel(props) {
+  const box = props.viewBox || {};
+  const x = Number(props.x ?? box.x ?? 0);
+  const y = Number(props.y ?? box.y ?? 0);
+  const width = Number(props.width ?? box.width ?? 0);
+  const height = Number(props.height ?? box.height ?? 0);
+  const payload = props.payload || {};
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const compact = height < 54;
+
+  return (
+    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontWeight={800} pointerEvents="none">
+      <tspan x={cx} dy={compact ? -3 : -7} fontSize={compact ? 9 : 11}>
+        {payload.countLabel}
+      </tspan>
+      <tspan x={cx} dy={compact ? 10 : 14} fontSize={compact ? 9 : 11}>
+        {payload.percentLabel}
+      </tspan>
+    </text>
   );
 }
 

@@ -61,7 +61,10 @@ export async function GET(request, { params }) {
     const [rows] = await connection.query(
       `SELECT o.*, e.nombre AS etapa_nombre, e.color AS etapa_color, e.descripcion AS etapa_temp, e.sort_order,
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
-              c.email, c.celular, c.identificacion_fiscal, c.id AS cliente_id,
+              c.id AS cliente_id, c.id_lead, c.nombre AS cliente_nombre_raw, c.apellido AS cliente_apellido,
+              c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal,
+              c.fecha_nacimiento, c.ocupacion, c.domicilio, c.departamento_id, c.provincia_id,
+              c.distrito_id, c.nombreconyugue, c.dniconyugue, c.nombre_comercial, c.created_by AS cliente_created_by,
               oc.name AS origen_nombre, so.name AS suborigen_nombre,
               au.fullname AS asignado_nombre, cu.fullname AS creado_nombre
        FROM ventas_oportunidades o
@@ -114,6 +117,10 @@ export async function GET(request, { params }) {
     const [closeOptions] = await connection.query(`SELECT id, detalle FROM configuracion_ventas_cierres_detalle ORDER BY id DESC`);
     const [accessories] = await connection.query(`SELECT id, marca_id, modelo_id, detalle, numero_parte, precio, precio_venta, moneda_id FROM ventas_accesorios_disponibles ORDER BY detalle ASC`);
     const [gifts] = await connection.query(`SELECT id, detalle, lote, precio_compra, precio_venta, moneda_id FROM ventas_regalos_disponibles ORDER BY detalle ASC`);
+    const [departamentos] = await connection.query(`SELECT id, nombre, codigo_ubigeo FROM departamentos ORDER BY nombre ASC`);
+    const [provincias] = await connection.query(`SELECT id, nombre, departamento_id, codigo_ubigeo FROM provincias ORDER BY nombre ASC`);
+    const [distritos] = await connection.query(`SELECT id, nombre, provincia_id, departamento_id, codigo_ubigeo FROM distritos ORDER BY nombre ASC`);
+    const [users] = await connection.query(`SELECT id, fullname, username FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC, username ASC`);
     return NextResponse.json({
       currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll, permissions: user.permissions || {} },
       opportunity: {
@@ -132,6 +139,26 @@ export async function GET(request, { params }) {
         etapaColor: opportunity.etapa_color || "#2563eb",
         asignadoNombre: opportunity.asignado_nombre || "No asignado",
         creadoNombre: opportunity.creado_nombre,
+      },
+      client: {
+        id: opportunity.cliente_id,
+        idLead: opportunity.id_lead || "",
+        nombre: opportunity.cliente_nombre_raw || "",
+        apellido: opportunity.cliente_apellido || "",
+        email: opportunity.email || "",
+        celular: opportunity.celular || "",
+        tipoIdentificacion: opportunity.tipo_identificacion || "DNI",
+        identificacionFiscal: opportunity.identificacion_fiscal || "",
+        fechaNacimiento: datePart(opportunity.fecha_nacimiento),
+        ocupacion: opportunity.ocupacion || "",
+        domicilio: opportunity.domicilio || "",
+        departamentoId: opportunity.departamento_id,
+        provinciaId: opportunity.provincia_id,
+        distritoId: opportunity.distrito_id,
+        nombreConyugue: opportunity.nombreconyugue || "",
+        dniConyugue: opportunity.dniconyugue || "",
+        nombreComercial: opportunity.nombre_comercial || "",
+        createdBy: opportunity.cliente_created_by,
       },
       stages: stages.map((s) => ({ id: s.id, nombre: s.nombre, temp: Number(s.descripcion || 0), color: s.color || "#2563eb", sortOrder: s.sort_order || s.id })),
       details: details.map((d) => ({ id: d.id, fechaAgenda: datePart(d.fecha_agenda), horaAgenda: timePart(d.hora_agenda), createdAt: d.created_at })),
@@ -158,7 +185,18 @@ export async function GET(request, { params }) {
       })),
       closures,
       reservations: reservations.map((row) => ({ id: row.id, estado: row.estado || "borrador", createdAt: row.created_at })),
-      options: { brands, models, prices, closeOptions, accessories, gifts },
+      options: {
+        brands,
+        models,
+        prices,
+        closeOptions,
+        accessories,
+        gifts,
+        departamentos: departamentos.map((row) => ({ id: row.id, nombre: row.nombre, codigoUbigeo: row.codigo_ubigeo })),
+        provincias: provincias.map((row) => ({ id: row.id, nombre: row.nombre, departamentoId: row.departamento_id, codigoUbigeo: row.codigo_ubigeo })),
+        distritos: distritos.map((row) => ({ id: row.id, nombre: row.nombre, provinciaId: row.provincia_id, departamentoId: row.departamento_id, codigoUbigeo: row.codigo_ubigeo })),
+        users: users.map((row) => ({ id: row.id, name: row.fullname || row.username || `Usuario ${row.id}` })),
+      },
     });
   } catch (error) {
     console.error("Error loading opportunity detail:", error);

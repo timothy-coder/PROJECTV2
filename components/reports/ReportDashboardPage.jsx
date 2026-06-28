@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export default function ReportDashboardPage({ type }) {
   const isVentas = type === "ventas";
-  const title = isVentas ? "Power BI Ventas" : "Power BI Posventa";
+  const title = isVentas ? "One Solution" : "One Solution";
 
   return (
     <main className="min-h-full bg-slate-50 text-slate-950">

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Calendar, Copy, Eye, FileText, Gift, Link, MessageSquare, MoreVertical, Package, Pencil, Plus, RotateCcw, Send, Trash2 } from "lucide-react";
+import { apiFetch } from "@/app/api/client";
+import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,16 +16,18 @@ import { useOpportunityDetail } from "@/hooks/opportunities/useOpportunityDetail
 import { hasPerm } from "@/lib/permissions";
 
 export default function OpportunityDetailPage({ id }) {
-  const { data, loading, save } = useOpportunityDetail(id);
+  const { data, loading, save, reload } = useOpportunityDetail(id);
   const [dialog, setDialog] = useState({ type: "", item: null });
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
   if (loading || !data) return <div className="p-4">Cargando...</div>;
-  const { opportunity, stages, details, activities, interest, quotes, testDrives, closures, reservations, options, currentUser } = data;
+  const { opportunity, client, stages, details, activities, interest, quotes, testDrives, closures, reservations, options, currentUser } = data;
   const currentIndex = stages.findIndex((stage) => stage.id === opportunity.etapaId);
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre.toLowerCase() === "nuevo");
+  const canEditClient = hasPerm(currentUser.permissions || {}, ["clientes", "edit"]);
   return (
     <TooltipProvider>
       <div className="min-h-full bg-slate-50 p-3 text-slate-950 sm:p-4">
@@ -61,7 +65,7 @@ export default function OpportunityDetailPage({ id }) {
             ))}
           </div>
         </header>
-        <InfoSection opportunity={opportunity} />
+        <InfoSection opportunity={opportunity} canEditClient={canEditClient} onEditClient={() => setClientDialogOpen(true)} />
         <div className="mb-4 grid gap-3 lg:grid-cols-2">
           <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={async () => { if (activity.trim()) { await save({ action: "activity", detalle: activity.trim() }); setActivity(""); } }} />
           <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={async () => { if (agenda.fechaAgenda && agenda.horaAgenda) { await save({ action: "agenda", ...agenda }); setAgenda({ fechaAgenda: "", horaAgenda: "" }); } }} />
@@ -76,14 +80,45 @@ export default function OpportunityDetailPage({ id }) {
         {dialog.type === "quote" ? <EditableQuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "quote", ...payload })} /> : null}
         {dialog.type === "testdrive" ? <TestDriveDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "testdrive", ...payload })} /> : null}
         {dialog.type === "closure" ? <ClosureDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "closure", ...payload })} /> : null}
+        <ClientDialog
+          open={clientDialogOpen}
+          mode="edit"
+          client={client}
+          options={options}
+          onClose={() => setClientDialogOpen(false)}
+          onSubmit={async (payload) => {
+            await apiFetch(`/api/clients/${opportunity.clienteId}`, { method: "PUT", body: JSON.stringify(payload) });
+            await reload({ showLoading: false });
+          }}
+        />
       </div>
     </TooltipProvider>
   );
 }
 
-function InfoSection({ opportunity }) {
+function InfoSection({ opportunity, canEditClient, onEditClient }) {
   const rows = [["CLIENTE", opportunity.clienteNombre], ["CODIGO", opportunity.code], ["ORIGEN", opportunity.origenNombre], ["SUBORIGEN", opportunity.suborigenNombre || "-"], ["ASIGNADO A", opportunity.asignadoNombre], ["CORREO", opportunity.email || "-"], ["CELULAR", opportunity.celular || "-"], ["DNI", opportunity.dni || "-"]];
-  return <section className="mb-3 rounded-lg bg-white p-3 shadow-sm sm:p-4"><h2 className="mb-3 text-sm font-bold sm:text-base">Informacion General</h2><div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">{rows.map(([k, v]) => <div key={k} className="min-w-0 rounded-md bg-slate-50 px-3 py-2"><p className="text-[10px] font-bold text-slate-500">{k}</p><p className="truncate text-xs font-semibold text-slate-900 sm:text-sm">{v}</p></div>)}</div></section>;
+  return (
+    <section className="mb-3 rounded-lg bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold sm:text-base">Informacion General</h2>
+        {canEditClient ? (
+          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={onEditClient}>
+            <Pencil className="size-3.5" />
+            Actualizar cliente
+          </Button>
+        ) : null}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {rows.map(([k, v]) => (
+          <div key={k} className="min-w-0 rounded-md bg-slate-50 px-3 py-2">
+            <p className="text-[10px] font-bold text-slate-500">{k}</p>
+            <p className="truncate text-xs font-semibold text-slate-900 sm:text-sm">{v}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 function ActivitySection({ activity, setActivity, activities, onSubmit }) {
   const rows = [...activities].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
