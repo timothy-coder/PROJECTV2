@@ -485,13 +485,7 @@ export default function SalesReportsDashboard() {
 
   return (
     <div className="min-h-full bg-[#e9eef2] text-slate-950">
-      <div className="grid min-h-[calc(100svh-1rem)] grid-cols-1 md:grid-cols-[86px_1fr]">
-        <aside className="hidden bg-gradient-to-b from-[#4c16f2] to-[#7b16f2] md:flex md:flex-col md:items-center md:justify-between md:py-6">
-          <div className="flex h-72 w-14 items-center justify-center rounded-md bg-[#211b1d] text-sm font-semibold text-white shadow-xl">
-            <span className="-rotate-90">Gerencial</span>
-          </div>
-          <div className="text-center text-2xl font-black leading-5 text-white">Hub<br /><span className="text-slate-300">CRM</span></div>
-        </aside>
+      <div className="min-h-[calc(100svh-1rem)]">
         <main className="min-w-0 p-2">
           <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
           <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_180px_1fr_92px]">
