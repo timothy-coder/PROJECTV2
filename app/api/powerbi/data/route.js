@@ -54,6 +54,7 @@ SELECT
   tk.token AS token,
   u.fullname AS usuarionombreasignadoaoportunidad,
   u.username AS usuarioasignadoaoportunidad,
+  u.color AS colorusuarioasignadoaoportunidad,
   us.fullname AS usuarionombrecreadoroportunidad,
   us.username AS usuariocreadoroportunidad,
   c.id_lead AS LEADford,

@@ -170,7 +170,13 @@ export default function UsersPage({ userPermissions }) {
                     <Fragment key={user.id}>
                       <tr className="text-slate-800">
                         <td className="px-3 py-2.5">
-                          <p className="font-semibold">{user.username}</p>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className="size-2.5 shrink-0 rounded-full border border-slate-200 shadow-sm"
+                              style={{ backgroundColor: user.color || "#5e17eb" }}
+                            />
+                            <p className="truncate font-semibold">{user.username}</p>
+                          </div>
                           <div className="mt-1 space-y-0.5 text-xs text-slate-500 sm:hidden">
                             <p className="font-medium text-slate-700">{user.fullname || "-"}</p>
                             <p>{user.roleName || "-"}</p>
