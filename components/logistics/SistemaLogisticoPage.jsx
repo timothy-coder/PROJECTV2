@@ -115,6 +115,7 @@ export default function SistemaLogisticoPage({ initialRows = [] }) {
             <tr className="bg-emerald-50 text-left text-emerald-800">
               <th className="sticky left-0 z-20 min-w-36 border border-emerald-100 bg-emerald-50 px-2 py-2">Producto</th>
               <th className="min-w-28 border border-emerald-100 px-2 py-2 text-center">Stock actual</th>
+              <th className="min-w-36 border border-emerald-100 px-2 py-2 text-center">Respuesta final</th>
               <th className="min-w-32 border border-emerald-100 px-2 py-2 text-center">Dias en almacen</th>
               <th className="min-w-28 border border-emerald-100 px-2 py-2 text-center">Mes actual</th>
               {MONTH_KEYS.map((key) => (
@@ -123,7 +124,6 @@ export default function SistemaLogisticoPage({ initialRows = [] }) {
                 </th>
               ))}
               <th className="min-w-20 border border-emerald-100 px-2 py-2 text-center">Tipo</th>
-              <th className="min-w-36 border border-emerald-100 px-2 py-2 text-center">Respuesta final</th>
             </tr>
           </thead>
           <tbody>
@@ -136,6 +136,11 @@ export default function SistemaLogisticoPage({ initialRows = [] }) {
                   </td>
                   <td className="border border-slate-100 p-1">
                     <CellInput value={row.stockActual} onChange={(value) => updateCell(row.id, "stockActual", value)} />
+                  </td>
+                  <td className="border border-slate-100 p-1 text-center">
+                    <span className="inline-flex h-7 min-w-20 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2 font-bold text-slate-800">
+                      {result.respuestaFinal || "-"}
+                    </span>
                   </td>
                   <td className="border border-slate-100 p-1">
                     <CellInput value={row.diasAlmacen} onChange={(value) => updateCell(row.id, "diasAlmacen", value)} />
@@ -151,11 +156,6 @@ export default function SistemaLogisticoPage({ initialRows = [] }) {
                   <td className="border border-slate-100 p-1 text-center">
                     <span className="inline-flex h-7 min-w-10 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50 px-2 font-bold text-emerald-800">
                       {result.tipo || "-"}
-                    </span>
-                  </td>
-                  <td className="border border-slate-100 p-1 text-center">
-                    <span className="inline-flex h-7 min-w-20 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2 font-bold text-slate-800">
-                      {result.respuestaFinal || "-"}
                     </span>
                   </td>
                 </tr>

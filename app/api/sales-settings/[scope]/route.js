@@ -16,6 +16,7 @@ const MAP = {
     stages: "configuracion_posventa_etapasconversion",
     times: "configuracion_posventa_estados_tiempo",
     closings: "configuracion_posventas_cierres_detalle",
+    measurementTypes: "configuracion_tipos_medida",
   },
 };
 
@@ -51,6 +52,11 @@ export async function GET(_request, { params }) {
     if (cfg.hours) {
       const [hourRows] = await pool.query(`SELECT id, TIME_FORMAT(hora, '%H:%i') AS hora FROM ${cfg.hours} ORDER BY hora ASC`);
       hours = hourRows.map((row) => ({ id: row.id, hora: row.hora }));
+    }
+    let measurementTypes = [];
+    if (scope === "posventa" && cfg.measurementTypes && hasPerm(user.permissions || {}, ["config_tipos_medida", "view"])) {
+      const [measurementRows] = await pool.query(`SELECT id, nombre, abreviatura, created_at FROM ${cfg.measurementTypes} ORDER BY nombre ASC`);
+      measurementTypes = measurementRows.map((row) => ({ id: row.id, nombre: row.nombre, abreviatura: row.abreviatura || "", createdAt: row.created_at }));
     }
     let userCounts = [];
     let userCountUsers = [];
@@ -99,6 +105,7 @@ export async function GET(_request, { params }) {
       times: timeRows.map((row) => ({ id: row.id, nombre: row.nombre, estado: row.estado, minutosDesde: row.minutos_desde, minutosHasta: row.minutos_hasta, colorHexadecimal: row.color_hexadecimal, descripcion: row.descripcion || "", activo: Boolean(row.activo), createdAt: row.created_at, updatedAt: row.updated_at })),
       closings,
       hours,
+      measurementTypes,
       userCounts,
       userCountUsers,
     });
@@ -138,6 +145,8 @@ export async function POST(request, { params }) {
       await upsertClosing(cfg.closings, body);
     } else if (body.resource === "hour" && cfg.hours) {
       await upsertHour(cfg.hours, body);
+    } else if (scope === "posventa" && body.resource === "measurement-type" && cfg.measurementTypes) {
+      await upsertMeasurementType(cfg.measurementTypes, body);
     } else if (scope === "ventas" && body.resource === "user-count") {
       await upsertUserCount(body);
     } else if (scope === "ventas" && body.resource === "user-count-reset") {
@@ -188,6 +197,13 @@ async function upsertHour(table, body) {
   if (!/^\d{2}:\d{2}$/.test(hora)) throw new Error("Hora invalida");
   if (body.id) await pool.query(`UPDATE ${table} SET hora=? WHERE id=?`, [`${hora}:00`, Number(body.id)]);
   else await pool.query(`INSERT INTO ${table} (hora) VALUES (?)`, [`${hora}:00`]);
+}
+async function upsertMeasurementType(table, body) {
+  const nombre = String(body.nombre || "").trim();
+  const abreviatura = String(body.abreviatura || "").trim() || null;
+  if (!nombre) throw new Error("Nombre requerido");
+  if (body.id) await pool.query(`UPDATE ${table} SET nombre=?, abreviatura=? WHERE id=?`, [nombre, abreviatura, Number(body.id)]);
+  else await pool.query(`INSERT INTO ${table} (nombre, abreviatura) VALUES (?, ?)`, [nombre, abreviatura]);
 }
 async function upsertUserCount(body) {
   const usuarioId = Number(body.usuarioId);
@@ -256,7 +272,7 @@ async function resetUserCounts() {
   }
 }
 async function deleteResource(cfg, body) {
-  const tables = { stage: cfg.stages, time: cfg.times, closing: cfg.closings, hour: cfg.hours };
+  const tables = { stage: cfg.stages, time: cfg.times, closing: cfg.closings, hour: cfg.hours, "measurement-type": cfg.measurementTypes };
   const table = tables[body.resource];
   if (table) await pool.query(`DELETE FROM ${table} WHERE id=?`, [Number(body.id)]);
 }
@@ -274,7 +290,7 @@ function canReadSettings(user, scope) {
       hasPerm(permissions, ["config_ventas_plantillas", "view"])
     );
   }
-  return hasPerm(permissions, ["configcotizacion", "view"]) || hasPerm(permissions, ["config_posventa_cierres", "view"]);
+  return hasPerm(permissions, ["configcotizacion", "view"]) || hasPerm(permissions, ["config_posventa_cierres", "view"]) || hasPerm(permissions, ["config_tipos_medida", "view"]);
 }
 
 function canWriteSettings(user, scope, body) {
@@ -287,6 +303,7 @@ function canWriteSettings(user, scope, body) {
     return hasPerm(permissions, ["configuracion_usuario_counts", "create"]) || hasPerm(permissions, ["configuracion_usuario_counts", "edit"]);
   }
   if (scope === "posventa" && resource === "closing") return hasPerm(permissions, ["config_posventa_cierres", action]);
+  if (scope === "posventa" && resource === "measurement-type") return hasPerm(permissions, ["config_tipos_medida", action]);
   const baseKey = scope === "ventas" ? "configagenda" : "configcotizacion";
   const baseAction = resource === "stage-order" || resource === "schedule" ? "edit" : action;
   return hasPerm(permissions, [baseKey, baseAction]);

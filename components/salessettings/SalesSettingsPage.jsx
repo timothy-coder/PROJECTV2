@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlignCenter, AlignLeft, AlignRight, Calendar, Clock, Edit3, Eye, FileImage, FileText, GripVertical, ImagePlus, Link, Plus, RotateCcw, Save, Trash2, Type, Users, Workflow } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Calendar, Clock, Edit3, Eye, FileImage, FileText, GripVertical, ImagePlus, Link, Plus, RotateCcw, Ruler, Save, Trash2, Type, Users, Workflow } from "lucide-react";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,6 +51,13 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
     canEdit: hasPerm(userPermissions, [closePermKey, "edit"]) || canEdit,
     canDelete: hasPerm(userPermissions, [closePermKey, "delete"]) || canDelete,
   };
+  const measurementPermKey = "config_tipos_medida";
+  const canViewMeasurementTypes = scope === "posventa" && hasPerm(userPermissions, [measurementPermKey, "view"]);
+  const measurementTypePerms = {
+    canCreate: hasPerm(userPermissions, [measurementPermKey, "create"]),
+    canEdit: hasPerm(userPermissions, [measurementPermKey, "edit"]),
+    canDelete: hasPerm(userPermissions, [measurementPermKey, "delete"]),
+  };
   const canViewTemplates = scope === "ventas" && (hasPerm(userPermissions, ["config_ventas_plantillas", "view"]) || canViewBase);
   const templatePerms = {
     canCreate: hasPerm(userPermissions, ["config_ventas_plantillas", "create"]) || canCreate,
@@ -63,11 +70,12 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
     ...(canViewUserCounts ? [{ id: "user-counts", label: "Usuarios Lead" }] : []),
     ...(canViewBase ? [{ id: "stages", label: "Etapas de Conversion" }, { id: "times", label: "Tiempos" }] : []),
     ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
+    ...(canViewMeasurementTypes ? [{ id: "measurement-types", label: "Tipos de medida" }] : []),
     ...(canViewTemplates ? [{ id: "templates", label: "Plantillas" }] : []),
   ];
   const [tab, setTab] = useState(tabs[0]?.id || "schedule");
   const activeTab = tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id;
-  const canView = canViewBase || canViewHours || canViewUserCounts || canViewClosings || canViewTemplates;
+  const canView = canViewBase || canViewHours || canViewUserCounts || canViewClosings || canViewMeasurementTypes || canViewTemplates;
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
   return (
     <div className="min-w-0 bg-slate-50 p-2 text-slate-950 sm:p-4">
@@ -84,6 +92,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
       {activeTab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
       {activeTab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
       {activeTab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
+      {activeTab === "measurement-types" ? <MeasurementTypesTab data={data} canCreate={measurementTypePerms.canCreate} canEdit={measurementTypePerms.canEdit} canDelete={measurementTypePerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "measurement-type", item })} /> : null}
       {activeTab === "templates" ? <TemplatesTab perms={templatePerms} /> : null}
       {dialog.open ? <EntityDialog state={dialog} onClose={() => setDialog({ open: false, resource: "", item: null })} onSubmit={async (payload) => { await data.save({ ...payload, resource: dialog.resource }); setDialog({ open: false, resource: "", item: null }); }} /> : null}
     </div>
@@ -440,6 +449,36 @@ function ClosingTab({ data, scope, canCreate, canEdit, canDelete, openDialog }) 
   return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
 }
 
+function MeasurementTypesTab({ data, canCreate, canEdit, canDelete, openDialog }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+      <Header
+        icon={Ruler}
+        title="Tipos de medida"
+        subtitle="Configura las unidades de medida disponibles para PostVenta"
+        action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo tipo</Button> : null}
+      />
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-4 sm:gap-3">
+        <Stat label="Total" value={data.measurementTypes.length} />
+        <Stat label="Con abreviatura" value={data.measurementTypes.filter((item) => item.abreviatura).length} tone="green" />
+      </div>
+      <List>
+        {data.measurementTypes.map((item) => (
+          <Row
+            key={item.id}
+            title={item.nombre}
+            subtitle={item.abreviatura ? `Abreviatura: ${item.abreviatura}` : "Sin abreviatura"}
+            badges={[`ID ${item.id}`]}
+            onEdit={canEdit ? () => openDialog(item) : null}
+            onDelete={canDelete ? () => data.delete("measurement-type", item.id) : null}
+          />
+        ))}
+        {!data.measurementTypes.length ? <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">No hay tipos de medida registrados.</div> : null}
+      </List>
+    </section>
+  );
+}
+
 function ElementCreateBar({ section, onCreate }) {
   const nextOrder = (section.elementos?.length || 0) + 1;
   return (
@@ -592,9 +631,11 @@ function EntityDialog({ state, onClose, onSubmit }) {
   const isTime = state.resource === "time";
   const isClosing = state.resource === "closing";
   const isHour = state.resource === "hour";
+  const isMeasurementType = state.resource === "measurement-type";
   const [form, setForm] = useState({
     id: state.item?.id,
     nombre: state.item?.nombre || "",
+    abreviatura: state.item?.abreviatura || "",
     hora: state.item?.hora || "",
     estado: state.item?.estado || "",
     minutosDesde: state.item?.minutosDesde ?? 0,
@@ -617,6 +658,11 @@ function EntityDialog({ state, onClose, onSubmit }) {
         <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-3">
           {isClosing ? (
             <Field label="Detalle"><Textarea value={form.detalle} onChange={(e) => setForm((f) => ({ ...f, detalle: e.target.value }))} /></Field>
+          ) : isMeasurementType ? (
+            <>
+              <Field label="Nombre"><Input value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} required /></Field>
+              <Field label="Abreviatura"><Input value={form.abreviatura} onChange={(e) => setForm((f) => ({ ...f, abreviatura: e.target.value }))} placeholder="Ej. und, lt, kg" /></Field>
+            </>
           ) : isHour ? (
             <Field label="Hora"><Input type="time" value={form.hora} onChange={(e) => setForm((f) => ({ ...f, hora: e.target.value }))} required /></Field>
           ) : isTime ? (

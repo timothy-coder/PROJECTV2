@@ -44,42 +44,33 @@ export default function NotificationsPage({ userPermissions = {} }) {
   const [notifications, setNotifications] = useState([]);
   const [unread, setUnread] = useState(0);
   const [meta, setMeta] = useState({ page: 1, pages: 1, total: 0 });
+  const [page, setPage] = useState(1);
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [sendOpen, setSendOpen] = useState(false);
   const canSend = hasPerm(userPermissions, ["notificaciones", "send"]);
 
-  const loadNotifications = useCallback(async (nextPage = 1, reset = true) => {
+  const loadNotifications = useCallback(async (nextPage = 1) => {
     setLoading(true);
     try {
       const response = await fetch(`/api/notifications?limit=${pageSize}&page=${nextPage}${canSend ? "&options=1" : ""}`, { credentials: "include" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.message || "No se pudieron cargar las notificaciones.");
-      setNotifications((current) => (reset ? payload.notifications || [] : [...current, ...(payload.notifications || [])]));
+      setNotifications(payload.notifications || []);
       setUnread(Number(payload.unread || 0));
       setMeta(payload.meta || { page: nextPage, pages: 1, total: payload.notifications?.length || 0 });
+      setPage(Number(payload.meta?.page || nextPage || 1));
       if (payload.options) setOptions(payload.options);
     } catch (error) {
       toast.error(error?.message || "No se pudieron cargar las notificaciones.");
     } finally {
       setLoading(false);
     }
-  }, [canSend]);
+  }, [canSend, pageSize]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => loadNotifications(1, true), 0);
+    const timer = window.setTimeout(() => loadNotifications(1), 0);
     return () => window.clearTimeout(timer);
   }, [loadNotifications]);
-
-  useEffect(() => {
-    function handleWindowScroll() {
-      const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80;
-      if (!nearBottom || loading || query.trim() || Number(meta.page || 1) >= Number(meta.pages || 1)) return;
-      loadNotifications(Number(meta.page || 1) + 1, false);
-    }
-
-    window.addEventListener("scroll", handleWindowScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleWindowScroll);
-  }, [loadNotifications, loading, meta.page, meta.pages, query]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -140,7 +131,7 @@ export default function NotificationsPage({ userPermissions = {} }) {
               Marcar todas leidas
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => loadNotifications(1, true)} disabled={loading}>
+          <Button variant="outline" onClick={() => loadNotifications(page)} disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}
             Recargar
           </Button>
@@ -169,28 +160,30 @@ export default function NotificationsPage({ userPermissions = {} }) {
 
         {!loading && filtered.map((item) => {
           const content = (
-            <article className={`rounded-lg border p-3 shadow-sm transition hover:shadow-md ${item.read ? "border-slate-200 bg-white" : typeClasses(item.type)}`}>
-              <div className="flex items-start justify-between gap-3">
+            <article className={`rounded-lg border px-3 py-2 shadow-sm transition hover:shadow-md ${item.read ? "border-slate-200 bg-white" : typeClasses(item.type)}`}>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                 <div className="min-w-0">
-                  <h2 className="text-sm font-bold leading-tight">{item.title}</h2>
-                  <p className="mt-1 whitespace-pre-wrap text-xs leading-snug text-slate-600">{item.message}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h2 className="truncate text-sm font-bold leading-tight">{item.title}</h2>
+                    {!item.read ? <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">Nuevo</span> : null}
+                  </div>
+                  <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-snug text-slate-600">{item.message}</p>
                 </div>
-                {!item.read ? <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">Nuevo</span> : null}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] font-semibold text-slate-400">{formatNotificationDate(item.createdAt)}</p>
-                {!item.read ? (
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      markAsRead(item.id);
-                    }}
-                  >
-                    Marcar como leida
-                  </button>
-                ) : null}
+                <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
+                  <p className="whitespace-nowrap text-right text-[10px] font-semibold text-slate-400">{formatNotificationDate(item.createdAt)}</p>
+                  {!item.read ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        markAsRead(item.id);
+                      }}
+                    >
+                      Marcar leida
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </article>
           );
@@ -209,12 +202,31 @@ export default function NotificationsPage({ userPermissions = {} }) {
             No hay notificaciones para mostrar.
           </div>
         ) : null}
-        {loading && notifications.length ? (
-          <div className="rounded-lg border bg-white p-3 text-center text-xs font-semibold text-slate-400">
-            Cargando mas notificaciones...
-          </div>
-        ) : null}
       </section>
+      <footer className="mt-3 grid gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm sm:grid-cols-3 sm:items-center">
+        <span>Pagina {Number(meta.page || page || 1)} de {Number(meta.pages || 1)}</span>
+        <span className="text-left sm:text-center">{Number(meta.total || 0)} registros</span>
+        <div className="flex justify-start gap-2 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadNotifications(Math.max(1, Number(meta.page || page || 1) - 1))}
+            disabled={loading || Number(meta.page || page || 1) <= 1}
+          >
+            Anterior
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadNotifications(Math.min(Number(meta.pages || 1), Number(meta.page || page || 1) + 1))}
+            disabled={loading || Number(meta.page || page || 1) >= Number(meta.pages || 1)}
+          >
+            Siguiente
+          </Button>
+        </div>
+      </footer>
       {sendOpen ? (
         <SendNotificationDialog
           open={sendOpen}
@@ -222,7 +234,7 @@ export default function NotificationsPage({ userPermissions = {} }) {
           onClose={() => setSendOpen(false)}
           onSent={() => {
             setSendOpen(false);
-            loadNotifications(1, true);
+            loadNotifications(1);
           }}
         />
       ) : null}
