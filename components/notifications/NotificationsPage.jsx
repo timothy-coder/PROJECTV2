@@ -75,7 +75,7 @@ export default function NotificationsPage({ userPermissions = {} }) {
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return notifications;
-    return notifications.filter((item) => `${item.title} ${item.message} ${item.type}`.toLowerCase().includes(needle));
+    return notifications.filter((item) => `${item.title} ${item.message} ${item.type} ${item.createdByName || ""}`.toLowerCase().includes(needle));
   }, [notifications, query]);
 
   async function markAsRead(notificationId) {
@@ -168,6 +168,7 @@ export default function NotificationsPage({ userPermissions = {} }) {
                     {!item.read ? <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">Nuevo</span> : null}
                   </div>
                   <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-snug text-slate-600">{item.message}</p>
+                  {item.createdByName ? <p className="mt-1 text-[10px] font-bold text-slate-400">Creado por: {item.createdByName}</p> : null}
                 </div>
                 <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
                   <p className="whitespace-nowrap text-right text-[10px] font-semibold text-slate-400">{formatNotificationDate(item.createdAt)}</p>

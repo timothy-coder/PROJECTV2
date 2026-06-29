@@ -38,11 +38,14 @@ function hasPowerBiToken(request) {
 function canReadPowerBiPosventaData(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(permissions, ["leadspv", "viewall"]) ||
-      hasPerm(permissions, ["citas", "viewall"]) ||
-      hasPerm(permissions, ["cotizacion", "viewall"])
+    hasPerm(permissions, ["reportes", "view"]) &&
+      hasPerm(permissions, ["home", "view"]) &&
+      hasPerm(permissions, ["home", "posventa"])
   );
+}
+
+function canViewAllDashboard(user) {
+  return Boolean(hasPerm(user?.permissions || {}, ["home", "viewall"]));
 }
 
 export const POWERBI_POSVENTA_QUERY = `
@@ -203,6 +206,7 @@ ORDER BY o.created_at DESC, o.id DESC
 
 export async function GET(request) {
   try {
+    let scopeUserId = null;
     if (!hasPowerBiToken(request)) {
       const user = await getCurrentUser();
       if (!user) {
@@ -211,12 +215,17 @@ export async function GET(request) {
       if (!canReadPowerBiPosventaData(user)) {
         return NextResponse.json({ message: "No tienes permiso para consultar esta data." }, { status: 403 });
       }
+      if (!canViewAllDashboard(user)) {
+        scopeUserId = user.id;
+      }
     }
 
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
     const offset = clampOffset(url.searchParams.get("offset"));
-    const [rows] = await pool.query(`${POWERBI_POSVENTA_QUERY} LIMIT ${limit} OFFSET ${offset}`);
+    const scopeSql = scopeUserId ? "WHERE (o.created_by = ? OR o.asignado_a = ?)" : "";
+    const query = POWERBI_POSVENTA_QUERY.replace("ORDER BY o.created_at DESC, o.id DESC", `${scopeSql} ORDER BY o.created_at DESC, o.id DESC`);
+    const [rows] = await pool.query(`${query} LIMIT ${limit} OFFSET ${offset}`, scopeUserId ? [scopeUserId, scopeUserId] : []);
 
     return NextResponse.json(rows);
   } catch (error) {

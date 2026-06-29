@@ -209,6 +209,7 @@ function buildOpportunityRecords(rows) {
     const latestQuote = latestRow(quoteRows.length ? quoteRows : group, "fechacreaciocotizacion");
     const firstReserve = latestRow(reserveRows.length ? reserveRows : group.filter((row) => row.reserva_detalle_created_at), "reserva_detalle_created_at");
     const closure = latestRow(group.filter((row) => row.fechacreacioncierre), "fechacreacioncierre");
+    const testDriveRows = uniqueRows(group.filter((row) => row.testdrive_id), (row) => row.testdrive_id);
     const viewsByQuote = uniqueRows(group.filter((row) => row.cotizacion_id), (row) => row.cotizacion_id);
     const totalViews = viewsByQuote.reduce((sum, row) => sum + moneyNumber(row.cotizacion_vistas_totales), 0);
     const modelName = clean(latestQuote.modelo_catalogo || latestQuote.modelo_historial);
@@ -230,6 +231,11 @@ function buildOpportunityRecords(rows) {
       base.nombreditri,
       closure.motivocierreoportunidad || closure.cierreoportunidaddetalle || base.motivocierreoportunidad,
     ];
+    const soldValue = moneyNumber(latestQuote.preciocotizacion || latestQuote.precio_unitario || latestQuote.preciocatalogo);
+    const isInvoiced = Boolean(latestQuote.evento_fecha_facturacion || latestQuote.evento_numero_factura || latestQuote.historial_created_at_facturacion);
+    const isRegistered = Boolean(latestQuote.evento_fecha_entrega_placa || base.plca || latestQuote.plca);
+    const matriculaStatus = isRegistered ? "Matriculados" : isInvoiced ? "En proceso de matrícula" : "Facturados pendientes";
+    const leadAttentionDays = daysBetween(base.token_created_at || base.fechacreacionoportunidad, base.primera_actividad_created_at);
     return {
       id,
       code: clean(base.codigodeoportunidad),
@@ -257,10 +263,17 @@ function buildOpportunityRecords(rows) {
       reservationCount: uniqueCount(group.map((row) => row.reserva_id)),
       virtualQuoteCount: countVisitQuoteTokens(group),
       totalViews,
+      soldValue,
+      isSold: isInvoiced,
+      testDriveCount: testDriveRows.length,
+      hasTestDrive: testDriveRows.length > 0,
+      noTestDriveReason: testDriveRows.length ? "" : clean(closureReason !== EMPTY ? closureReason : base.testdrive_descripcion, "Sin test drive registrado"),
+      matriculaStatus,
       followUp: Boolean(base.fecha_agenda || base.hora_agenda),
       daysToReservation: daysBetween(base.fechacreacionoportunidad, firstReserve.reserva_detalle_created_at),
       daysToClose: daysBetween(base.fechacreacionoportunidad, closure.fechacreacioncierre),
       daysToInvoice: daysBetween(base.fechacreacionoportunidad, latestQuote.evento_fecha_facturacion),
+      leadAttentionHours: leadAttentionDays != null ? leadAttentionDays * 24 : null,
       platformUseScore: platformFields.every(hasRealValue) ? 1 : 0,
     };
   });
@@ -308,6 +321,20 @@ function lineByDayAndAdvisor(records) {
     });
     return row;
   });
+}
+
+function fordDashboardStats(records) {
+  const sold = records.filter((record) => record.isSold);
+  const soldCount = sold.length;
+  const ticketAverage = soldCount ? sold.reduce((sum, item) => sum + moneyNumber(item.soldValue), 0) / soldCount : 0;
+  return {
+    ticketAverage,
+    soldCount,
+    testDriveApplied: records.filter((record) => record.hasTestDrive).length,
+    testDriveReasons: groupCount(records.filter((record) => !record.hasTestDrive), "noTestDriveReason", 6),
+    matriculaStatus: groupCount(records, "matriculaStatus", 6),
+    leadAttentionHours: avg(records.map((record) => record.leadAttentionHours)),
+  };
 }
 
 function buildDateTree(records) {
@@ -461,6 +488,8 @@ export default function SalesReportsDashboard() {
     city: groupCount(countedRecords, "city", 8),
     fuel: groupCount(countedRecords, "fuel", 6),
   }), [countedRecords]);
+  const isFordLeadView = filters.codeType === "LF";
+  const fordStats = useMemo(() => fordDashboardStats(countedRecords), [countedRecords]);
   const advisorColors = useMemo(() => {
     const map = {};
     countedRecords.forEach((record) => {
@@ -562,14 +591,36 @@ export default function SalesReportsDashboard() {
                   <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} />
                 </Panel>
                 <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Modelo por Asesor" summary={stackSummary(charts.advisorModel)} onFocus={() => setFocusChart("advisorModel")}><StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} /></Panel>
-                <Panel title="Tipo de Cliente" summary={chartSummary(charts.clientType, "tipo")} onFocus={() => setFocusChart("clientType")}><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Motivo de Cierre" summary={chartSummary(charts.closureReason, "motivo")} onFocus={() => setFocusChart("closureReason")}><ReasonBars data={charts.closureReason} active={chartFilters.closureReason} onSelect={toggleChartFilter} /></Panel>
+                {isFordLeadView ? (
+                  <>
+                    <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados.`}>
+                      <FordMetric value={`S/ ${formatNumber(fordStats.ticketAverage, 0)}`} label="Promedio valor VH vendidos" />
+                    </Panel>
+                    <Panel title="Test Drives Aplicados" summary={`${fordStats.testDriveApplied} vehículos tienen test drive registrado.`}>
+                      <FordMetric value={formatNumber(fordStats.testDriveApplied)} label="Cantidad de VH con test drive" />
+                    </Panel>
+                    <Panel title="Razones sin Test Drive" summary={chartSummary(fordStats.testDriveReasons, "razón")} onFocus={() => setFocusChart("fordTestDriveReasons")}>
+                      <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} field="noTestDriveReason" />
+                    </Panel>
+                  </>
+                ) : (
+                  <>
+                    <Panel title="Modelo por Asesor" summary={stackSummary(charts.advisorModel)} onFocus={() => setFocusChart("advisorModel")}><StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} /></Panel>
+                    <Panel title="Tipo de Cliente" summary={chartSummary(charts.clientType, "tipo")} onFocus={() => setFocusChart("clientType")}><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
+                    <Panel title="Motivo de Cierre" summary={chartSummary(charts.closureReason, "motivo")} onFocus={() => setFocusChart("closureReason")}><ReasonBars data={charts.closureReason} active={chartFilters.closureReason} onSelect={toggleChartFilter} /></Panel>
+                  </>
+                )}
               </section>
 
               <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
                 <Panel title="Prospectos por Día y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} advisorColors={advisorColors} activeAdvisor={filters.advisor} onSelectAdvisor={toggleAdvisorFilter} /></Panel>
-                <Panel title="Origen con Campañas" summary={chartSummary(charts.campaign, "origen")} onFocus={() => setFocusChart("campaign")}><Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={toggleChartFilter} /></Panel>
+                {isFordLeadView ? (
+                  <Panel title="Tiempo de Atención Lead" summary="Promedio desde derivación de marca hasta primera actividad del asesor.">
+                    <FordMetric value={`${formatNumber(fordStats.leadAttentionHours, 1)} h`} label="Tiempo promedio de atención" />
+                  </Panel>
+                ) : (
+                  <Panel title="Origen con Campañas" summary={chartSummary(charts.campaign, "origen")} onFocus={() => setFocusChart("campaign")}><Donut data={charts.campaign} field="campaign" active={chartFilters.campaign} onSelect={toggleChartFilter} /></Panel>
+                )}
                 <Panel
                   title="Ciudad Origen"
                   summary={cityChartSummary(charts.city, blankCityRecords.length)}
@@ -579,19 +630,26 @@ export default function SalesReportsDashboard() {
                 >
                   <Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} />
                 </Panel>
-                <Panel
-                  title="Tipo de Combustible"
-                  summary={blankAwareChartSummary(charts.fuel, "combustible", blankFuelRecords.length, "cotizaciones tienen combustible en blanco y no se cuentan en el gráfico.")}
-                  onFocus={() => setFocusChart("fuel")}
-                  alertCount={blankFuelRecords.length}
-                  onAlert={() => setBlankFuelOpen(true)}
-                >
-                  <Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} />
-                </Panel>
+                {isFordLeadView ? (
+                  <Panel title="Status Matrícula" summary={chartSummary(fordStats.matriculaStatus, "estado")} onFocus={() => setFocusChart("fordMatriculaStatus")}>
+                    <StageFunnel data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={toggleChartFilter} field="matriculaStatus" />
+                  </Panel>
+                ) : (
+                  <Panel
+                    title="Tipo de Combustible"
+                    summary={blankAwareChartSummary(charts.fuel, "combustible", blankFuelRecords.length, "cotizaciones tienen combustible en blanco y no se cuentan en el gráfico.")}
+                    onFocus={() => setFocusChart("fuel")}
+                    alertCount={blankFuelRecords.length}
+                    onAlert={() => setBlankFuelOpen(true)}
+                  >
+                    <Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={toggleChartFilter} />
+                  </Panel>
+                )}
               </section>
               <FocusChartDialog
                 chartKey={focusChart}
                 charts={charts}
+                fordStats={fordStats}
                 chartFilters={chartFilters}
                 activeAdvisor={filters.advisor}
                 advisorColors={advisorColors}
@@ -858,7 +916,16 @@ function Panel({ title, children, summary, onFocus, alertCount = 0, onAlert }) {
   );
 }
 
-function FocusChartDialog({ chartKey, charts, chartFilters, activeAdvisor, advisorColors, onClose, onSelect, onSelectAdvisor }) {
+function FordMetric({ value, label }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center rounded-md bg-slate-50 text-center">
+      <p className="text-4xl font-black text-violet-700">{value}</p>
+      <p className="mt-2 max-w-[220px] text-xs font-bold leading-tight text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdvisor, advisorColors, onClose, onSelect, onSelectAdvisor }) {
   if (!chartKey) return null;
   const config = {
     model: {
@@ -905,6 +972,16 @@ function FocusChartDialog({ chartKey, charts, chartFilters, activeAdvisor, advis
       title: "Tipo de Combustible",
       summary: chartSummary(charts.fuel, "combustible"),
       content: <Donut data={charts.fuel} field="fuel" active={chartFilters.fuel} onSelect={onSelect} />,
+    },
+    fordTestDriveReasons: {
+      title: "Razones sin Test Drive",
+      summary: chartSummary(fordStats.testDriveReasons, "razón"),
+      content: <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={onSelect} field="noTestDriveReason" />,
+    },
+    fordMatriculaStatus: {
+      title: "Status Matrícula",
+      summary: chartSummary(fordStats.matriculaStatus, "estado"),
+      content: <StageFunnel data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={onSelect} field="matriculaStatus" />,
     },
   }[chartKey];
   if (!config) return null;
@@ -1171,13 +1248,12 @@ function lineSummary(data) {
   return totals[0]?.value ? `Día con más prospectos: ${totals[0].name} (${totals[0].value}).` : "Sin registros por día.";
 }
 
-function StageFunnel({ data, active, onSelect }) {
+function StageFunnel({ data, active, onSelect, field = "stage" }) {
   const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const percentData = data.map((item) => ({
     ...item,
     percent: total ? (Number(item.value || 0) / total) * 100 : 0,
-    countLabel: `${formatNumber(item.value)} de ${formatNumber(total)}`,
-    percentLabel: `${formatNumber(total ? (Number(item.value || 0) / total) * 100 : 0, 1)}%`,
+    centerLabel: `${formatNumber(item.value)} - ${formatNumber(total ? (Number(item.value || 0) / total) * 100 : 0, 1)}%`,
   }));
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -1189,7 +1265,7 @@ function StageFunnel({ data, active, onSelect }) {
             "Etapa",
           ]}
         />
-        <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect("stage", entry.name)}>
+        <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect(field, entry.name)}>
           <LabelList position="right" fill="#475569" stroke="none" dataKey="name" fontSize={11} />
           <LabelList content={<StageCenterLabel />} />
           {percentData.map((entry, index) => (
@@ -1213,13 +1289,8 @@ function StageCenterLabel(props) {
   const compact = height < 54;
 
   return (
-    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontWeight={800} pointerEvents="none">
-      <tspan x={cx} dy={compact ? -3 : -7} fontSize={compact ? 9 : 11}>
-        {payload.countLabel}
-      </tspan>
-      <tspan x={cx} dy={compact ? 10 : 14} fontSize={compact ? 9 : 11}>
-        {payload.percentLabel}
-      </tspan>
+    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={compact ? 9 : 11} fontWeight={800} pointerEvents="none">
+      <tspan>{payload.centerLabel}</tspan>
     </text>
   );
 }
@@ -1272,7 +1343,7 @@ function StackedAdvisorTooltip({ active, payload, label, coordinate }) {
   );
 }
 
-function ReasonBars({ data, active, onSelect }) {
+function ReasonBars({ data, active, onSelect, field = "closureReason" }) {
   const max = Math.max(...data.map((item) => item.value), 1);
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -1281,7 +1352,7 @@ function ReasonBars({ data, active, onSelect }) {
         <XAxis type="number" domain={[0, max]} hide />
         <YAxis type="category" dataKey="name" width={96} tick={{ fontSize: 11 }} />
         <Tooltip itemSorter={() => 0} />
-        <Bar dataKey="value" radius={[0, 6, 6, 0]} onClick={(entry) => onSelect("closureReason", entry.name)}>
+        <Bar dataKey="value" radius={[0, 6, 6, 0]} onClick={(entry) => onSelect(field, entry.name)}>
           {data.map((item, index) => (
             <Cell key={item.name} fill={COLORS[index % COLORS.length]} opacity={!active || active === item.name ? 1 : 0.3} className="cursor-pointer" />
           ))}

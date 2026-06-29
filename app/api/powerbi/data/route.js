@@ -38,10 +38,14 @@ function hasPowerBiToken(request) {
 function canReadPowerBiData(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["oportunidades", "viewall"]) ||
-      hasPerm(permissions, ["cotizacion", "viewall"]) ||
-      hasPerm(permissions, ["reservas", "viewall"])
+    hasPerm(permissions, ["reportes", "view"]) &&
+      hasPerm(permissions, ["home", "view"]) &&
+      hasPerm(permissions, ["home", "ventas"])
   );
+}
+
+function canViewAllDashboard(user) {
+  return Boolean(hasPerm(user?.permissions || {}, ["home", "viewall"]));
 }
 
 const POWERBI_QUERY = `
@@ -52,6 +56,7 @@ SELECT
   voll.fecha_agenda AS fecha_agenda,
   voll.hora_agenda AS hora_agenda,
   tk.token AS token,
+  tk.created_at AS token_created_at,
   u.fullname AS usuarionombreasignadoaoportunidad,
   u.username AS usuarioasignadoaoportunidad,
   u.color AS colorusuarioasignadoaoportunidad,
@@ -202,7 +207,13 @@ SELECT
   vcep.vistas_totales AS cotizacion_vistas_totales,
   vcep.token as tokenvistacotizacion,
   vcvh.fecha_hora AS cotizacion_vista_fecha_hora,
-  voc.created_at as fechacreacioncierre
+  voc.created_at as fechacreacioncierre,
+  vtd.id AS testdrive_id,
+  vtd.fecha_testdrive AS testdrive_fecha,
+  vtd.estado AS testdrive_estado,
+  vtd.descripcion AS testdrive_descripcion,
+  vtd.created_at AS testdrive_created_at,
+  act_first.created_at AS primera_actividad_created_at
 FROM ventas_oportunidades o
 LEFT JOIN (
   SELECT vod.*
@@ -214,6 +225,15 @@ LEFT JOIN (
   ) latest_vod ON latest_vod.max_id = vod.id
 ) voll ON voll.oportunidad_padre_id = o.id
 LEFT JOIN ventas_oportunidad_tokens tk ON tk.oportunidad_id = o.id
+LEFT JOIN (
+  SELECT a.*
+  FROM ventas_oportunidades_actividades a
+  INNER JOIN (
+    SELECT oportunidad_id, MIN(id) AS min_id
+    FROM ventas_oportunidades_actividades
+    GROUP BY oportunidad_id
+  ) first_activity ON first_activity.min_id = a.id
+) act_first ON act_first.oportunidad_id = o.id
 LEFT JOIN administracion_usuarios u ON u.id = o.asignado_a
 LEFT JOIN administracion_clientes c ON c.id = o.cliente_id
 LEFT JOIN administracion_usuarios usu ON c.created_by = usu.id
@@ -249,12 +269,14 @@ LEFT JOIN administracion_modelos model ON model.id = vp.modelo_id
 LEFT JOIN configuracion_monedas mone ON mone.id = vp.moneda_id
 LEFT JOIN ventas_oportunidades_cierres voc ON voc.oportunidad_id = o.id
 LEFT JOIN configuracion_ventas_cierres_detalle cvcd ON cvcd.id = voc.cierre_detalle_id
+LEFT JOIN ventas_oportunidades_test_drives vtd ON vtd.oportunidad_id = o.id
 LEFT JOIN ventas_historial_carros_eventos vhce ON vhce.vin = vhc.vin
 ORDER BY o.created_at DESC, o.id DESC
 `;
 
 export async function GET(request) {
   try {
+    let scopeUserId = null;
     if (!hasPowerBiToken(request)) {
       const user = await getCurrentUser();
       if (!user) {
@@ -263,12 +285,17 @@ export async function GET(request) {
       if (!canReadPowerBiData(user)) {
         return NextResponse.json({ message: "No tienes permiso para consultar esta data." }, { status: 403 });
       }
+      if (!canViewAllDashboard(user)) {
+        scopeUserId = user.id;
+      }
     }
 
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
     const offset = clampOffset(url.searchParams.get("offset"));
-    const [rows] = await pool.query(`${POWERBI_QUERY} LIMIT ${limit} OFFSET ${offset}`);
+    const scopeSql = scopeUserId ? "WHERE (o.created_by = ? OR o.asignado_a = ?)" : "";
+    const query = POWERBI_QUERY.replace("ORDER BY o.created_at DESC, o.id DESC", `${scopeSql} ORDER BY o.created_at DESC, o.id DESC`);
+    const [rows] = await pool.query(`${query} LIMIT ${limit} OFFSET ${offset}`, scopeUserId ? [scopeUserId, scopeUserId] : []);
 
     return NextResponse.json(rows);
   } catch (error) {

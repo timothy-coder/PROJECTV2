@@ -74,6 +74,72 @@ async function isAdvisorUser(connection, userId) {
   return rows.length > 0;
 }
 
+async function ensureOverdueAgendaNotifications({ user, config, canViewAll, prefixFilters }) {
+  const prefixWhere = prefixFilters.map(() => "o.oportunidad_id LIKE ?").join(" OR ");
+  const params = canViewAll ? prefixFilters : [...prefixFilters, user.id, user.id];
+  const [rows] = await pool.query(
+    `SELECT
+        o.id,
+        o.oportunidad_id,
+        o.created_by,
+        o.asignado_a,
+        CONCAT(COALESCE(c.nombre,''), ' ', COALESCE(c.apellido,'')) AS cliente_nombre,
+        d.fecha_agenda,
+        d.hora_agenda
+     FROM ventas_oportunidades o
+     INNER JOIN administracion_clientes c ON c.id = o.cliente_id
+     INNER JOIN ventas_etapasconversion e ON e.id = o.etapasconversion_id
+     INNER JOIN (
+       SELECT detail.*
+       FROM ventas_oportunidades_detalles detail
+       INNER JOIN (
+         SELECT oportunidad_padre_id, MAX(id) AS max_id
+         FROM ventas_oportunidades_detalles
+         WHERE fecha_agenda IS NOT NULL
+         GROUP BY oportunidad_padre_id
+       ) latest_detail ON latest_detail.max_id = detail.id
+     ) d ON d.oportunidad_padre_id = o.id
+     WHERE (${prefixWhere})
+       ${canViewAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)"}
+       AND LOWER(e.nombre) NOT LIKE '%cerrad%'
+       AND TIMESTAMP(d.fecha_agenda, COALESCE(d.hora_agenda, '00:00:00')) < NOW()`,
+    params
+  );
+
+  for (const row of rows) {
+    const recipients = Array.from(new Set([row.created_by, row.asignado_a].filter(Boolean).map(Number)));
+    if (!recipients.length) continue;
+
+    const url = `/oportunidades/${row.id}`;
+    const title = `Agenda vencida: ${row.oportunidad_id}`;
+    const agendaText = `${datePart(row.fecha_agenda)} ${timePart(row.hora_agenda)}`.trim();
+    const message = `La agenda de ${row.oportunidad_id} (${String(row.cliente_nombre || "").trim() || "cliente sin nombre"}) ya se vencio. Fecha agendada: ${agendaText}. Revisa la oportunidad.`;
+    const [[existing]] = await pool.query(
+      `SELECT id FROM notificaciones WHERE titulo = ? AND url = ? LIMIT 1`,
+      [title, url]
+    );
+
+    let notificationId = existing?.id;
+    if (!notificationId) {
+      const [result] = await pool.query(
+        `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by, created_at, updated_at)
+         VALUES (
+           ?, ?, 'warning', 'CalendarClock', ?,
+           (SELECT id FROM administracion_usuarios WHERE username = 'admin' OR fullname = 'Super Administrador' ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, id ASC LIMIT 1),
+           NOW(), NOW()
+         )`,
+        [title, message, url]
+      );
+      notificationId = result.insertId;
+    }
+
+    await pool.query(
+      `INSERT IGNORE INTO notificacion_usuarios (notificacion_id, usuario_id) VALUES ?`,
+      [recipients.map((recipientId) => [notificationId, recipientId])]
+    );
+  }
+}
+
 export async function GET(request) {
   try {
     const user = await getCurrentUser();
@@ -85,6 +151,7 @@ export async function GET(request) {
     const canViewAll = canSeeAll(user, config.permission);
     const canViewAllClients = canSeeAllClients(user);
     const prefixFilters = config.listPrefixes.map((prefix) => `${prefix}-%`);
+    await ensureOverdueAgendaNotifications({ user, config, canViewAll, prefixFilters });
     const prefixWhere = prefixFilters.map(() => "o.oportunidad_id LIKE ?").join(" OR ");
     const [opportunityRows] = await pool.query(
       `SELECT o.id, o.oportunidad_id, o.cliente_id, o.origen_id, o.suborigen_id, o.etapasconversion_id,

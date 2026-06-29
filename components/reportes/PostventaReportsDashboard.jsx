@@ -7,6 +7,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Funnel,
+  FunnelChart,
+  LabelList,
   Line,
   LineChart as RechartsLineChart,
   Pie,
@@ -19,16 +22,22 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const COLORS = ["#188ff2", "#df3f4f", "#1429a6", "#ec6a2e", "#8b0fa8", "#d83eb5", "#6e48c7", "#1ea34a", "#e4bd00", "#0f766e"];
+const STAGE_COLORS = ["#ee6b2f", "#209947", "#e3bb00", "#d9435d", "#7148c7", "#188ff2", "#8b0fa8"];
 const EMPTY = "(En blanco)";
 
 function clean(value, fallback = EMPTY) {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function hasRealValue(value) {
+  const text = String(value ?? "").trim();
+  return Boolean(text && text !== EMPTY);
 }
 
 function readDate(value) {
@@ -59,6 +68,74 @@ function yearKey(value) {
 
 function dayNumber(key) {
   return String(Number(String(key || "").slice(8, 10)) || "");
+}
+
+function dateFromKey(key) {
+  const [year, month, day] = String(key || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function dateKeyFromParts(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function workdayWeight(date) {
+  const day = date.getDay();
+  if (day >= 1 && day <= 5) return 1;
+  if (day === 6) return 0.5;
+  return 0;
+}
+
+function laborableDaysBetween(startKey, endKey) {
+  const start = dateFromKey(startKey);
+  const end = dateFromKey(endKey);
+  if (!start || !end || start > end) return 0;
+  let total = 0;
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    total += workdayWeight(cursor);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return total;
+}
+
+function dateRangeForContext(filters, records) {
+  if (filters.dateLevel === "day" && filters.dateValue) return { start: filters.dateValue, end: filters.dateValue };
+  if (filters.dateLevel === "month" && filters.dateValue) {
+    const [year, month] = filters.dateValue.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return { start: dateKeyFromParts(year, month, 1), end: dateKeyFromParts(year, month, lastDay) };
+  }
+  if (filters.dateLevel === "year" && filters.dateValue) return { start: `${filters.dateValue}-01-01`, end: `${filters.dateValue}-12-31` };
+  const days = records.map((item) => item.day).filter(Boolean).sort();
+  if (!days.length) return { start: "", end: "" };
+  return { start: days[0], end: days[days.length - 1] };
+}
+
+function todayKey() {
+  const today = new Date();
+  return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
+}
+
+function minDateKey(a, b) {
+  if (!a) return b || "";
+  if (!b) return a || "";
+  return a <= b ? a : b;
+}
+
+function laborableDaysForContext(filters, records) {
+  const range = dateRangeForContext(filters, records);
+  if (!range.start || !range.end) return 0;
+  return laborableDaysBetween(range.start, range.end);
+}
+
+function elapsedLaborableDaysForContext(filters, records) {
+  const range = dateRangeForContext(filters, records);
+  if (!range.start || !range.end) return 0;
+  const elapsedEnd = minDateKey(range.end, todayKey());
+  if (elapsedEnd < range.start) return 0;
+  return laborableDaysBetween(range.start, elapsedEnd);
 }
 
 function monthNameFromNumber(month) {
@@ -95,10 +172,34 @@ function avg(values) {
   return valid.reduce((sum, value) => sum + Number(value), 0) / valid.length;
 }
 
+function isEffectiveAppointment(value) {
+  const status = String(value || "").toLowerCase().trim();
+  return ["finalizada", "finalizado", "cita efectiva", "efectiva", "orden creada", "realizada", "realizado", "atendida", "atendido", "completada", "completado"].includes(status);
+}
+
+function isRescheduledAppointment(value) {
+  return String(value || "").toLowerCase().includes("reprogram");
+}
+
+function platformUseScore(record) {
+  const required = [
+    record.code,
+    record.client,
+    record.clientType,
+    record.vehicle,
+    record.stage,
+    record.origin,
+    record.advisor,
+    record.createdAt,
+  ];
+  return required.every((value) => clean(value, "") !== "") ? 1 : 0;
+}
+
 function groupCount(records, key, limit = 10) {
   const map = new Map();
   records.forEach((record) => {
     const label = clean(typeof key === "function" ? key(record) : record[key]);
+    if (!hasRealValue(label)) return;
     map.set(label, (map.get(label) || 0) + 1);
   });
   return Array.from(map.entries())
@@ -131,6 +232,8 @@ function buildRecords(rows) {
     const citaRows = uniqueRows(group, (row) => row.cita_id);
     const viewRows = uniqueRows(group, (row) => row.cotizacion_vista_id);
     const close = latestRow(group.filter((row) => row.cierre_created_at), "cierre_created_at");
+    const effectiveCitaRows = citaRows.filter((row) => isEffectiveAppointment(row.cita_estado));
+    const reprogrammedCitaRows = citaRows.filter((row) => isRescheduledAppointment(row.cita_estado));
     const vehicle = [base.vehiculo_marca, base.vehiculo_modelo].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
     const plate = clean(base.vehiculo_placa || base.vehiculo_vin, "");
     const center = clean(base.cotizacion_centro || base.cita_centro || base.cita_taller || base.cotizacion_taller || base.cotizacion_mostrador);
@@ -145,6 +248,7 @@ function buildRecords(rows) {
       advisor: clean(base.usuario_asignado_nombre || base.cita_asesor_nombre || base.cotizacion_usuario_nombre || base.usuario_asignado_username, "Sin asesor"),
       client: clean(base.nombreapellidocliente),
       clientType: clean(base.tipoidentificacioncliente),
+      model: clean(base.vehiculo_modelo),
       vehicle,
       vehicleDetail: plate ? `${vehicle} / ${plate}` : vehicle,
       stage: clean(base.etapa_nombre),
@@ -155,7 +259,12 @@ function buildRecords(rows) {
       quoteTotal: quoteRows.reduce((sum, row) => sum + moneyNumber(row.cotizacion_monto_total), 0),
       productCount: uniqueCount(group.map((row) => row.cotizacion_producto_id)),
       appointmentCount: citaRows.length,
+      reprogramCount: reprogrammedCitaRows.length,
+      effectiveAppointmentCount: effectiveCitaRows.length,
+      daysToAppointments: citaRows.map((row) => daysBetween(base.fechacreacionoportunidadpv, row.cita_start_at || row.cita_created_at)),
+      daysToEffectiveAppointments: effectiveCitaRows.map((row) => daysBetween(base.fechacreacionoportunidadpv, row.cita_start_at || row.cita_created_at)),
       viewCount: viewRows.length,
+      virtualQuoteCount: quoteRows.filter((row) => clean(row.cotizacion_public_token, "") !== "").length,
       closureReason: clean(close.cierre_detalle || base.cierre_detalle),
       closedAt: close.cierre_created_at,
       daysToClose: daysBetween(base.fechacreacionoportunidadpv, close.cierre_created_at),
@@ -276,6 +385,7 @@ export default function PostventaReportsDashboard() {
 
   const records = useMemo(() => buildRecords(rows), [rows]);
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
+  const reportRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.code)), [filteredRecords]);
   const selectable = useMemo(() => ({
     months: Array.from(new Set(records.map((item) => item.month).filter(Boolean))).sort().reverse(),
     advisors: groupCount(records, "advisor", 100).map((item) => item.name).sort((a, b) => a.localeCompare(b)),
@@ -286,33 +396,49 @@ export default function PostventaReportsDashboard() {
   const vehicleTree = useMemo(() => buildVehicleTree(records), [records]);
 
   const kpis = useMemo(() => {
-    const activeDays = uniqueCount(filteredRecords.map((item) => item.day)) || 1;
+    const prospectDays = laborableDaysForContext(filters, reportRecords) || 1;
+    const elapsedProspectDays = elapsedLaborableDaysForContext(filters, reportRecords) || 1;
+    const appointmentDays = reportRecords.flatMap((item) => item.daysToAppointments || []);
+    const effectiveAppointmentDays = reportRecords.flatMap((item) => item.daysToEffectiveAppointments || []);
+    const platformBase = reportRecords.length;
+    const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
+    const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
     return {
-      opportunities: filteredRecords.length,
-      perDay: filteredRecords.length / activeDays,
-      quotes: filteredRecords.reduce((sum, item) => sum + item.quoteCount, 0),
-      quoted: filteredRecords.reduce((sum, item) => sum + item.quoteTotal, 0),
-      appointments: filteredRecords.reduce((sum, item) => sum + item.appointmentCount, 0),
-      products: filteredRecords.reduce((sum, item) => sum + item.productCount, 0),
-      views: filteredRecords.reduce((sum, item) => sum + item.viewCount, 0),
-      followUp: filteredRecords.filter((item) => item.followUp).length,
-      closed: filteredRecords.filter((item) => item.closedAt).length,
-      daysClose: avg(filteredRecords.map((item) => item.daysToClose)),
+      opportunities: reportRecords.length,
+      managed: reportRecords.filter((item) => item.followUp || item.quoteCount || item.appointmentCount || item.closedAt).length,
+      projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
+      quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
+      quoted: reportRecords.reduce((sum, item) => sum + item.quoteTotal, 0),
+      reprogrammed: reportRecords.reduce((sum, item) => sum + item.reprogramCount, 0),
+      appointments: reportRecords.reduce((sum, item) => sum + item.appointmentCount, 0),
+      notCompletedAppointments: notCompletedAppointmentCount,
+      notCompletedAppointmentsPercent: scheduledOpportunityCount ? (notCompletedAppointmentCount / scheduledOpportunityCount) * 100 : 0,
+      daysAppointment: avg(appointmentDays),
+      effectiveAppointments: reportRecords.reduce((sum, item) => sum + item.effectiveAppointmentCount, 0),
+      daysEffective: avg(effectiveAppointmentDays),
+      products: reportRecords.reduce((sum, item) => sum + item.productCount, 0),
+      views: reportRecords.reduce((sum, item) => sum + item.viewCount, 0),
+      virtualQuotes: reportRecords.reduce((sum, item) => sum + item.virtualQuoteCount, 0),
+      followUp: reportRecords.filter((item) => item.followUp).length,
+      closed: reportRecords.filter((item) => item.closedAt).length,
+      daysClose: avg(reportRecords.map((item) => item.daysToClose)),
       withoutOpportunity: vehiclesWithoutOpportunity,
+      platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [filteredRecords, vehiclesWithoutOpportunity]);
+  }, [reportRecords, filters, vehiclesWithoutOpportunity]);
 
   const charts = useMemo(() => ({
-    stage: groupCount(filteredRecords, "stage", 8),
-    advisor: groupCount(filteredRecords, "advisor", 8),
-    vehicle: groupCount(filteredRecords, "vehicle", 8),
-    service: groupCount(filteredRecords, "service", 8),
-    center: groupCount(filteredRecords, "center", 8),
-    origin: groupCount(filteredRecords, "origin", 8),
-    clientType: groupCount(filteredRecords, "clientType", 8),
-    closureReason: groupCount(filteredRecords, "closureReason", 6),
-    days: lineByDay(filteredRecords),
-  }), [filteredRecords]);
+    model: groupCount(reportRecords, "model", 8),
+    stage: groupCount(reportRecords, "stage", 8),
+    advisor: groupCount(reportRecords, "advisor", 8),
+    vehicle: groupCount(reportRecords, "vehicle", 8),
+    service: groupCount(reportRecords, "service", 8),
+    center: groupCount(reportRecords, "center", 8),
+    origin: groupCount(reportRecords, "origin", 8),
+    clientType: groupCount(reportRecords, "clientType", 8),
+    closureReason: groupCount(reportRecords, "closureReason", 6),
+    days: lineByDay(reportRecords),
+  }), [reportRecords]);
 
   function toggleChartFilter(field, value) {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
@@ -334,7 +460,7 @@ export default function PostventaReportsDashboard() {
         </aside>
         <main className="min-w-0 p-2">
           <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
-          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[260px_220px_260px_170px_1fr]">
+          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_1fr_92px]">
             <DateTreeFilter valueLevel={filters.dateLevel} value={filters.dateValue} tree={dateTree} onChange={(dateLevel, dateValue) => setFilters((current) => ({ ...current, dateLevel, dateValue }))} />
             <FilterBox label="Asesor" value={filters.advisor} onChange={(value) => setFilters((current) => ({ ...current, advisor: value }))} options={[["", "Todas"], ...selectable.advisors.map((item) => [item, item])]} />
             <VehicleTreeFilter valueLevel={filters.vehicleLevel} value={filters.vehicleValue} tree={vehicleTree} onChange={(vehicleLevel, vehicleValue) => setFilters((current) => ({ ...current, vehicleLevel, vehicleValue }))} />
@@ -344,6 +470,10 @@ export default function PostventaReportsDashboard() {
                 <RotateCcw className="size-4" /> Limpiar
               </Button>
             </div>
+            <div className="rounded-md bg-white p-2 text-center shadow-sm">
+              <p className="text-[10px] font-bold text-slate-500">Uso Plataforma</p>
+              <p className="text-2xl font-bold">{formatNumber(kpis.platformUse, 0)} %</p>
+            </div>
           </section>
           </Card>
 
@@ -352,24 +482,25 @@ export default function PostventaReportsDashboard() {
             <ReportsLoadingState />
           ) : (
             <>
-              <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-5 xl:grid-cols-11">
+              <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-12">
                 <Kpi title="Oportunidades" value={formatNumber(kpis.opportunities)} />
-                <Kpi title="Oport/Dia" value={formatNumber(kpis.perDay, 1)} />
+                <Kpi title="Gestionadas" value={formatNumber(kpis.managed)} />
+                <Kpi title="Proyectado" value={formatNumber(kpis.projected)} />
                 <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} />
-                <Kpi title="Total Cotizado" value={formatNumber(kpis.quoted)} />
-                <Kpi title="Citas" value={formatNumber(kpis.appointments)} />
-                <Kpi title="Productos" value={formatNumber(kpis.products)} />
+                <Kpi title="Reprogramaciones" value={formatNumber(kpis.reprogrammed)} />
+                <Kpi title="Agendamientos" value={formatNumber(kpis.appointments)} />
+                <Kpi title="No concretaron" value={`${formatNumber(kpis.notCompletedAppointments)} / ${formatNumber(kpis.notCompletedAppointmentsPercent, 1)}%`} />
+                <Kpi title="Días Agendamiento" value={formatNumber(kpis.daysAppointment, 1)} />
+                <Kpi title="Efectiva" value={`${formatNumber(kpis.effectiveAppointments)} / ${formatNumber(kpis.daysEffective, 1)} d`} />
+                <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} />
                 <Kpi title="Total Vistas" value={formatNumber(kpis.views)} />
                 <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} />
-                <Kpi title="Cerradas" value={formatNumber(kpis.closed)} />
-                <Kpi title="Dias Cierre" value={formatNumber(kpis.daysClose, 2)} />
-                <Kpi title="Sin Oportunidad" value={formatNumber(kpis.withoutOpportunity)} />
               </section>
 
               <section className="grid gap-2 xl:grid-cols-[1fr_1fr_1fr_1fr]">
-                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><BarList data={charts.stage} field="stage" active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Oportunidad por Modelo" summary={chartSummary(charts.model, "modelo")} onFocus={() => setFocusChart("model")}><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Asesor" summary={chartSummary(charts.advisor, "asesor")} onFocus={() => setFocusChart("advisor")}><BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Vehiculo" summary={chartSummary(charts.vehicle, "vehiculo")} onFocus={() => setFocusChart("vehicle")}><Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Servicio" summary={chartSummary(charts.service, "servicio")} onFocus={() => setFocusChart("service")}><Donut data={charts.service} field="service" active={chartFilters.service} onSelect={toggleChartFilter} /></Panel>
               </section>
 
@@ -432,18 +563,22 @@ function ReportsLoadingState() {
 }
 
 function FilterBox({ label, value, onChange, options }) {
-  const emptyValue = "Todos";
+  const normalizedOptions = options.map(([optionValue, optionLabel]) => ({
+    value: optionValue || "",
+    label: optionLabel || "Todas",
+  }));
   return (
     <div className="rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
       <Label className="mb-1 block text-sm font-bold text-slate-900">{label}</Label>
-      <Select value={value || emptyValue} onValueChange={(nextValue) => onChange(nextValue === emptyValue ? "" : nextValue)}>
-        <SelectTrigger className="h-8 w-full bg-slate-100 text-xs font-medium text-slate-700">
-          <SelectValue placeholder="Todas" />
-        </SelectTrigger>
-        <SelectContent align="start" className="max-h-72">
-          {options.map(([optionValue, optionLabel]) => <SelectItem key={optionValue || emptyValue} value={optionValue || emptyValue}>{optionLabel || emptyValue}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <SearchableSelect
+        value={value || ""}
+        options={normalizedOptions}
+        placeholder="Todas"
+        searchPlaceholder={`Buscar ${label.toLowerCase()}...`}
+        emptyText="Sin resultados"
+        className="h-8 bg-slate-100 text-xs font-medium text-slate-700"
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -560,7 +695,8 @@ function lineSummary(data) {
 function FocusChartDialog({ chartKey, charts, chartFilters, onClose, onSelect }) {
   if (!chartKey) return null;
   const config = {
-    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa"), content: <BarList data={charts.stage} field="stage" active={chartFilters.stage} onSelect={onSelect} /> },
+    model: { title: "Oportunidad por Modelo", summary: chartSummary(charts.model, "modelo"), content: <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={onSelect} /> },
+    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa"), content: <StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={onSelect} /> },
     advisor: { title: "Asesor", summary: chartSummary(charts.advisor, "asesor"), content: <BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={onSelect} /> },
     vehicle: { title: "Vehiculo", summary: chartSummary(charts.vehicle, "vehiculo"), content: <Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={onSelect} /> },
     service: { title: "Tipo de Servicio", summary: chartSummary(charts.service, "servicio"), content: <Donut data={charts.service} field="service" active={chartFilters.service} onSelect={onSelect} /> },
@@ -600,6 +736,53 @@ function BarList({ data, field, active, onSelect }) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+function StageFunnel({ data, active, onSelect, field = "stage" }) {
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const percentData = data.map((item) => ({
+    ...item,
+    percent: total ? (Number(item.value || 0) / total) * 100 : 0,
+    centerLabel: `${formatNumber(item.value)} - ${formatNumber(total ? (Number(item.value || 0) / total) * 100 : 0, 1)}%`,
+  }));
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <FunnelChart margin={{ top: 10, right: 8, bottom: 10, left: 8 }}>
+        <Tooltip
+          itemSorter={() => 0}
+          formatter={(value, name, item) => [
+            `${formatNumber(item?.payload?.value)} de ${formatNumber(total)} / ${formatNumber(value, 1)}%`,
+            "Etapa",
+          ]}
+        />
+        <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect(field, entry.name)}>
+          <LabelList position="right" fill="#475569" stroke="none" dataKey="name" fontSize={11} />
+          <LabelList content={<StageCenterLabel />} />
+          {percentData.map((entry, index) => (
+            <Cell key={entry.name} fill={STAGE_COLORS[index % STAGE_COLORS.length]} opacity={!active || active === entry.name ? 1 : 0.3} className="cursor-pointer" />
+          ))}
+        </Funnel>
+      </FunnelChart>
+    </ResponsiveContainer>
+  );
+}
+
+function StageCenterLabel(props) {
+  const box = props.viewBox || {};
+  const x = Number(props.x ?? box.x ?? 0);
+  const y = Number(props.y ?? box.y ?? 0);
+  const width = Number(props.width ?? box.width ?? 0);
+  const height = Number(props.height ?? box.height ?? 0);
+  const payload = props.payload || {};
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const compact = height < 54;
+
+  return (
+    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={compact ? 9 : 11} fontWeight={800} pointerEvents="none">
+      <tspan>{payload.centerLabel}</tspan>
+    </text>
   );
 }
 

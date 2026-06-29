@@ -17,7 +17,8 @@ const REPORTS = [
     category: "Ventas",
     href: "/reportes/ventas",
     icon: Database,
-    permissions: [["oportunidades", "viewall"], ["cotizacion", "viewall"], ["reservas", "viewall"]],
+    permissions: [["reportes", "view"], ["home", "view"], ["home", "ventas"]],
+    requireAllPermissions: true,
     badge: "Dashboard",
   },
   {
@@ -27,7 +28,8 @@ const REPORTS = [
     category: "Posventa",
     href: "/reportes/posventa",
     icon: Wrench,
-    permissions: [["oportunidadespv", "viewall"], ["ordenespv", "viewall"]],
+    permissions: [["reportes", "view"], ["home", "view"], ["home", "posventa"]],
+    requireAllPermissions: true,
     badge: "Dashboard",
   },
   {
@@ -95,6 +97,9 @@ const REPORTS = [
 const CATEGORIES = ["Todos", "Ventas", "Posventa"];
 
 function canSeeReport(userPermissions, report) {
+  if (report.requireAllPermissions) {
+    return report.permissions.every((permission) => hasPerm(userPermissions, permission));
+  }
   return report.permissions.some((permission) => hasPerm(userPermissions, permission));
 }
 

@@ -7,6 +7,14 @@ import { getCurrentUser } from "@/lib/server/getCurrentUser";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function creatorLabel(row) {
+  if (!row?.created_by) return "";
+  const username = String(row.creator_username || "").trim().toLowerCase();
+  const name = String(row.creator_name || "").trim();
+  if (username === "admin" || name.toLowerCase() === "super administrador") return "El sistema lo realizo";
+  return name || row.creator_username || `Usuario ${row.created_by}`;
+}
+
 function limitParam(value) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return 10;
@@ -55,6 +63,9 @@ export async function GET(request) {
           n.tipo,
           n.icono,
           n.url,
+          n.created_by,
+          COALESCE(creator.fullname, creator.username) AS creator_name,
+          creator.username AS creator_username,
           n.created_at,
           n.updated_at,
           COALESCE(MAX(nu.leida), n.leida, 0) AS leida,
@@ -66,6 +77,8 @@ export async function GET(request) {
        LEFT JOIN notificacion_roles nr
          ON nr.notificacion_id = n.id
         AND nr.role_id = ?
+       LEFT JOIN administracion_usuarios creator
+         ON creator.id = n.created_by
        WHERE (nu.usuario_id IS NOT NULL OR nr.role_id IS NOT NULL)
          AND n.created_at <= NOW()
        GROUP BY n.id
@@ -83,6 +96,8 @@ export async function GET(request) {
       url: row.url || "",
       read: Boolean(row.leida),
       readAt: row.leida_at,
+      createdBy: row.created_by,
+      createdByName: creatorLabel(row),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -167,9 +182,9 @@ export async function POST(request) {
 
     await connection.beginTransaction();
     const [result] = await connection.query(
-      `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url)
-       VALUES (?, ?, ?, ?, ?)`,
-      [payload.title, payload.message, payload.type, payload.icon, payload.url]
+      `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [payload.title, payload.message, payload.type, payload.icon, payload.url, user.id]
     );
 
     if (payload.roleIds.length) {

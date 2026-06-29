@@ -108,8 +108,12 @@ async function createMaintenanceReminderNotification(connection, roleId, vehicle
   const titulo = "Recordatorio de mantenimiento";
   const mensaje = `El vehiculo ${vehicle.vehiculo} del cliente ${vehicle.clienteNombre} tiene proximo mantenimiento el ${proximo}. Faltan ${Number(days)} dias.`;
   const [result] = await connection.query(
-    `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_at, updated_at)
-     VALUES (?, ?, 'warning', 'wrench', ?, ?, ?)`,
+    `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by, created_at, updated_at)
+     VALUES (
+       ?, ?, 'warning', 'wrench', ?,
+       (SELECT id FROM administracion_usuarios WHERE username = 'admin' OR fullname = 'Super Administrador' ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, id ASC LIMIT 1),
+       ?, ?
+     )`,
     [titulo, mensaje, url, sendDate, sendDate]
   );
   await connection.query(
@@ -242,6 +246,11 @@ export async function GET(request) {
       where.push("(cierre.detalle IS NOT NULL OR cierre_config.detalle IS NOT NULL)");
     } else if (status === "Sin historial") {
       where.push("NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)");
+    } else if (status === "Ventas sin mantenimiento") {
+      where.push(
+        `sales_vehicle.reserva_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)`
+      );
     } else if (status === "Sin algoritmo") {
       where.push(
         `EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)
@@ -298,6 +307,13 @@ export async function GET(request) {
          WHERE latest_close.rn=1
        ) cierre ON cierre.oportunidad_id=opp.id
        LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id=cierre.cierre_detalle_id
+       LEFT JOIN (
+         SELECT rd.vin, MAX(r.id) AS reserva_id
+         FROM ventas_reserva_detalles rd
+         INNER JOIN ventas_reservas r ON r.id=rd.reserva_id
+         WHERE rd.vin IS NOT NULL AND rd.vin <> ''
+         GROUP BY rd.vin
+       ) sales_vehicle ON sales_vehicle.vin=v.vin
        ${whereSql}`;
 
     const [[countRow]] = await pool.query(
@@ -316,7 +332,8 @@ export async function GET(request) {
           av.kilometraje AS algoritmo_km, av.meses AS algoritmo_meses, av.anios AS algoritmo_anios,
           opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
           od.fecha_agenda, od.hora_agenda,
-          cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo
+          cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo,
+          sales_vehicle.reserva_id AS ventas_reserva_id
        ${baseFrom}
        ORDER BY c.nombre ASC, v.id DESC
        LIMIT ? OFFSET ?`,
@@ -541,6 +558,8 @@ export async function GET(request) {
         recordatorio: reminderDate ? datePart(reminderDate) : "",
         estadoRecordatorio,
         cierreMotivo: row.cierre_motivo || row.cierre_detalle || "",
+        ventasReservaId: row.ventas_reserva_id || null,
+        ventasSinMantenimiento: Boolean(row.ventas_reserva_id && !hasHistory),
 
         oportunidadId: row.oportunidad_abierta_id,
         oportunidadCodigo: row.oportunidad_codigo || "",

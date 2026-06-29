@@ -252,6 +252,8 @@ export default function MaintenanceDuePage({ userPermissions }) {
               options={[
                 { value: "", label: "Todos" },
                 { value: "Vencido", label: "Vencido" },
+                { value: "Ventas sin mantenimiento", label: "Ventas sin mantenimiento" },
+                { value: "Sin historial", label: "Sin historial" },
                 { value: "Pendiente contacto", label: "Pendiente contacto" },
                 { value: "Programado", label: "Programado" },
                 { value: "Sin algoritmo", label: "Sin algoritmo" },
@@ -341,7 +343,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
 
             <tbody className="divide-y">
               {rows.map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id} className={item.ventasSinMantenimiento ? "bg-yellow-50" : ""}>
                   <td className="px-3 py-3 align-top">
                     <div className="flex items-start gap-2">
                       <Button size="icon-sm" variant="outline" onClick={() => setClientDetail(item)}>
@@ -358,6 +360,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
                       </Button><span className="line-clamp-2 min-w-0 whitespace-normal break-words leading-snug">{item.vehiculo}</span>
                       
                     </div>
+                    {item.ventasSinMantenimiento ? <p className="mt-1 inline-flex rounded-full border border-yellow-300 bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-800">Venta sin mantenimiento</p> : null}
                     {item.vin ? <p className="mt-1 text-xs font-medium text-slate-500">VIN: {item.vin}</p> : null}
                   </td>
 
@@ -427,7 +430,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
             </thead>
             <tbody className="divide-y">
               {rows.map((item) => (
-                <tr key={item.id} className="align-top">
+                <tr key={item.id} className={`align-top ${item.ventasSinMantenimiento ? "bg-yellow-50" : ""}`}>
                   <td className="px-2 py-3">
                     <button type="button" className="line-clamp-2 text-left text-[11px] font-bold leading-tight text-slate-950" onClick={() => setClientDetail(item)}>
                       {item.clienteNombre}
@@ -435,6 +438,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
                     <button type="button" className="mt-1 line-clamp-2 text-left text-[10px] font-medium leading-tight text-slate-500" onClick={() => setVehicleDetail(item)}>
                       {item.vehiculo}
                     </button>
+                    {item.ventasSinMantenimiento ? <p className="mt-1 inline-flex rounded-full border border-yellow-300 bg-yellow-100 px-1.5 py-0.5 text-[9px] font-bold text-yellow-800">Venta sin mantenimiento</p> : null}
                     {item.vin ? <p className="mt-1 truncate text-[9px] text-slate-400">VIN: {item.vin}</p> : null}
                   </td>
                   <td className="px-2 py-3">

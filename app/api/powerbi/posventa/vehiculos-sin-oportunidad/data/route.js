@@ -139,17 +139,19 @@ function hasPowerBiToken(request) {
 function canReadPowerBiPosventaVehicles(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["oportunidadespv", "view"]) ||
-    hasPerm(permissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(permissions, ["leadspv", "view"]) ||
-      hasPerm(permissions, ["leadspv", "viewall"]) ||
-      hasPerm(permissions, ["clientes", "view"]) ||
-      hasPerm(permissions, ["clientes", "viewall"])
+    hasPerm(permissions, ["reportes", "view"]) &&
+      hasPerm(permissions, ["home", "view"]) &&
+      hasPerm(permissions, ["home", "posventa"])
   );
+}
+
+function canViewAllDashboard(user) {
+  return Boolean(hasPerm(user?.permissions || {}, ["home", "viewall"]));
 }
 
 export async function GET(request) {
   try {
+    let scopeUserId = null;
     if (!hasPowerBiToken(request)) {
       const user = await getCurrentUser();
       if (!user) {
@@ -157,6 +159,9 @@ export async function GET(request) {
       }
       if (!canReadPowerBiPosventaVehicles(user)) {
         return NextResponse.json({ message: "No tienes permiso para consultar vehiculos sin oportunidad de PostVenta." }, { status: 403 });
+      }
+      if (!canViewAllDashboard(user)) {
+        scopeUserId = user.id;
       }
     }
 
@@ -174,6 +179,11 @@ export async function GET(request) {
       "NOT EXISTS (SELECT 1 FROM posventa_oportunidades o WHERE o.vehiculo_id = v.id)",
     ];
     const params = [];
+
+    if (scopeUserId) {
+      where.push("c.created_by = ?");
+      params.push(scopeUserId);
+    }
 
     if (query) {
       const like = `%${query}%`;

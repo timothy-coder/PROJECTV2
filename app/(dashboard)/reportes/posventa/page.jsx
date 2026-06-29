@@ -7,9 +7,8 @@ export default async function Page() {
   const permissions = user?.permissions || {};
   const canView =
     hasPerm(permissions, ["reportes", "view"]) &&
-    (hasPerm(permissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(permissions, ["ordenespv", "viewall"]) ||
-      hasPerm(permissions, ["leadspv", "viewall"]));
+    hasPerm(permissions, ["home", "view"]) &&
+    hasPerm(permissions, ["home", "posventa"]);
 
   if (!canView) {
     return <div className="p-4 text-sm font-bold text-slate-700">No tienes permiso para ver este dashboard.</div>;

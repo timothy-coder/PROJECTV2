@@ -64,6 +64,78 @@ async function closedStageId(connection) {
   return rows[0]?.id || await stageIdByName(connection, "Cerrada");
 }
 
+async function ensureOverduePostventaAgendaNotifications({ user, config, canAll }) {
+  const params = [`${config.prefix}-%`];
+  const scopeSql = canAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)";
+  if (!canAll) params.push(user.id, user.id);
+
+  const [rows] = await pool.query(
+    `SELECT
+        o.id,
+        o.oportunidad_id,
+        o.created_by,
+        o.asignado_a,
+        CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
+        d.fecha_agenda,
+        d.hora_agenda,
+        e.nombre AS etapa_nombre
+     FROM posventa_oportunidades o
+     INNER JOIN administracion_clientes c ON c.id = o.cliente_id
+     INNER JOIN configuracion_posventa_etapasconversion e ON e.id = o.etapasconversionpv_id
+     INNER JOIN (
+       SELECT detail.*
+       FROM posventa_oportunidades_detalles detail
+       INNER JOIN (
+         SELECT oportunidad_padre_id, MAX(id) AS max_id
+         FROM posventa_oportunidades_detalles
+         WHERE fecha_agenda IS NOT NULL AND hora_agenda IS NOT NULL
+         GROUP BY oportunidad_padre_id
+       ) latest_detail ON latest_detail.max_id = detail.id
+     ) d ON d.oportunidad_padre_id = o.id
+     WHERE o.oportunidad_id LIKE ?
+       AND d.fecha_agenda IS NOT NULL
+       AND d.hora_agenda IS NOT NULL
+       AND TIMESTAMP(d.fecha_agenda, d.hora_agenda) < NOW()
+       AND LOWER(COALESCE(e.nombre,'')) NOT LIKE '%cerrad%'
+       ${scopeSql}
+     LIMIT 200`,
+    params
+  );
+
+  for (const row of rows) {
+    const recipients = Array.from(new Set([row.created_by, row.asignado_a].filter(Boolean).map(Number)));
+    if (!recipients.length) continue;
+
+    const url = `/oportunidadespv/${row.id}`;
+    const title = `Agenda vencida: ${row.oportunidad_id}`;
+    const agendaText = `${datePart(row.fecha_agenda)} ${timePart(row.hora_agenda)}`.trim();
+    const message = `La agenda de ${row.oportunidad_id} (${String(row.cliente_nombre || "").trim() || "cliente sin nombre"}) ya se vencio. Fecha agendada: ${agendaText}. Revisa la oportunidad de PostVenta.`;
+    const [[existing]] = await pool.query(
+      `SELECT id FROM notificaciones WHERE titulo = ? AND url = ? LIMIT 1`,
+      [title, url]
+    );
+
+    let notificationId = existing?.id;
+    if (!notificationId) {
+      const [result] = await pool.query(
+        `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by, created_at, updated_at)
+         VALUES (
+           ?, ?, 'warning', 'CalendarClock', ?,
+           (SELECT id FROM administracion_usuarios WHERE username = 'admin' OR fullname = 'Super Administrador' ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, id ASC LIMIT 1),
+           NOW(), NOW()
+         )`,
+        [title, message, url]
+      );
+      notificationId = result.insertId;
+    }
+
+    await pool.query(
+      `INSERT IGNORE INTO notificacion_usuarios (notificacion_id, usuario_id) VALUES ?`,
+      [recipients.map((recipientId) => [notificationId, recipientId])]
+    );
+  }
+}
+
 export async function GET(request) {
   try {
     const user = await getCurrentUser();
@@ -73,6 +145,7 @@ export async function GET(request) {
       return NextResponse.json({ message: `No tienes permiso para ver ${config.label}.` }, { status: 403 });
     }
     const canAll = canSeeAll(user, config.permission);
+    await ensureOverduePostventaAgendaNotifications({ user, config, canAll });
     const searchParams = request.nextUrl.searchParams;
     const page = intParam(searchParams.get("page"), 1, 1, 999999);
     const limit = intParam(searchParams.get("limit"), 10, 1, 100);

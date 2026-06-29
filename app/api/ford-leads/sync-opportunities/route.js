@@ -304,7 +304,49 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
   );
   const changedAt = new Date().toISOString();
   await touchFordLeadModifiedDate(request, lead, changedAt);
+  await notifyFordOpportunityCreated(connection, {
+    opportunityId: oportunidadId,
+    code,
+    token,
+    lead,
+    recipients: [ownerUserId, assignedUserId],
+  });
   return { id: oportunidadId, code, token, assignedUserId, createdBy: ownerUserId, lastModifiedDate: changedAt };
+}
+
+async function notifyFordOpportunityCreated(connection, { opportunityId, code, token, lead, recipients }) {
+  const recipientIds = Array.from(new Set((recipients || []).filter(Boolean).map(Number)));
+  if (!recipientIds.length || !opportunityId || !code) return;
+
+  const contactName = lead?.contact?.name || [lead?.contact?.firstName, lead?.contact?.lastName].filter(Boolean).join(" ") || "cliente sin nombre";
+  const vehicleName = [lead?.vehicle?.model, lead?.vehicle?.version].filter(Boolean).join(" ") || "vehiculo sin modelo";
+  const url = `/oportunidades/${opportunityId}`;
+  const title = `Lead Ford creado: ${code}`;
+  const message = `Se creo la oportunidad ${code} desde el Lead Ford ${token || ""}. Cliente: ${contactName}. Vehiculo: ${vehicleName}.`;
+
+  const [[existing]] = await connection.query(
+    `SELECT id FROM notificaciones WHERE titulo = ? AND url = ? LIMIT 1`,
+    [title, url]
+  );
+
+  let notificationId = existing?.id;
+  if (!notificationId) {
+    const [result] = await connection.query(
+      `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by, created_at, updated_at)
+       VALUES (
+         ?, ?, 'info', 'Ford', ?,
+         (SELECT id FROM administracion_usuarios WHERE username = 'admin' OR fullname = 'Super Administrador' ORDER BY CASE WHEN username = 'admin' THEN 0 ELSE 1 END, id ASC LIMIT 1),
+         NOW(), NOW()
+       )`,
+      [title, message, url]
+    );
+    notificationId = result.insertId;
+  }
+
+  await connection.query(
+    `INSERT IGNORE INTO notificacion_usuarios (notificacion_id, usuario_id) VALUES ?`,
+    [recipientIds.map((recipientId) => [notificationId, recipientId])]
+  );
 }
 
 async function syncFordLeadsToOpportunities(request, { leadIds = [], manualLeadId = "" } = {}) {
