@@ -477,15 +477,15 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const modelTree = useMemo(() => buildModelTree(records), [records]);
 
   const kpis = useMemo(() => {
-    const prospectDays = laborableDaysForContext(filters, countedRecords) || 1;
-    const elapsedProspectDays = elapsedLaborableDaysForContext(filters, countedRecords) || 1;
+    const prospectDays = laborableDaysForContext(filters, filteredRecords) || 1;
+    const elapsedProspectDays = elapsedLaborableDaysForContext(filters, filteredRecords) || 1;
     const quoteCount = countedRecords.reduce((sum, item) => sum + item.quoteCount, 0);
     const virtualQuotes = countedRecords.reduce((sum, item) => sum + item.virtualQuoteCount, 0);
     const platformBase = filteredRecords.length;
     return {
-      prospects: countedRecords.length,
-      prospectsPerDay: countedRecords.length / prospectDays,
-      projected: (countedRecords.length / elapsedProspectDays) * prospectDays,
+      prospects: filteredRecords.length,
+      prospectsPerDay: filteredRecords.length / prospectDays,
+      projected: (filteredRecords.length / elapsedProspectDays) * prospectDays,
       quotes: quoteCount,
       reservations: countedRecords.reduce((sum, item) => sum + item.reservationCount, 0),
       daysReserve: avg(countedRecords.map((item) => item.daysToReservation)),
