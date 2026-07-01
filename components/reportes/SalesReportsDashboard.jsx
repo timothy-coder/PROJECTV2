@@ -113,6 +113,10 @@ function todayKey() {
   return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
 }
 
+function currentMonthKey() {
+  return todayKey().slice(0, 7);
+}
+
 function minDateKey(a, b) {
   if (!a) return b || "";
   if (!b) return a || "";
@@ -417,11 +421,11 @@ function filterRecords(records, filters, chartFilters) {
   });
 }
 
-export default function SalesReportsDashboard() {
+export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [filters, setFilters] = useState({ dateLevel: "", dateValue: "", advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
+  const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
   const [chartFilters, setChartFilters] = useState({});
   const [focusChart, setFocusChart] = useState(null);
   const [blankModelOpen, setBlankModelOpen] = useState(false);
@@ -536,7 +540,7 @@ export default function SalesReportsDashboard() {
       <div className="min-h-[calc(100svh-1rem)]">
         <main className="min-w-0 p-2">
           <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
-          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_180px_1fr_92px]">
+          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_180px_auto_1fr_92px]">
             <DateTreeFilter
               valueLevel={filters.dateLevel}
               value={filters.dateValue}
@@ -566,6 +570,7 @@ export default function SalesReportsDashboard() {
               searchPlaceholder="Buscar etapa..."
             />
             <CodeTypeFilter value={filters.codeType} available={availableCodeTypes} onChange={(value) => setFilters((current) => ({ ...current, codeType: value }))} />
+            {viewSwitcher ? <div className="flex items-end">{viewSwitcher}</div> : null}
             <div className="flex items-end justify-end">
               <Button type="button" variant="outline" size="lg" className="h-9 w-full bg-white text-violet-700 shadow-sm hover:bg-violet-50 sm:w-auto" onClick={clearAll}>
                 <RotateCcw className="size-4" /> Limpiar

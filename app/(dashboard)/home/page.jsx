@@ -1,5 +1,4 @@
-import PostventaReportsDashboard from "@/components/reportes/PostventaReportsDashboard";
-import SalesReportsDashboard from "@/components/reportes/SalesReportsDashboard";
+import { HomeReportsTabs } from "@/components/home/HomeReportsTabs";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -37,31 +36,5 @@ export default async function HomePage() {
     );
   }
 
-  return (
-    <main className="min-w-0 bg-slate-50">
-      {showSales ? (
-        <section id="home-ventas">
-          {showPostventa ? (
-            <div className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur">
-              <h1 className="text-base font-bold leading-tight text-violet-700">Dashboard Ventas</h1>
-              <p className="mt-0.5 text-xs font-medium text-violet-400">Home segun permisos de ventas</p>
-            </div>
-          ) : null}
-          <SalesReportsDashboard />
-        </section>
-      ) : null}
-
-      {showPostventa ? (
-        <section id="home-posventa" className={showSales ? "mt-3 border-t border-violet-200" : ""}>
-          {showSales ? (
-            <div className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur">
-              <h1 className="text-base font-bold leading-tight text-violet-700">Dashboard Posventa</h1>
-              <p className="mt-0.5 text-xs font-medium text-violet-400">Home segun permisos de posventa</p>
-            </div>
-          ) : null}
-          <PostventaReportsDashboard />
-        </section>
-      ) : null}
-    </main>
-  );
+  return <HomeReportsTabs showSales={showSales} showPostventa={showPostventa} />;
 }

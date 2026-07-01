@@ -118,6 +118,10 @@ function todayKey() {
   return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
 }
 
+function currentMonthKey() {
+  return todayKey().slice(0, 7);
+}
+
 function minDateKey(a, b) {
   if (!a) return b || "";
   if (!b) return a || "";
@@ -333,11 +337,11 @@ function buildVehicleTree(records) {
   }));
 }
 
-export default function PostventaReportsDashboard() {
+export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [filters, setFilters] = useState({ dateLevel: "", dateValue: "", advisor: "", vehicleLevel: "", vehicleValue: "", stage: "" });
+  const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", vehicleLevel: "", vehicleValue: "", stage: "" });
   const [chartFilters, setChartFilters] = useState({});
   const [focusChart, setFocusChart] = useState(null);
   const [vehiclesWithoutOpportunity, setVehiclesWithoutOpportunity] = useState(0);
@@ -454,11 +458,12 @@ export default function PostventaReportsDashboard() {
       <div className="min-h-[calc(100svh-1rem)]">
         <main className="min-w-0 p-2">
           <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
-          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_1fr_92px]">
+          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_auto_1fr_92px]">
             <DateTreeFilter valueLevel={filters.dateLevel} value={filters.dateValue} tree={dateTree} onChange={(dateLevel, dateValue) => setFilters((current) => ({ ...current, dateLevel, dateValue }))} />
             <FilterBox label="Asesor" value={filters.advisor} onChange={(value) => setFilters((current) => ({ ...current, advisor: value }))} options={[["", "Todas"], ...selectable.advisors.map((item) => [item, item])]} />
             <VehicleTreeFilter valueLevel={filters.vehicleLevel} value={filters.vehicleValue} tree={vehicleTree} onChange={(vehicleLevel, vehicleValue) => setFilters((current) => ({ ...current, vehicleLevel, vehicleValue }))} />
             <FilterBox label="Etapa" value={filters.stage} onChange={(value) => setFilters((current) => ({ ...current, stage: value }))} options={[["", "Todas"], ...selectable.stages.map((item) => [item, item])]} />
+            {viewSwitcher ? <div className="flex items-end">{viewSwitcher}</div> : null}
             <div className="flex items-end justify-end">
               <Button type="button" variant="outline" size="lg" className="h-9 w-full bg-white text-violet-700 shadow-sm hover:bg-violet-50 sm:w-auto" onClick={clearAll}>
                 <RotateCcw className="size-4" /> Limpiar
