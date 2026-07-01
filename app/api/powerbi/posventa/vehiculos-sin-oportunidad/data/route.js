@@ -139,14 +139,16 @@ function hasPowerBiToken(request) {
 function canReadPowerBiPosventaVehicles(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["reportes", "view"]) &&
-      hasPerm(permissions, ["home", "view"]) &&
-      hasPerm(permissions, ["home", "posventa"])
+    hasPerm(permissions, ["home", "posventaview"]) ||
+      hasPerm(permissions, ["home", "posventaviewall"]) ||
+      hasPerm(permissions, ["home", "posventa"]) ||
+      hasPerm(permissions, ["home", "viewall"])
   );
 }
 
 function canViewAllDashboard(user) {
-  return Boolean(hasPerm(user?.permissions || {}, ["home", "viewall"]));
+  const permissions = user?.permissions || {};
+  return Boolean(hasPerm(permissions, ["home", "posventaviewall"]) || hasPerm(permissions, ["home", "viewall"]));
 }
 
 export async function GET(request) {

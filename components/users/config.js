@@ -1,5 +1,5 @@
 export const USER_PERMISSION_GROUPS = [
-  { key: "home", label: "Home", actions: ["view", "ventas", "posventa", "viewall"] },
+  { key: "home", label: "Home", actions: ["ventasview", "ventasviewall", "posventaview", "posventaviewall"] },
   { key: "usuarios", label: "Usuarios", actions: ["view", "create", "edit", "delete"] },
   { key: "clientes", label: "Clientes", actions: ["view", "viewall", "create", "edit", "delete", "vehicles", "import", "export", "vehicles_import", "vehicles_export", "maintenance_import", "maintenance_export"] },
   { key: "proveedores", label: "Proveedores", actions: ["view", "create", "edit", "delete"] },

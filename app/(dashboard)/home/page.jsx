@@ -1,55 +1,67 @@
-import { pool } from "@/lib/db";
+import PostventaReportsDashboard from "@/components/reportes/PostventaReportsDashboard";
+import SalesReportsDashboard from "@/components/reportes/SalesReportsDashboard";
+import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
-import { PowerBiLinksSlider } from "@/components/home/PowerBiLinksSlider";
 
 export const dynamic = "force-dynamic";
 
-async function getPowerBiLinks() {
-  try {
-    const user = await getCurrentUser();
-    const roleId = Number(user?.role?.id || 0);
-    const [rows] = await pool.query(
-      `SELECT l.id, l.link, l.is_for_desktop, l.is_for_mobile
-       FROM configuracion_links l
-       WHERE NOT EXISTS (
-          SELECT 1 FROM configuracion_roles_links public_check WHERE public_check.link_id = l.id
-       )
-       OR EXISTS (
-          SELECT 1 FROM configuracion_roles_links role_check WHERE role_check.link_id = l.id AND role_check.role_id = ?
-       )
-       ORDER BY l.id ASC`,
-      [roleId]
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      link: row.link,
-      isForDesktop: Boolean(row.is_for_desktop),
-      isForMobile: Boolean(row.is_for_mobile),
-    }));
-  } catch (error) {
-    console.error("Error loading home Power BI links:", error);
-    return [];
-  }
+function canSalesHome(permissions) {
+  return (
+    hasPerm(permissions, ["home", "ventasview"]) ||
+    hasPerm(permissions, ["home", "ventasviewall"]) ||
+    hasPerm(permissions, ["home", "ventas"]) ||
+    hasPerm(permissions, ["home", "viewall"])
+  );
+}
+
+function canPostventaHome(permissions) {
+  return (
+    hasPerm(permissions, ["home", "posventaview"]) ||
+    hasPerm(permissions, ["home", "posventaviewall"]) ||
+    hasPerm(permissions, ["home", "posventa"]) ||
+    hasPerm(permissions, ["home", "viewall"])
+  );
 }
 
 export default async function HomePage() {
-  const links = await getPowerBiLinks();
-  const desktopLinks = links.filter((item) => item.isForDesktop);
-  const mobileLinks = links.filter((item) => item.isForMobile);
+  const user = await getCurrentUser();
+  const permissions = user?.permissions || {};
+  const showSales = canSalesHome(permissions);
+  const showPostventa = canPostventaHome(permissions);
+
+  if (!showSales && !showPostventa) {
+    return (
+      <div className="min-h-full bg-slate-50 p-4 text-sm font-bold text-slate-700">
+        No tienes permisos para ver dashboards en Home.
+      </div>
+    );
+  }
 
   return (
-    <div className="min-w-0 space-y-4 bg-[#5e17eb] p-4">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Panel de Control</h1>
-      </div>
+    <main className="min-w-0 bg-slate-50">
+      {showSales ? (
+        <section id="home-ventas">
+          {showPostventa ? (
+            <div className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur">
+              <h1 className="text-base font-bold leading-tight text-violet-700">Dashboard Ventas</h1>
+              <p className="mt-0.5 text-xs font-medium text-violet-400">Home segun permisos de ventas</p>
+            </div>
+          ) : null}
+          <SalesReportsDashboard />
+        </section>
+      ) : null}
 
-      <div className="hidden md:block">
-        <PowerBiLinksSlider links={desktopLinks} emptyText="No hay links configurados para desktop." />
-      </div>
-
-      <div className="md:hidden">
-        <PowerBiLinksSlider links={mobileLinks} mobile emptyText="No hay links configurados para mobile." />
-      </div>
-    </div>
+      {showPostventa ? (
+        <section id="home-posventa" className={showSales ? "mt-3 border-t border-violet-200" : ""}>
+          {showSales ? (
+            <div className="sticky top-0 z-30 border-b border-violet-200 bg-slate-50/95 px-3 py-2 backdrop-blur">
+              <h1 className="text-base font-bold leading-tight text-violet-700">Dashboard Posventa</h1>
+              <p className="mt-0.5 text-xs font-medium text-violet-400">Home segun permisos de posventa</p>
+            </div>
+          ) : null}
+          <PostventaReportsDashboard />
+        </section>
+      ) : null}
+    </main>
   );
 }

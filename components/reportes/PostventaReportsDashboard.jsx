@@ -451,13 +451,7 @@ export default function PostventaReportsDashboard() {
 
   return (
     <div className="min-h-full bg-[#e9eef2] text-slate-950">
-      <div className="grid min-h-[calc(100svh-1rem)] grid-cols-1 md:grid-cols-[86px_1fr]">
-        <aside className="hidden bg-gradient-to-b from-[#4c16f2] to-[#7b16f2] md:flex md:flex-col md:items-center md:justify-between md:py-6">
-          <div className="flex h-72 w-14 items-center justify-center rounded-md bg-[#211b1d] text-sm font-semibold text-white shadow-xl">
-            <span className="-rotate-90">Posventa</span>
-          </div>
-          <div className="text-center text-2xl font-black leading-5 text-white">Hub<br /><span className="text-slate-300">CRM</span></div>
-        </aside>
+      <div className="min-h-[calc(100svh-1rem)]">
         <main className="min-w-0 p-2">
           <Card className="relative z-40 mb-2 overflow-visible gap-2 bg-[#8798a3] p-3 py-3">
           <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_190px_230px_150px_1fr_92px]">
@@ -741,30 +735,52 @@ function BarList({ data, field, active, onSelect }) {
 
 function StageFunnel({ data, active, onSelect, field = "stage" }) {
   const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
-  const percentData = data.map((item) => ({
+  const percentData = data.map((item, index) => ({
     ...item,
+    color: STAGE_COLORS[index % STAGE_COLORS.length],
     percent: total ? (Number(item.value || 0) / total) * 100 : 0,
     centerLabel: `${formatNumber(item.value)} - ${formatNumber(total ? (Number(item.value || 0) / total) * 100 : 0, 1)}%`,
   }));
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <FunnelChart margin={{ top: 10, right: 8, bottom: 10, left: 8 }}>
-        <Tooltip
-          itemSorter={() => 0}
-          formatter={(value, name, item) => [
-            `${formatNumber(item?.payload?.value)} de ${formatNumber(total)} / ${formatNumber(value, 1)}%`,
-            "Etapa",
-          ]}
-        />
-        <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect(field, entry.name)}>
-          <LabelList position="right" fill="#475569" stroke="none" dataKey="name" fontSize={11} />
-          <LabelList content={<StageCenterLabel />} />
-          {percentData.map((entry, index) => (
-            <Cell key={entry.name} fill={STAGE_COLORS[index % STAGE_COLORS.length]} opacity={!active || active === entry.name ? 1 : 0.3} className="cursor-pointer" />
-          ))}
-        </Funnel>
-      </FunnelChart>
-    </ResponsiveContainer>
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_150px] items-center gap-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <FunnelChart margin={{ top: 10, right: 4, bottom: 10, left: 4 }}>
+          <Tooltip
+            itemSorter={() => 0}
+            formatter={(value, name, item) => [
+              `${formatNumber(item?.payload?.value)} de ${formatNumber(total)} / ${formatNumber(value, 1)}%`,
+              "Etapa",
+            ]}
+          />
+          <Funnel dataKey="percent" data={percentData} nameKey="name" isAnimationActive onClick={(entry) => onSelect(field, entry.name)}>
+            <LabelList content={<StageCenterLabel />} />
+            {percentData.map((entry) => (
+              <Cell key={entry.name} fill={entry.color} opacity={!active || active === entry.name ? 1 : 0.3} className="cursor-pointer" />
+            ))}
+          </Funnel>
+        </FunnelChart>
+      </ResponsiveContainer>
+      <div className="max-h-full space-y-1 overflow-auto pr-1 text-[10px] leading-tight">
+        {percentData.map((item) => {
+          const selected = !active || active === item.name;
+          return (
+            <button
+              key={item.name}
+              type="button"
+              className={`flex w-full items-start gap-1.5 rounded-md px-1.5 py-1 text-left transition hover:bg-slate-50 ${selected ? "opacity-100" : "opacity-40"}`}
+              onClick={() => onSelect(field, item.name)}
+              title={item.name}
+            >
+              <span className="mt-0.5 size-2 shrink-0 rounded-sm" style={{ backgroundColor: item.color }} />
+              <span className="min-w-0 flex-1">
+                <span className="block whitespace-normal break-words font-black text-slate-700">{item.name}</span>
+                <span className="block font-bold text-slate-500">{formatNumber(item.value)} - {formatNumber(item.percent, 1)}%</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

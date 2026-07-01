@@ -193,6 +193,10 @@ function formatNumber(value, decimals = 0) {
   return number.toLocaleString("es-PE", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 }
 
+function formatDollar(value, decimals = 0) {
+  return `$ ${formatNumber(value, decimals)}`;
+}
+
 function buildOpportunityRecords(rows) {
   const groups = new Map();
   rows.forEach((row) => {
@@ -247,6 +251,7 @@ function buildOpportunityRecords(rows) {
       advisorColor: base.colorusuarioasignadoaoportunidad || "",
       creator: clean(base.usuarionombrecreadoroportunidad || base.usuariocreadoroportunidad, "Sin creador"),
       client: clean(base.nombreapelidocomlpetoclietne),
+      phone: clean(base.celular, "-"),
       clientType: clean(base.tipopersona || base.tipoidentifcaion),
       model: modelName,
       modelVersion: [modelName, version].filter((item) => item && item !== EMPTY).join(" / ") || EMPTY,
@@ -307,6 +312,17 @@ function stackByAdvisorAndModel(records) {
     topModels.forEach((model) => {
       row[model] = records.filter((item) => item.advisor === advisor && item.model === model).length;
     });
+    row.details = records
+      .filter((item) => item.advisor === advisor && topModels.includes(item.model))
+      .map((item) => ({
+        id: item.id,
+        client: item.client,
+        phone: item.phone,
+        stage: item.stage,
+        model: item.model,
+        origin: item.origin,
+      }))
+      .slice(0, 18);
     return row;
   });
 }
@@ -331,6 +347,7 @@ function fordDashboardStats(records) {
     ticketAverage,
     soldCount,
     testDriveApplied: records.filter((record) => record.hasTestDrive).length,
+    testDriveModels: groupCount(records.filter((record) => record.hasTestDrive), "model", 8),
     testDriveReasons: groupCount(records.filter((record) => !record.hasTestDrive), "noTestDriveReason", 6),
     matriculaStatus: groupCount(records, "matriculaStatus", 6),
     leadAttentionHours: avg(records.map((record) => record.leadAttentionHours)),
@@ -580,6 +597,51 @@ export default function SalesReportsDashboard() {
                 <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} />
               </section>
 
+              {isFordLeadView ? (
+                <>
+                  <section className="grid gap-2 xl:grid-cols-[.9fr_.9fr_1.25fr_1fr_.9fr]">
+                    <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados en dólares.`}>
+                      <FordMetric value={formatDollar(fordStats.ticketAverage, 0)} label="Promedio valor VH vendidos" />
+                    </Panel>
+                    <Panel title="Tiempo de Atención Lead" summary="Promedio desde derivación de marca hasta primera actividad del asesor.">
+                      <FordMetric value={`${formatNumber(fordStats.leadAttentionHours, 1)} h`} label="Tiempo promedio de atención" />
+                    </Panel>
+                    <Panel
+                      title="Oportunidad por Modelo"
+                      summary={modelChartSummary(charts.model, blankModelRecords.length)}
+                      onFocus={() => setFocusChart("model")}
+                      alertCount={blankModelRecords.length}
+                      onAlert={() => setBlankModelOpen(true)}
+                    >
+                      <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} />
+                    </Panel>
+                    <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                    <Panel title="Test Drives Aplicados" summary={chartSummary(fordStats.testDriveModels, "modelo")} onFocus={() => setFocusChart("fordTestDriveModels")}>
+                      <ReasonBars data={fordStats.testDriveModels} active={chartFilters.model} onSelect={toggleChartFilter} field="model" />
+                    </Panel>
+                  </section>
+
+                  <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
+                    <Panel title="Prospectos por Día y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} advisorColors={advisorColors} activeAdvisor={filters.advisor} onSelectAdvisor={toggleAdvisorFilter} /></Panel>
+                    <Panel
+                      title="Ciudad Origen"
+                      summary={cityChartSummary(charts.city, blankCityRecords.length)}
+                      onFocus={() => setFocusChart("city")}
+                      alertCount={blankCityRecords.length}
+                      onAlert={() => setBlankCityOpen(true)}
+                    >
+                      <Donut data={charts.city} field="city" active={chartFilters.city} onSelect={toggleChartFilter} />
+                    </Panel>
+                    <Panel title="Status Matrícula" summary={chartSummary(fordStats.matriculaStatus, "estado")} onFocus={() => setFocusChart("fordMatriculaStatus")}>
+                      <ReasonBars data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={toggleChartFilter} field="matriculaStatus" />
+                    </Panel>
+                    <Panel title="Razones sin Test Drive" summary={chartSummary(fordStats.testDriveReasons, "razón")} onFocus={() => setFocusChart("fordTestDriveReasons")}>
+                      <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} field="noTestDriveReason" />
+                    </Panel>
+                  </section>
+                </>
+              ) : (
+                <>
               <section className="grid gap-2 xl:grid-cols-[1.25fr_1fr_1fr_1fr_.78fr]">
                 <Panel
                   title="Oportunidad por Modelo"
@@ -593,8 +655,8 @@ export default function SalesReportsDashboard() {
                 <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
                 {isFordLeadView ? (
                   <>
-                    <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados.`}>
-                      <FordMetric value={`S/ ${formatNumber(fordStats.ticketAverage, 0)}`} label="Promedio valor VH vendidos" />
+                    <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados en dólares.`}>
+                      <FordMetric value={formatDollar(fordStats.ticketAverage, 0)} label="Promedio valor VH vendidos" />
                     </Panel>
                     <Panel title="Test Drives Aplicados" summary={`${fordStats.testDriveApplied} vehículos tienen test drive registrado.`}>
                       <FordMetric value={formatNumber(fordStats.testDriveApplied)} label="Cantidad de VH con test drive" />
@@ -646,6 +708,8 @@ export default function SalesReportsDashboard() {
                   </Panel>
                 )}
               </section>
+                </>
+              )}
               <FocusChartDialog
                 chartKey={focusChart}
                 charts={charts}
@@ -978,10 +1042,15 @@ function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdv
       summary: chartSummary(fordStats.testDriveReasons, "razón"),
       content: <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={onSelect} field="noTestDriveReason" />,
     },
+    fordTestDriveModels: {
+      title: "Test Drives Aplicados",
+      summary: chartSummary(fordStats.testDriveModels, "modelo"),
+      content: <ReasonBars data={fordStats.testDriveModels} active={chartFilters.model} onSelect={onSelect} field="model" />,
+    },
     fordMatriculaStatus: {
       title: "Status Matrícula",
       summary: chartSummary(fordStats.matriculaStatus, "estado"),
-      content: <StageFunnel data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={onSelect} field="matriculaStatus" />,
+      content: <ReasonBars data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={onSelect} field="matriculaStatus" />,
     },
   }[chartKey];
   if (!config) return null;
@@ -1324,20 +1393,49 @@ function StackedAdvisorTooltip({ active, payload, label, coordinate }) {
   const items = [...payload]
     .filter((item) => Number(item.value || 0) > 0)
     .reverse();
+  const details = payload[0]?.payload?.details || [];
   const shiftLeft = Number(coordinate?.x || 0) > 160;
   return (
     <div
-      className="w-52 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[10px] shadow-lg"
+      className="w-[min(520px,calc(100vw-32px))] rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[10px] shadow-xl"
       style={{ transform: shiftLeft ? "translate(-112%, -52%)" : "translate(10px, -52%)" }}
     >
       <p className="mb-1 truncate font-black text-slate-700">{label}</p>
-      <div className="space-y-1">
+      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
         {items.map((item) => (
           <span key={item.dataKey} className="flex items-center gap-1 font-bold" style={{ color: item.color || item.fill }}>
             <span className="size-2 shrink-0 rounded-sm" style={{ backgroundColor: item.color || item.fill }} />
             <span className="truncate">{item.name}: {item.value}</span>
           </span>
         ))}
+      </div>
+      <div className="max-h-64 overflow-auto rounded-sm border border-slate-200">
+        <table className="w-full border-collapse text-left text-[10px]">
+          <thead className="sticky top-0 bg-white text-slate-900 shadow-sm">
+            <tr>
+              <th className="px-2 py-1 font-black">Cliente</th>
+              <th className="px-2 py-1 font-black">Celular</th>
+              <th className="px-2 py-1 font-black">Etapa</th>
+              <th className="px-2 py-1 font-black">Modelo</th>
+              <th className="px-2 py-1 font-black">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.length ? details.map((item, index) => (
+              <tr key={`${item.id}-${index}`} className={index % 2 ? "bg-slate-100" : "bg-white"}>
+                <td className="max-w-32 px-2 py-1 font-semibold text-slate-700">{item.client}</td>
+                <td className="px-2 py-1 text-slate-600">{item.phone}</td>
+                <td className="px-2 py-1 text-slate-600">{item.stage}</td>
+                <td className="px-2 py-1 text-slate-600">{item.model}</td>
+                <td className="px-2 py-1 text-slate-600">{item.origin}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td className="px-2 py-3 text-center font-semibold text-slate-500" colSpan={5}>Sin oportunidades para mostrar.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

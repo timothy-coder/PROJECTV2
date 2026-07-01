@@ -17,8 +17,7 @@ const REPORTS = [
     category: "Ventas",
     href: "/reportes/ventas",
     icon: Database,
-    permissions: [["reportes", "view"], ["home", "view"], ["home", "ventas"]],
-    requireAllPermissions: true,
+    permissions: [["home", "ventasview"], ["home", "ventasviewall"], ["home", "ventas"], ["home", "viewall"]],
     badge: "Dashboard",
   },
   {
@@ -28,8 +27,7 @@ const REPORTS = [
     category: "Posventa",
     href: "/reportes/posventa",
     icon: Wrench,
-    permissions: [["reportes", "view"], ["home", "view"], ["home", "posventa"]],
-    requireAllPermissions: true,
+    permissions: [["home", "posventaview"], ["home", "posventaviewall"], ["home", "posventa"], ["home", "viewall"]],
     badge: "Dashboard",
   },
   {

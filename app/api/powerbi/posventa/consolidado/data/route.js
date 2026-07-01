@@ -39,18 +39,19 @@ function hasPowerBiToken(request) {
 function canReadPowerBiPosventaConsolidated(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["oportunidadespv", "view"]) ||
-      hasPerm(permissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(permissions, ["leadspv", "view"]) ||
-      hasPerm(permissions, ["leadspv", "viewall"]) ||
-      hasPerm(permissions, ["citas", "viewall"]) ||
-      hasPerm(permissions, ["cotizacion", "viewall"]) ||
-      hasPerm(permissions, ["clientes", "view"]) ||
-      hasPerm(permissions, ["clientes", "viewall"])
+    hasPerm(permissions, ["home", "posventaview"]) ||
+      hasPerm(permissions, ["home", "posventaviewall"]) ||
+      hasPerm(permissions, ["home", "posventa"]) ||
+      hasPerm(permissions, ["home", "viewall"])
   );
 }
 
-function buildVehiclesWithoutOpportunityQuery({ query, brand, model }) {
+function canViewAllDashboard(user) {
+  const permissions = user?.permissions || {};
+  return Boolean(hasPerm(permissions, ["home", "posventaviewall"]) || hasPerm(permissions, ["home", "viewall"]));
+}
+
+function buildVehiclesWithoutOpportunityQuery({ query, brand, model, scopeUserId }) {
   const where = [
     "v.deleted_at IS NULL",
     "NOT EXISTS (SELECT 1 FROM posventa_oportunidades o WHERE o.vehiculo_id = v.id)",
@@ -82,6 +83,11 @@ function buildVehiclesWithoutOpportunityQuery({ query, brand, model }) {
     params.push(model);
   }
 
+  if (scopeUserId) {
+    where.push("c.created_by = ?");
+    params.push(scopeUserId);
+  }
+
   const baseFrom = `
     FROM administracion_vehiculos v
     INNER JOIN administracion_clientes c ON c.id = v.cliente_id
@@ -104,8 +110,8 @@ function buildVehiclesWithoutOpportunityQuery({ query, brand, model }) {
   return { baseFrom, params };
 }
 
-async function loadVehiclesWithoutOpportunity({ limit, offset, page, withMeta, query, brand, model }) {
-  const { baseFrom, params } = buildVehiclesWithoutOpportunityQuery({ query, brand, model });
+async function loadVehiclesWithoutOpportunity({ limit, offset, page, withMeta, query, brand, model, scopeUserId }) {
+  const { baseFrom, params } = buildVehiclesWithoutOpportunityQuery({ query, brand, model, scopeUserId });
   const [[countRow]] = withMeta
     ? await pool.query(`SELECT COUNT(DISTINCT v.id) AS total ${baseFrom}`, params)
     : [[{ total: 0 }]];
@@ -283,6 +289,7 @@ function normalizeVehicleWithoutOpportunityRow(row) {
 
 export async function GET(request) {
   try {
+    let scopeUserId = null;
     if (!hasPowerBiToken(request)) {
       const user = await getCurrentUser();
       if (!user) {
@@ -290,6 +297,9 @@ export async function GET(request) {
       }
       if (!canReadPowerBiPosventaConsolidated(user)) {
         return NextResponse.json({ message: "No tienes permiso para consultar la data consolidada de PostVenta." }, { status: 403 });
+      }
+      if (!canViewAllDashboard(user)) {
+        scopeUserId = user.id;
       }
     }
 
@@ -309,7 +319,12 @@ export async function GET(request) {
     const vehicleBrand = String(url.searchParams.get("brand") || "").trim().toLowerCase();
     const vehicleModel = String(url.searchParams.get("model") || "").trim().toLowerCase();
 
-    const [opportunities] = await pool.query(`${POWERBI_POSVENTA_QUERY} LIMIT ${oportunidadesLimit} OFFSET ${oportunidadesOffset}`);
+    const scopeSql = scopeUserId ? "WHERE (o.created_by = ? OR o.asignado_a = ?)" : "";
+    const opportunitiesQuery = POWERBI_POSVENTA_QUERY.replace("ORDER BY o.created_at DESC, o.id DESC", `${scopeSql} ORDER BY o.created_at DESC, o.id DESC`);
+    const [opportunities] = await pool.query(
+      `${opportunitiesQuery} LIMIT ${oportunidadesLimit} OFFSET ${oportunidadesOffset}`,
+      scopeUserId ? [scopeUserId, scopeUserId] : []
+    );
     const vehicles = await loadVehiclesWithoutOpportunity({
       limit: vehiculosLimit,
       offset: vehiculosOffset,
@@ -318,6 +333,7 @@ export async function GET(request) {
       query: vehicleQuery,
       brand: vehicleBrand,
       model: vehicleModel,
+      scopeUserId,
     });
 
     const data = [

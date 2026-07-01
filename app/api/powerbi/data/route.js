@@ -38,14 +38,16 @@ function hasPowerBiToken(request) {
 function canReadPowerBiData(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["reportes", "view"]) &&
-      hasPerm(permissions, ["home", "view"]) &&
-      hasPerm(permissions, ["home", "ventas"])
+    hasPerm(permissions, ["home", "ventasview"]) ||
+      hasPerm(permissions, ["home", "ventasviewall"]) ||
+      hasPerm(permissions, ["home", "ventas"]) ||
+      hasPerm(permissions, ["home", "viewall"])
   );
 }
 
 function canViewAllDashboard(user) {
-  return Boolean(hasPerm(user?.permissions || {}, ["home", "viewall"]));
+  const permissions = user?.permissions || {};
+  return Boolean(hasPerm(permissions, ["home", "ventasviewall"]) || hasPerm(permissions, ["home", "viewall"]));
 }
 
 const POWERBI_QUERY = `

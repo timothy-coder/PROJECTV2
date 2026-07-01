@@ -255,10 +255,25 @@ function fordPatchStatus(value, lossReason) {
   return ["New", "Contacted", "Assigned", "Closed Won", "Closed Lost"].includes(status) ? status : "Assigned";
 }
 
+function isFordStatusTransitionError(error) {
+  const raw = [
+    error?.message,
+    error?.payload?.message,
+    error?.payload?.error?.message,
+    error?.payload?.error?.message?.description,
+  ]
+    .filter(Boolean)
+    .map((value) => (typeof value === "string" ? value : JSON.stringify(value)))
+    .join(" ")
+    .toLowerCase();
+  return error?.status === 400 && (raw.includes("estado anterior") || raw.includes("estado seleccionado"));
+}
+
 async function touchFordLeadModifiedDate(request, lead, changedAt) {
   const leadId = String(lead.id || "").trim();
   if (!leadId) return null;
   const lossReason = lead.lossReason || lead.lostReason || undefined;
+  const currentStatus = String(lead.status || "").trim();
   const body = normalizeFordLeadPatch({
     status: fordPatchStatus(lead.status, lossReason),
     contact: lead.contact || {},
@@ -267,7 +282,20 @@ async function touchFordLeadModifiedDate(request, lead, changedAt) {
     lastModifiedDate: changedAt,
     lossReason,
   });
-  return fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body });
+  try {
+    return await fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body });
+  } catch (error) {
+    if (!currentStatus || body.status === currentStatus || !isFordStatusTransitionError(error)) throw error;
+    const retryBody = normalizeFordLeadPatch({
+      status: currentStatus,
+      contact: lead.contact || {},
+      vehicle: lead.vehicle || {},
+      preferenceDealer: lead.preferenceDealer || {},
+      lastModifiedDate: changedAt,
+      lossReason,
+    });
+    return fordLeadsFetch(`/leads/${encodeURIComponent(leadId)}`, { request, method: "PATCH", body: retryBody });
+  }
 }
 
 async function createOpportunityFromLead(connection, lead, userId, request) {
@@ -303,15 +331,33 @@ async function createOpportunityFromLead(connection, lead, userId, request) {
     [oportunidadId, token, ownerUserId]
   );
   const changedAt = new Date().toISOString();
-  await touchFordLeadModifiedDate(request, lead, changedAt);
-  await notifyFordOpportunityCreated(connection, {
-    opportunityId: oportunidadId,
-    code,
-    token,
-    lead,
-    recipients: [ownerUserId, assignedUserId],
-  });
-  return { id: oportunidadId, code, token, assignedUserId, createdBy: ownerUserId, lastModifiedDate: changedAt };
+  const warnings = [];
+  try {
+    await touchFordLeadModifiedDate(request, lead, changedAt);
+  } catch (error) {
+    console.warn("No se pudo actualizar el Lead Ford despues de crear la oportunidad:", error);
+    warnings.push({
+      step: "ford_patch",
+      message: error.message || "Ford no permitio actualizar el lead.",
+      detail: error.payload || null,
+    });
+  }
+  try {
+    await notifyFordOpportunityCreated(connection, {
+      opportunityId: oportunidadId,
+      code,
+      token,
+      lead,
+      recipients: [ownerUserId, assignedUserId],
+    });
+  } catch (error) {
+    console.warn("No se pudo crear la notificacion del Lead Ford:", error);
+    warnings.push({
+      step: "notification",
+      message: error.message || "No se pudo crear la notificacion.",
+    });
+  }
+  return { id: oportunidadId, code, token, assignedUserId, createdBy: ownerUserId, lastModifiedDate: changedAt, warnings };
 }
 
 async function notifyFordOpportunityCreated(connection, { opportunityId, code, token, lead, recipients }) {
@@ -401,16 +447,27 @@ export async function POST(request) {
     const leads = await syncFordLeadsToOpportunities(request, { leadIds: body.leadIds || [], manualLeadId: body.manualLeadId || "" });
     const created = [];
     const skipped = [];
-    await connection.beginTransaction();
     for (const lead of leads) {
-      const result = await createOpportunityFromLead(connection, lead, user.id, request);
-      if (result.skipped) skipped.push(result);
-      else created.push(result);
+      try {
+        await connection.beginTransaction();
+        const result = await createOpportunityFromLead(connection, lead, user.id, request);
+        await connection.commit();
+        if (result.skipped) skipped.push(result);
+        else created.push(result);
+      } catch (error) {
+        await connection.rollback();
+        console.error("Error creando oportunidad desde Lead Ford:", error);
+        skipped.push({
+          skipped: true,
+          token: lead?.id || null,
+          reason: error.message || "No se pudo crear la oportunidad para este lead.",
+          detail: error.payload || null,
+        });
+      }
     }
-    await connection.commit();
     return NextResponse.json({ ok: true, schedule, total: leads.length, created, skipped });
   } catch (error) {
-    await connection.rollback();
+    await connection.rollback().catch(() => {});
     console.error("Error syncing Ford leads to opportunities:", error);
     return NextResponse.json(
       { message: error.message || "No se pudieron crear oportunidades Ford.", detail: error.payload || null },
