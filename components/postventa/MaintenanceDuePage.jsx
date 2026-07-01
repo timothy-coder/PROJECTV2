@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Eye, Loader2, MoreVertical, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,13 +24,15 @@ import { hasPerm } from "@/lib/permissions";
 
 export default function MaintenanceDuePage({ userPermissions }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [quickRange, setQuickRange] = useState("");
-  const [brandFilter, setBrandFilter] = useState("");
-  const [modelFilter, setModelFilter] = useState("");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  const [status, setStatus] = useState(() => searchParams.get("status") || "");
+  const [fromDate, setFromDate] = useState(() => searchParams.get("fromDate") || "");
+  const [toDate, setToDate] = useState(() => searchParams.get("toDate") || "");
+  const [quickRange, setQuickRange] = useState(() => searchParams.get("range") || "");
+  const [brandFilter, setBrandFilter] = useState(() => searchParams.get("brand") || "");
+  const [modelFilter, setModelFilter] = useState(() => searchParams.get("model") || "");
   const [dialogVehicle, setDialogVehicle] = useState(null);
   const [clientDetail, setClientDetail] = useState(null);
   const [vehicleDetail, setVehicleDetail] = useState(null);
@@ -38,10 +40,28 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const [recalculating, setRecalculating] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [mobileActionId, setMobileActionId] = useState(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") || 1)));
   const [limit, setLimit] = useState(10);
   const tableContainerRef = useRef(null);
   const paginationRef = useRef(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (status) params.set("status", status);
+    if (brandFilter) params.set("brand", brandFilter);
+    if (modelFilter) params.set("model", modelFilter);
+    if (fromDate) params.set("fromDate", fromDate);
+    if (toDate) params.set("toDate", toDate);
+    if (quickRange) params.set("range", quickRange);
+    if (page > 1) params.set("page", String(page));
+
+    const next = params.toString();
+    const current = window.location.search.replace(/^\?/, "");
+    if (current !== next) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }
+  }, [brandFilter, fromDate, modelFilter, page, pathname, query, quickRange, router, status, toDate]);
   useEffect(() => {
     function updateLimit() {
       const height = window.visualViewport?.height || window.innerHeight || 800;

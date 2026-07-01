@@ -1142,7 +1142,7 @@ function BlankModelDialog({ open, records, onClose }) {
   if (!open) return null;
   return (
     <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-hidden bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] max-w-[min(98vw,1320px)] overflow-hidden bg-white p-0 text-slate-950">
         <DialogHeader className="border-b border-red-200 bg-red-50 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 text-base font-bold text-red-700">
             <AlertTriangle className="size-4" />
@@ -1153,7 +1153,7 @@ function BlankModelDialog({ open, records, onClose }) {
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[72svh] overflow-auto p-3">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <table className="w-full table-auto border-collapse text-left text-xs">
             <thead className="sticky top-0 bg-white text-slate-500">
               <tr>
                 <th className="border-b px-3 py-2">Codigo</th>
@@ -1198,7 +1198,7 @@ function BlankCityDialog({ open, records, onClose }) {
   if (!open) return null;
   return (
     <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-hidden bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] max-w-[min(98vw,1320px)] overflow-hidden bg-white p-0 text-slate-950">
         <DialogHeader className="border-b border-red-200 bg-red-50 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 text-base font-bold text-red-700">
             <AlertTriangle className="size-4" />
@@ -1209,7 +1209,7 @@ function BlankCityDialog({ open, records, onClose }) {
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[72svh] overflow-auto p-3">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <table className="w-full table-auto border-collapse text-left text-xs">
             <thead className="sticky top-0 bg-white text-slate-500">
               <tr>
                 <th className="border-b px-3 py-2">Código</th>
@@ -1254,7 +1254,7 @@ function BlankFieldDialog({ open, records, title, description, emptyText, onClos
   if (!open) return null;
   return (
     <Dialog open onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-h-[92svh] max-w-[min(96vw,980px)] overflow-hidden bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] max-w-[min(98vw,1320px)] overflow-hidden bg-white p-0 text-slate-950">
         <DialogHeader className="border-b border-red-200 bg-red-50 px-5 py-4">
           <DialogTitle className="flex items-center gap-2 text-base font-bold text-red-700">
             <AlertTriangle className="size-4" />
@@ -1263,7 +1263,7 @@ function BlankFieldDialog({ open, records, title, description, emptyText, onClos
           <DialogDescription className="text-red-700">{description}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[72svh] overflow-auto p-3">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <table className="w-full table-auto border-collapse text-left text-xs">
             <thead className="sticky top-0 bg-white text-slate-500">
               <tr>
                 <th className="border-b px-3 py-2">Código</th>
