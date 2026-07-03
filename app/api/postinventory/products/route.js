@@ -7,6 +7,7 @@ export async function POST(request) {
     const body = await request.json();
     const numeroParte = String(body.numeroParte || "").trim();
     const descripcion = String(body.descripcion || "").trim();
+    const marca = String(body.marca || "").trim() || null;
     const tipoId = body.tipoId ? Number(body.tipoId) : null;
     const fechaIngreso = body.fechaIngreso || null;
     const stockTotal = Number(body.stockTotal || 0);
@@ -20,9 +21,9 @@ export async function POST(request) {
 
     const [result] = await pool.query(
       `INSERT INTO posventa_productos
-       (numero_parte, descripcion, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
-       VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-      [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta, monedaId]
+       (numero_parte, descripcion, marca, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+      [numeroParte, descripcion, marca, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta, monedaId]
     );
 
     return NextResponse.json({ ok: true, id: result.insertId }, { status: 201 });

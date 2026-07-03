@@ -5,7 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
 export function usePostInventory() {
+<<<<<<< Updated upstream
   const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [], lots: [], shelves: [], shelfLevels: [], shelfPositions: [] } });
+=======
+  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { settings: {}, types: [], measureTypes: [], providers: [], currencies: [], centers: [], workshops: [], counters: [] } });
+>>>>>>> Stashed changes
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -24,7 +28,10 @@ export function usePostInventory() {
       soldProducts: next.soldProducts || [],
       stocks: next.stocks || [],
       options: {
+        settings: next.options?.settings || {},
         types: next.options?.types || [],
+        measureTypes: next.options?.measureTypes || [],
+        providers: next.options?.providers || [],
         currencies: next.options?.currencies || [],
         centers: next.options?.centers || [],
         workshops: next.options?.workshops || [],
@@ -65,6 +72,9 @@ export function usePostInventory() {
     createProduct: async (payload) => { await postInventoryApi.createProduct(payload); await reload(); },
     updateProduct: async (id, payload) => { await postInventoryApi.updateProduct(id, payload); await reload(); },
     deleteProduct: async (id) => { await postInventoryApi.deleteProduct(id); await reload(); },
+    createLot: async (payload) => { await postInventoryApi.createLot(payload); await reload(); },
+    updateLot: async (id, payload) => { await postInventoryApi.updateLot(id, payload); await reload(); },
+    deleteLot: async (id) => { await postInventoryApi.deleteLot(id); await reload(); },
     importProducts: async (rows) => { const result = await postInventoryApi.importProducts(rows); await reload(); return result; },
     createSoldProduct: async (payload) => { await postInventoryApi.createSoldProduct(payload); await reload(); },
     updateSoldProduct: async (id, payload) => { await postInventoryApi.updateSoldProduct(id, payload); await reload(); },

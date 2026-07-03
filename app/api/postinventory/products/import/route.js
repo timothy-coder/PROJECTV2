@@ -46,6 +46,7 @@ export async function POST(request) {
       const row = rows[index] || {};
       const numeroParte = cleanText(value(row, ["numero_parte", "Numero Parte", "N Parte", "numeroParte"]));
       const descripcion = cleanText(value(row, ["descripcion", "Descripcion", "Descripción"]));
+      const marca = cleanText(value(row, ["marca", "Marca"])) || null;
       if (!numeroParte || !descripcion) {
         errors.push(`Fila ${index + 2}: numero_parte y descripcion son obligatorios.`);
         continue;
@@ -65,18 +66,18 @@ export async function POST(request) {
         await connection.query(
           `UPDATE posventa_productos
            SET descripcion = ?, tipo_inventario_id = ?, fecha_ingreso = ?, stock_total = ?,
-               precio_compra = ?, precio_venta = ?, moneda_id = ?,
+               marca = ?, precio_compra = ?, precio_venta = ?, moneda_id = ?,
                stock_disponible = GREATEST(? - stock_usado, 0)
            WHERE id = ?`,
-          [descripcion, tipoId, fechaIngreso, stockTotal, precioCompra, precioVenta, monedaId, stockTotal, existingRows[0].id]
+          [descripcion, tipoId, fechaIngreso, stockTotal, marca, precioCompra, precioVenta, monedaId, stockTotal, existingRows[0].id]
         );
         updated += 1;
       } else {
         await connection.query(
           `INSERT INTO posventa_productos
-           (numero_parte, descripcion, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
-           VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-          [numeroParte, descripcion, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta, monedaId]
+           (numero_parte, descripcion, marca, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+          [numeroParte, descripcion, marca, tipoId, fechaIngreso, stockTotal, stockTotal, precioCompra, precioVenta, monedaId]
         );
         imported += 1;
       }

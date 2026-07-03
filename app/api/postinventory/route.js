@@ -52,10 +52,20 @@ function mapSoldProduct(row) {
   };
 }
 
+function mapSettings(row) {
+  return {
+    habilitarMarcaManual: Boolean(row?.habilitar_marca_manual),
+    habilitarLotes: row ? Boolean(row.habilitar_lotes) : true,
+    habilitarFechaVencimiento: row ? Boolean(row.habilitar_fecha_vencimiento) : true,
+    habilitarProveedorEnLote: row ? Boolean(row.habilitar_proveedor_en_lote) : true,
+    habilitarTipoMedida: row ? Boolean(row.habilitar_tipo_medida) : true,
+  };
+}
+
 export async function GET() {
   try {
     const [productRows] = await pool.query(
-      `SELECT p.id, p.numero_parte, p.descripcion, p.tipo_inventario_id, p.fecha_ingreso,
+      `SELECT p.id, p.numero_parte, p.descripcion, p.marca, p.tipo_inventario_id, p.fecha_ingreso,
               p.stock_total, p.stock_usado, p.stock_disponible,
               p.precio_compra, p.precio_venta, p.moneda_id,
               t.nombre AS tipo_nombre,
@@ -90,6 +100,35 @@ export async function GET() {
        FROM configuracion_monedas
        WHERE is_active = 1
        ORDER BY codigo ASC`
+    );
+    const [settingsRows] = await pool.query(
+      `SELECT habilitar_marca_manual, habilitar_lotes, habilitar_fecha_vencimiento,
+              habilitar_proveedor_en_lote, habilitar_tipo_medida
+       FROM configuracion_posventa_inventario
+       ORDER BY id ASC
+       LIMIT 1`
+    );
+    const [measureTypeRows] = await pool.query(
+      `SELECT id, nombre, abreviatura
+       FROM configuracion_tipos_medida
+       ORDER BY nombre ASC`
+    );
+    const [providerRows] = await pool.query(
+      `SELECT id, razon_social, nombre_comercial, ruc, is_active
+       FROM administracion_proveedores
+       WHERE is_active = 1
+       ORDER BY razon_social ASC`
+    );
+    const [lotRows] = await pool.query(
+      `SELECT l.id, l.producto_id, l.tipo_medida_id, l.proveedor_id, l.numero_factura,
+              l.fecha_vencimiento, l.precio_compra, l.stock_lote, l.stock_usado,
+              l.stock_disponible, l.created_at,
+              tm.nombre AS tipo_medida_nombre, tm.abreviatura AS tipo_medida_abreviatura,
+              pr.razon_social AS proveedor_nombre, pr.nombre_comercial AS proveedor_comercial
+       FROM posventa_productos_lotes l
+       LEFT JOIN configuracion_tipos_medida tm ON tm.id = l.tipo_medida_id
+       LEFT JOIN administracion_proveedores pr ON pr.id = l.proveedor_id
+       ORDER BY l.created_at DESC`
     );
     const [centerRows] = await pool.query(
       `SELECT id, nombre FROM configuracion_centros ORDER BY nombre ASC`
@@ -162,6 +201,7 @@ export async function GET() {
       id: row.id,
       numeroParte: row.numero_parte,
       descripcion: row.descripcion,
+      marca: row.marca || "",
       tipoId: row.tipo_inventario_id,
       tipoNombre: row.tipo_nombre || "Sin tipo",
       fechaIngreso: row.fecha_ingreso,
@@ -172,6 +212,22 @@ export async function GET() {
       monedaCodigo: row.moneda_codigo || "",
       monedaNombre: row.moneda_nombre || "",
       monedaSimbolo: row.moneda_simbolo || "S/",
+      lotes: lotRows.filter((lot) => lot.producto_id === row.id).map((lot) => ({
+        id: lot.id,
+        productoId: lot.producto_id,
+        tipoMedidaId: lot.tipo_medida_id,
+        proveedorId: lot.proveedor_id,
+        numeroFactura: lot.numero_factura || "",
+        fechaVencimiento: lot.fecha_vencimiento,
+        precioCompra: Number(lot.precio_compra || 0),
+        stockLote: Number(lot.stock_lote || 0),
+        stockUsado: Number(lot.stock_usado || 0),
+        stockDisponible: Number(lot.stock_disponible || 0),
+        tipoMedidaNombre: lot.tipo_medida_nombre || "",
+        tipoMedidaAbreviatura: lot.tipo_medida_abreviatura || "",
+        proveedorNombre: lot.proveedor_comercial || lot.proveedor_nombre || "",
+        createdAt: lot.created_at,
+      })),
     }));
     const comboItems = comboItemRows.map((row) => ({
       id: row.id,
@@ -189,7 +245,10 @@ export async function GET() {
       soldProducts: soldProductRows.map(mapSoldProduct),
       stocks,
       options: {
+        settings: mapSettings(settingsRows[0]),
         types: typeRows.map((row) => ({ id: row.id, nombre: row.nombre })),
+        measureTypes: measureTypeRows.map((row) => ({ id: row.id, nombre: row.nombre, abreviatura: row.abreviatura || "" })),
+        providers: providerRows.map((row) => ({ id: row.id, nombre: row.nombre_comercial || row.razon_social, razonSocial: row.razon_social, ruc: row.ruc || "" })),
         currencies: currencyRows.map((row) => ({ id: row.id, codigo: row.codigo, nombre: row.nombre, simbolo: row.simbolo })),
         centers: centerRows.map((row) => ({ id: row.id, nombre: row.nombre })),
         workshops: workshopRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),

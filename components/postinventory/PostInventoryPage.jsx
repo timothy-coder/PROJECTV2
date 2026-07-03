@@ -59,23 +59,32 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   const [comboDialog, setComboDialog] = useState({ open: false, item: null, readonly: false });
   const [soldDialog, setSoldDialog] = useState({ open: false, item: null, readonly: false });
   const [stockDialog, setStockDialog] = useState({ open: false, product: null });
+<<<<<<< Updated upstream
   const [locationDialog, setLocationDialog] = useState({ open: false, item: null });
+=======
+  const [lotDialog, setLotDialog] = useState({ open: false, product: null, item: null, readonly: false });
+>>>>>>> Stashed changes
   const [deleteDialog, setDeleteDialog] = useState({ open: false, title: "", onConfirm: null });
   const [formatsMenuOpen, setFormatsMenuOpen] = useState(false);
   const canView = hasPerm(userPermissions, ["inventario", "view"]);
   const canCreate = hasPerm(userPermissions, ["inventario", "create"]);
   const canEdit = hasPerm(userPermissions, ["inventario", "edit"]);
   const canDelete = hasPerm(userPermissions, ["inventario", "delete"]);
+<<<<<<< Updated upstream
   const canLocationView = hasPerm(userPermissions, ["ubicacion_inventario", "view"]);
   const canLocationCreate = hasPerm(userPermissions, ["ubicacion_inventario", "create"]);
   const canLocationEdit = hasPerm(userPermissions, ["ubicacion_inventario", "edit"]);
   const canLocationDelete = hasPerm(userPermissions, ["ubicacion_inventario", "delete"]);
   const canLocationImport = hasPerm(userPermissions, ["ubicacion_inventario", "import"]);
+=======
+  const canLots = canEdit || hasPerm(userPermissions, ["inventario", "lotes"]);
+  const inventorySettings = data.options?.settings || {};
+>>>>>>> Stashed changes
 
   const filteredProducts = useMemo(() => {
     const clean = query.trim().toLowerCase();
     const filtered = clean
-      ? data.products.filter((product) => `${product.numeroParte} ${product.descripcion}`.toLowerCase().includes(clean))
+      ? data.products.filter((product) => `${product.numeroParte} ${product.descripcion} ${product.marca}`.toLowerCase().includes(clean))
       : data.products;
     return filtered.map((product) => ({
       ...product,
@@ -123,6 +132,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
       {
         numero_parte: "ABC-12345",
         descripcion: "Filtro de aceite",
+        marca: "FORD",
         tipo_inventario: "Repuestos",
         fecha_ingreso: "2026-06-05",
         stock_total: 10,
@@ -272,10 +282,18 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         total={data.products.length}
         canEdit={canEdit}
         canDelete={canDelete}
+<<<<<<< Updated upstream
         canStock={canLocationView}
+=======
+        canLots={canLots}
+        settings={inventorySettings}
+>>>>>>> Stashed changes
         onView={(product) => setProductDialog({ open: true, item: product, readonly: true })}
         onEdit={(product) => setProductDialog({ open: true, item: product, readonly: false })}
         onStock={(product) => setStockDialog({ open: true, product })}
+        onLot={(product) => setLotDialog({ open: true, product, item: null, readonly: false })}
+        onEditLot={(product, item) => setLotDialog({ open: true, product, item, readonly: false })}
+        onDeleteLot={(lot) => setDeleteDialog({ open: true, title: `Eliminar lote ${lot.numeroFactura}`, onConfirm: () => data.deleteLot(lot.id) })}
         onDelete={(product) => setDeleteDialog({ open: true, title: `Eliminar ${product.numeroParte}`, onConfirm: () => data.deleteProduct(product.id) })}
       /> : view === "combos" ? <CombosTable
         loading={data.loading}
@@ -310,6 +328,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
           key={`${productDialog.item?.id || "new"}-${productDialog.readonly}`}
           state={productDialog}
           options={data.options}
+          settings={inventorySettings}
           onClose={() => setProductDialog({ open: false, item: null, readonly: false })}
           onSubmit={async (payload) => {
             if (productDialog.item) {
@@ -320,6 +339,25 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
               toast.success("Producto creado");
             }
             setProductDialog({ open: false, item: null, readonly: false });
+          }}
+        />
+      ) : null}
+      {lotDialog.open ? (
+        <LotDialog
+          key={`${lotDialog.product?.id || "product"}-${lotDialog.item?.id || "new"}-${lotDialog.readonly}`}
+          state={lotDialog}
+          options={data.options}
+          settings={inventorySettings}
+          onClose={() => setLotDialog({ open: false, product: null, item: null, readonly: false })}
+          onSubmit={async (payload) => {
+            if (lotDialog.item) {
+              await data.updateLot(lotDialog.item.id, payload);
+              toast.success("Lote actualizado");
+            } else {
+              await data.createLot(payload);
+              toast.success("Lote creado");
+            }
+            setLotDialog({ open: false, product: null, item: null, readonly: false });
           }}
         />
       ) : null}
@@ -393,15 +431,21 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   );
 }
 
+<<<<<<< Updated upstream
 function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, onView, onEdit, onStock, onDelete }) {
+=======
+function ProductsTable({ loading, products, total, canEdit, canDelete, canLots, settings, onView, onEdit, onStock, onLot, onEditLot, onDeleteLot, onDelete }) {
+  const useLots = settings?.habilitarLotes !== false;
+>>>>>>> Stashed changes
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-3 py-3">N Parte</th>
                 <th className="px-3 py-3">Descripcion</th>
+                <th className="px-3 py-3">Marca</th>
                 <th className="px-3 py-3">Tipo</th>
                 <th className="px-3 py-3">Disponible</th>
                 <th className="px-3 py-3">Precio Venta</th>
@@ -410,13 +454,17 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
             </thead>
             <tbody className="divide-y divide-slate-200">
               {loading ? (
-                <tr><td colSpan={6} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={7} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : products.map((product) => (
                 <tr key={product.id}>
                   <td className="px-3 py-3 font-bold text-slate-950">{product.numeroParte}</td>
                   <td className="px-3 py-3">{product.descripcion}</td>
+                  <td className="px-3 py-3">{product.marca || "-"}</td>
                   <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium">{product.tipoNombre}</span></td>
-                  <td className="px-3 py-3 font-bold text-emerald-700">{product.available}</td>
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-emerald-700">{product.available}</div>
+                    {useLots ? <div className="text-xs font-medium text-slate-500">{product.lotes?.length || 0} lotes</div> : null}
+                  </td>
                   <td className="px-3 py-3">
                     <div className="font-bold text-slate-950">{money(product.precioVenta, product.monedaSimbolo)}</div>
                     <div className="text-xs font-medium text-slate-500">{product.monedaCodigo || "Sin moneda"}</div>
@@ -425,9 +473,27 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" onClick={() => onView(product)}><Eye className="size-4" /></Button>
                       {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(product)}><Edit3 className="size-4" /></Button> : null}
+<<<<<<< Updated upstream
                       {canStock ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
+=======
+                      {useLots && canLots ? <Button variant="ghost" size="icon" onClick={() => onLot(product)} title="Agregar lote"><Layers3 className="size-4" /></Button> : null}
+                      {canEdit ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
+>>>>>>> Stashed changes
                       {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(product)}><Trash2 className="size-4" /></Button> : null}
                     </div>
+                    {useLots && product.lotes?.length ? (
+                      <div className="mt-2 flex justify-end gap-1">
+                        {product.lotes.slice(0, 2).map((lot) => (
+                          <span key={lot.id} className="inline-flex overflow-hidden rounded-full bg-violet-50 text-[11px] font-bold text-violet-700">
+                            <button type="button" onClick={() => onEditLot(product, lot)} className="px-2 py-1">
+                              {lot.numeroFactura} ({lot.stockDisponible})
+                            </button>
+                            {canDelete ? <button type="button" onClick={() => onDeleteLot(lot)} className="border-l border-violet-100 px-1.5 py-1 text-red-600">x</button> : null}
+                          </span>
+                        ))}
+                        {product.lotes.length > 2 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">+{product.lotes.length - 2}</span> : null}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -594,13 +660,16 @@ function SoldProductsTable({ loading, items, total, canEdit, canDelete, onView, 
   );
 }
 
-function ProductDialog({ state, options, onClose, onSubmit }) {
+function ProductDialog({ state, options, settings, onClose, onSubmit }) {
   const readonly = state.readonly;
+  const useLots = settings?.habilitarLotes !== false;
+  const allowManualBrand = Boolean(settings?.habilitarMarcaManual);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     numeroParte: state.item?.numeroParte || "",
     descripcion: state.item?.descripcion || "",
+    marca: state.item?.marca || "",
     tipoId: state.item?.tipoId ? String(state.item.tipoId) : "",
     fechaIngreso: state.item?.fechaIngreso ? String(state.item.fechaIngreso).slice(0, 10) : "",
     stockTotal: state.item?.stockTotal || "",
@@ -619,6 +688,7 @@ function ProductDialog({ state, options, onClose, onSubmit }) {
     try {
       await onSubmit({
         ...form,
+        marca: form.marca || null,
         tipoId: form.tipoId || null,
         fechaIngreso: form.fechaIngreso || null,
         stockTotal: form.stockTotal || 0,
@@ -635,7 +705,7 @@ function ProductDialog({ state, options, onClose, onSubmit }) {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,430px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white p-0 text-slate-950">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700"><Package className="size-5" />{readonly ? "Detalle" : state.item ? "Editar" : "Nuevo"} producto</DialogTitle>
@@ -645,6 +715,11 @@ function ProductDialog({ state, options, onClose, onSubmit }) {
             <Panel number="1" title="Informacion General">
               <Field label="Numero de parte *"><Input disabled={readonly} value={form.numeroParte} placeholder="Ej: ABC-12345" onChange={(e) => setForm((f) => ({ ...f, numeroParte: e.target.value }))} required /></Field>
               <Field label="Descripcion *"><Input disabled={readonly} value={form.descripcion} placeholder="Descripcion del producto" onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} required /></Field>
+              {allowManualBrand ? (
+                <Field label="Marca">
+                  <Input disabled={readonly} value={form.marca} placeholder="Ej: FORD" onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value }))} />
+                </Field>
+              ) : null}
             </Panel>
             <Panel number="2" title="Clasificacion">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -662,12 +737,13 @@ function ProductDialog({ state, options, onClose, onSubmit }) {
                 <Field label="Fecha ingreso"><Input disabled={readonly} type="date" value={form.fechaIngreso} onChange={(e) => setForm((f) => ({ ...f, fechaIngreso: e.target.value }))} /></Field>
               </div>
             </Panel>
-            <Panel number="3" title="Precios">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label="Stock total"><Input disabled={readonly} type="number" value={form.stockTotal} onChange={(e) => setForm((f) => ({ ...f, stockTotal: e.target.value }))} /></Field>
+            <Panel number="3" title={useLots ? "Precios" : "Stock y precios"}>
+              <div className={`grid gap-3 ${useLots ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+                {!useLots ? <Field label="Stock total"><Input disabled={readonly} type="number" value={form.stockTotal} onChange={(e) => setForm((f) => ({ ...f, stockTotal: e.target.value }))} /></Field> : null}
                 <Field label="Precio compra"><Input disabled={readonly} type="number" step="0.01" value={form.precioCompra} onChange={(e) => setForm((f) => ({ ...f, precioCompra: e.target.value }))} /></Field>
                 <Field label="Precio venta"><Input disabled={readonly} type="number" step="0.01" value={form.precioVenta} onChange={(e) => setForm((f) => ({ ...f, precioVenta: e.target.value }))} /></Field>
               </div>
+              {useLots ? <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">El stock total se calcula automaticamente con los lotes registrados.</p> : null}
               <Field label="Moneda">
                 <SearchableSelect
                   disabled={readonly}
@@ -685,6 +761,125 @@ function ProductDialog({ state, options, onClose, onSubmit }) {
           <DialogFooter className="border-t border-slate-200 p-3">
             <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
             {!readonly ? <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">{saving ? "Guardando..." : "Guardar"}</Button> : null}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LotDialog({ state, options, settings, onClose, onSubmit }) {
+  const readonly = state.readonly;
+  const product = state.product;
+  const showMeasureType = settings?.habilitarTipoMedida !== false;
+  const showProvider = settings?.habilitarProveedorEnLote !== false;
+  const showExpiration = settings?.habilitarFechaVencimiento !== false;
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    tipoMedidaId: state.item?.tipoMedidaId ? String(state.item.tipoMedidaId) : "",
+    proveedorId: state.item?.proveedorId ? String(state.item.proveedorId) : "",
+    numeroFactura: state.item?.numeroFactura || "",
+    fechaVencimiento: state.item?.fechaVencimiento ? String(state.item.fechaVencimiento).slice(0, 10) : "",
+    precioCompra: state.item?.precioCompra || product?.precioCompra || "",
+    stockLote: state.item?.stockLote || "",
+  });
+  const measureOptions = (options?.measureTypes || []).map((item) => ({
+    value: item.id,
+    label: `${item.nombre}${item.abreviatura ? ` (${item.abreviatura})` : ""}`,
+  }));
+  const providerOptions = (options?.providers || []).map((item) => ({
+    value: item.id,
+    label: `${item.nombre}${item.ruc ? ` - ${item.ruc}` : ""}`,
+  }));
+
+  async function submit(event) {
+    event.preventDefault();
+    if (readonly) return onClose();
+    setError("");
+    setSaving(true);
+    try {
+      await onSubmit({
+        productoId: product.id,
+        tipoMedidaId: form.tipoMedidaId || null,
+        proveedorId: form.proveedorId || null,
+        numeroFactura: form.numeroFactura,
+        fechaVencimiento: form.fechaVencimiento || null,
+        precioCompra: form.precioCompra || 0,
+        stockLote: form.stockLote || 0,
+      });
+    } catch (err) {
+      setError(err.message || "No se pudo guardar el lote.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[94svh] max-w-[min(94vw,520px)] overflow-y-auto bg-white p-0 text-slate-950">
+        <form onSubmit={submit}>
+          <DialogHeader className="border-b border-violet-100 p-4">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+              <Layers3 className="size-5" />{readonly ? "Detalle" : state.item ? "Editar" : "Nuevo"} lote
+            </DialogTitle>
+            <DialogDescription>{product?.numeroParte} - {product?.descripcion}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 p-4">
+            <Panel number="1" title="Datos del lote">
+              <Field label="Numero de factura *">
+                <Input disabled={readonly} value={form.numeroFactura} placeholder="Ej: F001-000123" onChange={(event) => setForm((current) => ({ ...current, numeroFactura: event.target.value }))} required />
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {showProvider ? (
+                  <Field label="Proveedor *">
+                    <SearchableSelect
+                      disabled={readonly}
+                      value={form.proveedorId}
+                      options={providerOptions}
+                      placeholder={providerOptions.length ? "Seleccionar proveedor" : "Sin proveedores"}
+                      searchPlaceholder="Buscar proveedor..."
+                      emptyText="No hay proveedores."
+                      onChange={(value) => setForm((current) => ({ ...current, proveedorId: value }))}
+                    />
+                  </Field>
+                ) : null}
+                {showMeasureType ? (
+                  <Field label="Tipo de medida *">
+                    <SearchableSelect
+                      disabled={readonly}
+                      value={form.tipoMedidaId}
+                      options={measureOptions}
+                      placeholder={measureOptions.length ? "Seleccionar medida" : "Sin medidas"}
+                      searchPlaceholder="Buscar medida..."
+                      emptyText="No hay tipos de medida."
+                      onChange={(value) => setForm((current) => ({ ...current, tipoMedidaId: value }))}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+              {showExpiration ? (
+                <Field label="Fecha de vencimiento">
+                  <Input disabled={readonly} type="date" value={form.fechaVencimiento} onChange={(event) => setForm((current) => ({ ...current, fechaVencimiento: event.target.value }))} />
+                </Field>
+              ) : null}
+            </Panel>
+            <Panel number="2" title="Stock y compra">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Precio compra *">
+                  <Input disabled={readonly} type="number" step="0.01" min="0" value={form.precioCompra} onChange={(event) => setForm((current) => ({ ...current, precioCompra: event.target.value }))} required />
+                </Field>
+                <Field label="Stock lote *">
+                  <Input disabled={readonly} type="number" min="0" value={form.stockLote} onChange={(event) => setForm((current) => ({ ...current, stockLote: event.target.value }))} required />
+                </Field>
+              </div>
+              {state.item ? <p className="rounded-md bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">Stock usado: {state.item.stockUsado || 0}. Disponible: {state.item.stockDisponible || 0}.</p> : null}
+            </Panel>
+            {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+          </div>
+          <DialogFooter className="border-t border-slate-200 p-3">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            {!readonly ? <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">{saving ? "Guardando..." : "Guardar lote"}</Button> : null}
           </DialogFooter>
         </form>
       </DialogContent>
