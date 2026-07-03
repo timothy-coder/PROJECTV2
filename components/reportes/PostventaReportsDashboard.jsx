@@ -236,7 +236,7 @@ function buildRecords(rows) {
     const citaRows = uniqueRows(group, (row) => row.cita_id);
     const viewRows = uniqueRows(group, (row) => row.cotizacion_vista_id);
     const close = latestRow(group.filter((row) => row.cierre_created_at), "cierre_created_at");
-    const effectiveCitaRows = citaRows.filter((row) => isEffectiveAppointment(row.cita_estado));
+    const effectiveCitaRows = citaRows.filter((row) => row.cita_id || isEffectiveAppointment(row.cita_estado));
     const reprogrammedCitaRows = citaRows.filter((row) => isRescheduledAppointment(row.cita_estado));
     const vehicle = [base.vehiculo_marca, base.vehiculo_modelo].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
     const plate = clean(base.vehiculo_placa || base.vehiculo_vin, "");
@@ -300,7 +300,7 @@ function filterRecords(records, filters, chartFilters) {
 
 function lineByDay(records) {
   const days = Array.from(new Set(records.map((item) => item.day).filter(Boolean))).sort();
-  return days.map((day) => ({ day: day.slice(5), value: records.filter((item) => item.day === day).length }));
+  return days.map((day) => ({ day: dayNumber(day), value: records.filter((item) => item.day === day).length }));
 }
 
 function buildDateTree(records) {
@@ -658,7 +658,9 @@ function Kpi({ title, value }) {
   return (
     <Card className="gap-0 overflow-hidden bg-white py-0 shadow-sm">
       <div className="bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-center text-xs font-black text-white">{title}</div>
-      <CardContent className="flex h-14 items-center justify-center px-2 text-xl font-bold md:text-2xl">{value || "-"}</CardContent>
+      <CardContent className="flex h-14 items-center justify-center px-2 text-center text-lg font-black leading-tight md:text-xl">
+        <span className="block max-w-full break-words">{value || "-"}</span>
+      </CardContent>
     </Card>
   );
 }

@@ -35,6 +35,16 @@ export function usePostventaOpportunityDetail(id) {
       await reload();
       return result;
     },
+    updateClientData: async (payload) => {
+      const result = await apiFetch(`/api/postventa-opportunities/${id}`, { method: "POST", body: JSON.stringify({ action: "client-update", ...payload }) });
+      await reload();
+      return result;
+    },
+    updateVehicleData: async (payload) => {
+      const result = await apiFetch(`/api/postventa-opportunities/${id}`, { method: "POST", body: JSON.stringify({ action: "vehicle-update", ...payload }) });
+      await reload();
+      return result;
+    },
   }), [id, reload]);
 
   return { data, loading, reload, ...actions };

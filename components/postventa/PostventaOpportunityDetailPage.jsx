@@ -11,12 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { VehicleDialog } from "@/components/clients/VehicleDialog";
 import { usePostventaOpportunityDetail } from "@/hooks/postventa/usePostventaOpportunityDetail";
 import { usePostventaQuotes } from "@/hooks/postventaquotes/usePostventaQuotes";
 import { QuoteForm } from "@/components/postventaquotes/PostventaQuotesPage";
 
 export default function PostventaOpportunityDetailPage({ id }) {
-  const { data, loading, save, createAppointment, updateAppointment } = usePostventaOpportunityDetail(id);
+  const { data, loading, save, createAppointment, updateAppointment, updateClientData, updateVehicleData } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
   const [maintenance, setMaintenance] = useState({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
@@ -27,11 +28,13 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [clientEditOpen, setClientEditOpen] = useState(false);
+  const [vehicleEditOpen, setVehicleEditOpen] = useState(false);
   const quoteData = usePostventaQuotes(quoteType);
 
   if (loading || !data) return <div className="p-4">Cargando...</div>;
 
-  const { opportunity, stages, details, activities, appointments = [], appointmentOptions = {}, closings = [], closures = [], currentUser } = data;
+  const { opportunity, stages, details, activities, appointments = [], appointmentOptions = {}, vehicleOptions = {}, closings = [], closures = [], currentUser } = data;
   const currentIndex = stages.findIndex((stage) => Number(stage.id) === Number(opportunity.etapaId));
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre?.toLowerCase() === "nuevo");
@@ -99,7 +102,12 @@ export default function PostventaOpportunityDetailPage({ id }) {
           </div>
         </header>
 
-        <InfoSection opportunity={opportunity} />
+        <InfoSection
+          opportunity={opportunity}
+          canEdit={Boolean(currentUser.canEditOpportunity)}
+          onEditClient={() => setClientEditOpen(true)}
+          onEditVehicle={() => setVehicleEditOpen(true)}
+        />
         <div className="mb-4 grid gap-3 lg:grid-cols-2">
           <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={addActivity} onEdit={setEditingActivity} />
           <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={addAgenda} />
@@ -199,6 +207,44 @@ export default function PostventaOpportunityDetailPage({ id }) {
             }}
           />
         ) : null}
+        {clientEditOpen ? (
+          <ClientDataDialog
+            opportunity={opportunity}
+            onClose={() => setClientEditOpen(false)}
+            onSubmit={async (payload) => {
+              await updateClientData(payload);
+              setClientEditOpen(false);
+              toast.success("Datos del cliente actualizados");
+            }}
+          />
+        ) : null}
+        <VehicleDialog
+          open={vehicleEditOpen}
+          mode="edit"
+          client={{
+            id: opportunity.clienteId,
+            nombre: opportunity.clienteNombreRaw,
+            apellido: opportunity.clienteApellido,
+          }}
+          vehicle={{
+            id: opportunity.vehiculoId,
+            clienteId: opportunity.clienteId,
+            placas: opportunity.placa,
+            vin: opportunity.vin,
+            marcaId: opportunity.marcaId,
+            modeloId: opportunity.modeloId,
+            anio: opportunity.anio,
+            color: opportunity.color,
+            kilometraje: opportunity.kilometraje,
+            fechaUltimaVisita: opportunity.fechaUltimaVisita,
+          }}
+          options={vehicleOptions}
+          onClose={() => setVehicleEditOpen(false)}
+          onSubmit={async (payload) => {
+            await updateVehicleData(payload);
+            toast.success("Datos del vehiculo actualizados");
+          }}
+        />
       </div>
     </TooltipProvider>
   );
@@ -319,31 +365,59 @@ function QuoteSection({ canCreate, createdQuote, onCopy, onOpen, quoteType, setQ
   );
 }
 
-function InfoSection({ opportunity }) {
-  const rows = [
+function InfoSection({ opportunity, canEdit, onEditClient, onEditVehicle }) {
+  const clientRows = [
     ["CLIENTE", opportunity.clienteNombre],
-    ["CODIGO", opportunity.code],
+    ["CORREO", opportunity.email || "-"],
+    ["CELULAR", opportunity.celular || "-"],
+    ["DNI", opportunity.dni || "-"],
+  ];
+  const vehicleRows = [
     ["VEHICULO", opportunity.vehiculoNombre],
     ["PLACA", opportunity.placa || "-"],
     ["VIN", opportunity.vin || "-"],
     ["ANIO", opportunity.anio || "-"],
     ["COLOR", opportunity.color || "-"],
+    ["KM", opportunity.kilometraje || "-"],
+  ];
+  const opportunityRows = [
+    ["CODIGO", opportunity.code],
     ["ORIGEN", opportunity.origenNombre],
     ["SUBORIGEN", opportunity.suborigenNombre || "-"],
     ["ASIGNADO A", opportunity.asignadoNombre],
-    ["CORREO", opportunity.email || "-"],
-    ["CELULAR", opportunity.celular || "-"],
-    ["DNI", opportunity.dni || "-"],
     ["CREADO POR", opportunity.creadoNombre || "-"],
   ];
 
   return (
     <section className="mb-3 rounded-lg bg-white p-3 shadow-sm sm:p-4">
-      <h2 className="mb-3 text-sm font-bold sm:text-base">Informacion General</h2>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-sm font-bold sm:text-base">Informacion General</h2>
+        {canEdit ? (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onEditClient}>
+              <Pencil className="size-3.5" />Editar cliente
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onEditVehicle}>
+              <Pencil className="size-3.5" />Editar vehiculo
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      <InfoGroup title="Datos del cliente" rows={clientRows} />
+      <InfoGroup title="Datos del vehiculo" rows={vehicleRows} />
+      <InfoGroup title="Datos de oportunidad" rows={opportunityRows} />
+    </section>
+  );
+}
+
+function InfoGroup({ title, rows }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">{title}</p>
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {rows.map(([key, value]) => <InfoItem key={key} label={key} value={value} />)}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -353,6 +427,71 @@ function InfoItem({ label, value }) {
       <p className="text-[10px] font-bold text-slate-500">{label}</p>
       <p className="truncate text-xs font-semibold text-slate-900 sm:text-sm">{value}</p>
     </div>
+  );
+}
+
+function ClientDataDialog({ opportunity, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    nombre: opportunity.clienteNombreRaw || "",
+    apellido: opportunity.clienteApellido || "",
+    email: opportunity.email || "",
+    celular: opportunity.celular || "",
+    tipoIdentificacion: opportunity.tipoIdentificacion || "DNI",
+    identificacionFiscal: opportunity.dni || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!form.nombre.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit(form);
+    } catch (err) {
+      setError(err.message || "No se pudo actualizar el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(96vw,640px)] bg-white text-slate-950">
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-violet-700">Editar datos del cliente</DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <Field label="Nombre *"><Input value={form.nombre} onChange={(event) => update("nombre", event.target.value)} /></Field>
+            <Field label="Apellido"><Input value={form.apellido} onChange={(event) => update("apellido", event.target.value)} /></Field>
+            <Field label="Correo"><Input type="email" value={form.email} onChange={(event) => update("email", event.target.value)} /></Field>
+            <Field label="Celular"><Input value={form.celular} onChange={(event) => update("celular", event.target.value)} /></Field>
+            <Field label="Tipo documento">
+              <NativeSelect
+                value={form.tipoIdentificacion}
+                onChange={(event) => update("tipoIdentificacion", event.target.value)}
+                options={[["DNI", "DNI"], ["RUC", "RUC"], ["CE", "CE"], ["PASAPORTE", "Pasaporte"]]}
+              />
+            </Field>
+            <Field label="Documento"><Input value={form.identificacionFiscal} onChange={(event) => update("identificacionFiscal", event.target.value)} /></Field>
+          </div>
+          {error ? <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+            <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">Guardar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

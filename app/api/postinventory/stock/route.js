@@ -1,26 +1,46 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { validateLotLocationStock } from "@/lib/postinventoryLotStock";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
+
+async function requireLocationPermission(action) {
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ message: "No autorizado." }, { status: 401 }) };
+  if (!hasPerm(user.permissions || {}, ["ubicacion_inventario", action])) {
+    return { error: NextResponse.json({ message: "No tienes permiso para ubicaciones de inventario." }, { status: 403 }) };
+  }
+  return { user };
+}
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const productoId = Number(body.productoId);
-    const centroId = Number(body.centroId);
-    const tallerId = body.tallerId ? Number(body.tallerId) : null;
-    const mostradorId = body.mostradorId ? Number(body.mostradorId) : null;
-    const stock = Number(body.stock || 0);
+    const allowed = await requireLocationPermission("create");
+    if (allowed.error) return allowed.error;
 
-    if (!productoId || !centroId || Number.isNaN(stock) || (tallerId && mostradorId)) {
+    const body = await request.json();
+    const loteId = Number(body.loteId);
+    const anaquelId = Number(body.anaquelId);
+    const nivelId = body.nivelId ? Number(body.nivelId) : null;
+    const posicionId = body.posicionId ? Number(body.posicionId) : null;
+    const stock = Number(body.stock || body.cantidad || 0);
+
+    if (!loteId || !anaquelId || Number.isNaN(stock)) {
       return NextResponse.json({ message: "Ubicacion o stock invalido." }, { status: 400 });
     }
 
+    const stockValidation = await validateLotLocationStock(pool, loteId, stock);
+    if (!stockValidation.ok) {
+      return NextResponse.json({ message: stockValidation.message }, { status: 400 });
+    }
+
     const [result] = await pool.query(
-      `INSERT INTO posventa_stock (producto_id, centro_id, taller_id, mostrador_id, stock)
+      `INSERT INTO posventa_lotes_ubicaciones (lote_id, anaquel_id, nivel_id, posicion_id, cantidad)
        VALUES (?, ?, ?, ?, ?)`,
-      [productoId, centroId, tallerId, mostradorId, stock]
+      [loteId, anaquelId, nivelId, posicionId, stock]
     );
-    await syncProductStock(productoId);
+    await syncProductStockByLot(loteId);
 
     return NextResponse.json({ ok: true, id: result.insertId }, { status: 201 });
   } catch (error) {
@@ -29,9 +49,15 @@ export async function POST(request) {
   }
 }
 
-async function syncProductStock(productoId) {
+async function syncProductStockByLot(loteId) {
+  const [lotRows] = await pool.query(`SELECT producto_id FROM posventa_productos_lotes WHERE id = ?`, [loteId]);
+  const productoId = lotRows[0]?.producto_id;
+  if (!productoId) return;
   const [sumRows] = await pool.query(
-    `SELECT COALESCE(SUM(stock), 0) AS usado FROM posventa_stock WHERE producto_id = ?`,
+    `SELECT COALESCE(SUM(u.cantidad), 0) AS usado
+     FROM posventa_lotes_ubicaciones u
+     INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
+     WHERE l.producto_id = ?`,
     [productoId]
   );
   const [productRows] = await pool.query(

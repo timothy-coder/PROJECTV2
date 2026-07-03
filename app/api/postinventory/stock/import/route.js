@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { validateLotLocationStock } from "@/lib/postinventoryLotStock";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
+
+async function requireLocationPermission(action) {
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ message: "No autorizado." }, { status: 401 }) };
+  if (!hasPerm(user.permissions || {}, ["ubicacion_inventario", action])) {
+    return { error: NextResponse.json({ message: "No tienes permiso para ubicaciones de inventario." }, { status: 403 }) };
+  }
+  return { user };
+}
 
 function value(row, keys) {
   for (const key of keys) {
@@ -34,7 +46,10 @@ function buildMap(rows, fields = ["nombre"]) {
 
 async function syncProductStock(connection, productoId) {
   const [sumRows] = await connection.query(
-    `SELECT COALESCE(SUM(stock), 0) AS usado FROM posventa_stock WHERE producto_id = ?`,
+    `SELECT COALESCE(SUM(u.cantidad), 0) AS usado
+     FROM posventa_lotes_ubicaciones u
+     INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
+     WHERE l.producto_id = ?`,
     [productoId]
   );
   const [productRows] = await connection.query(
@@ -52,20 +67,28 @@ async function syncProductStock(connection, productoId) {
 export async function POST(request) {
   const connection = await pool.getConnection();
   try {
+    const allowed = await requireLocationPermission("import");
+    if (allowed.error) return allowed.error;
+
     const body = await request.json();
     const rows = Array.isArray(body.rows) ? body.rows : [];
     if (!rows.length) {
       return NextResponse.json({ message: "No hay filas para importar." }, { status: 400 });
     }
 
-    const [productRows] = await connection.query(`SELECT id, numero_parte FROM posventa_productos`);
-    const [centerRows] = await connection.query(`SELECT id, nombre FROM configuracion_centros`);
-    const [workshopRows] = await connection.query(`SELECT id, centro_id, nombre FROM configuracion_talleres`);
-    const [counterRows] = await connection.query(`SELECT id, centro_id, nombre FROM configuracion_mostradores`);
-    const productMap = buildMap(productRows, ["numero_parte"]);
-    const centerMap = buildMap(centerRows);
-    const workshopMap = buildMap(workshopRows);
-    const counterMap = buildMap(counterRows);
+    const [lotRows] = await connection.query(
+      `SELECT l.id, l.producto_id, p.numero_parte
+       FROM posventa_productos_lotes l
+       INNER JOIN posventa_productos p ON p.id = l.producto_id`
+    );
+    const [shelfRows] = await connection.query(`SELECT id, codigo FROM almacen_anaqueles`);
+    const [levelRows] = await connection.query(`SELECT id, anaquel_id, codigo_nivel FROM almacen_anaquel_niveles`);
+    const [positionRows] = await connection.query(`SELECT id, nivel_id, posicion FROM almacen_nivel_posiciones`);
+    const lotMap = buildMap(lotRows, ["id"]);
+    const shelfMap = buildMap(shelfRows, ["codigo"]);
+    const levelMap = buildMap(levelRows, ["codigo_nivel"]);
+    const positionMap = buildMap(positionRows, ["posicion"]);
+    const productByLot = new Map(lotRows.map((row) => [Number(row.id), row.producto_id]));
 
     let imported = 0;
     const touchedProducts = new Set();
@@ -74,28 +97,34 @@ export async function POST(request) {
     await connection.beginTransaction();
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index] || {};
-      const productRaw = cleanText(value(row, ["producto_id", "Producto ID", "numero_parte", "Numero Parte", "N Parte", "numeroParte"]));
-      const centerRaw = cleanText(value(row, ["centro_id", "Centro ID", "centro", "Centro"]));
-      const workshopRaw = cleanText(value(row, ["taller_id", "Taller ID", "taller", "Taller"]));
-      const counterRaw = cleanText(value(row, ["mostrador_id", "Mostrador ID", "mostrador", "Mostrador"]));
-      const stock = numberValue(value(row, ["stock", "Stock", "cantidad", "Cantidad"]));
+      const lotRaw = cleanText(value(row, ["lote_id", "Lote ID", "lote", "Lote"]));
+      const shelfRaw = cleanText(value(row, ["anaquel_id", "Anaquel ID", "anaquel", "Anaquel"]));
+      const levelRaw = cleanText(value(row, ["nivel_id", "Nivel ID", "nivel", "Nivel"]));
+      const positionRaw = cleanText(value(row, ["posicion_id", "Posicion ID", "posicion", "Posicion"]));
+      const stock = numberValue(value(row, ["cantidad", "Cantidad", "stock", "Stock"]));
 
-      const productoId = productMap.get(productRaw) || productMap.get(productRaw.toLowerCase());
-      const centroId = centerMap.get(centerRaw) || centerMap.get(centerRaw.toLowerCase());
-      const tallerId = workshopRaw ? workshopMap.get(workshopRaw) || workshopMap.get(workshopRaw.toLowerCase()) || null : null;
-      const mostradorId = counterRaw ? counterMap.get(counterRaw) || counterMap.get(counterRaw.toLowerCase()) || null : null;
+      const loteId = lotMap.get(lotRaw) || lotMap.get(lotRaw.toLowerCase());
+      const anaquelId = shelfMap.get(shelfRaw) || shelfMap.get(shelfRaw.toLowerCase());
+      const nivelId = levelRaw ? levelMap.get(levelRaw) || levelMap.get(levelRaw.toLowerCase()) || null : null;
+      const posicionId = positionRaw ? positionMap.get(positionRaw) || positionMap.get(positionRaw.toLowerCase()) || null : null;
 
-      if (!productoId || !centroId || Number.isNaN(stock) || (tallerId && mostradorId)) {
-        errors.push(`Fila ${index + 2}: producto, centro y stock son obligatorios; usa solo taller o mostrador.`);
+      if (!loteId || !anaquelId || Number.isNaN(stock)) {
+        errors.push(`Fila ${index + 2}: lote, anaquel y cantidad son obligatorios.`);
+        continue;
+      }
+
+      const stockValidation = await validateLotLocationStock(connection, loteId, stock);
+      if (!stockValidation.ok) {
+        errors.push(`Fila ${index + 2}: ${stockValidation.message}`);
         continue;
       }
 
       await connection.query(
-        `INSERT INTO posventa_stock (producto_id, centro_id, taller_id, mostrador_id, stock)
+        `INSERT INTO posventa_lotes_ubicaciones (lote_id, anaquel_id, nivel_id, posicion_id, cantidad)
          VALUES (?, ?, ?, ?, ?)`,
-        [productoId, centroId, tallerId, mostradorId, stock]
+        [loteId, anaquelId, nivelId, posicionId, stock]
       );
-      touchedProducts.add(productoId);
+      if (productByLot.get(Number(loteId))) touchedProducts.add(productByLot.get(Number(loteId)));
       imported += 1;
     }
 

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
 export function usePostInventory() {
-  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [] } });
+  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [], lots: [], shelves: [], shelfLevels: [], shelfPositions: [] } });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -29,6 +29,10 @@ export function usePostInventory() {
         centers: next.options?.centers || [],
         workshops: next.options?.workshops || [],
         counters: next.options?.counters || [],
+        lots: next.options?.lots || [],
+        shelves: next.options?.shelves || [],
+        shelfLevels: next.options?.shelfLevels || [],
+        shelfPositions: next.options?.shelfPositions || [],
       },
     });
     setLoading(false);

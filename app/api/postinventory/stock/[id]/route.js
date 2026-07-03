@@ -1,29 +1,56 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { validateLotLocationStock } from "@/lib/postinventoryLotStock";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
+
+async function requireLocationPermission(action) {
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ message: "No autorizado." }, { status: 401 }) };
+  if (!hasPerm(user.permissions || {}, ["ubicacion_inventario", action])) {
+    return { error: NextResponse.json({ message: "No tienes permiso para ubicaciones de inventario." }, { status: 403 }) };
+  }
+  return { user };
+}
 
 export async function PUT(request, { params }) {
   try {
+    const allowed = await requireLocationPermission("edit");
+    if (allowed.error) return allowed.error;
+
     const { id: rawId } = await params;
     const id = Number(rawId);
     const body = await request.json();
-    const productoId = Number(body.productoId);
-    const centroId = Number(body.centroId);
-    const tallerId = body.tallerId ? Number(body.tallerId) : null;
-    const mostradorId = body.mostradorId ? Number(body.mostradorId) : null;
-    const stock = Number(body.stock || 0);
+    const loteId = Number(body.loteId);
+    const anaquelId = Number(body.anaquelId);
+    const nivelId = body.nivelId ? Number(body.nivelId) : null;
+    const posicionId = body.posicionId ? Number(body.posicionId) : null;
+    const stock = Number(body.stock || body.cantidad || 0);
 
-    if (!id || !productoId || !centroId || Number.isNaN(stock) || (tallerId && mostradorId)) {
+    if (!id || !loteId || !anaquelId || Number.isNaN(stock)) {
       return NextResponse.json({ message: "Ubicacion o stock invalido." }, { status: 400 });
     }
 
+    const [previousRows] = await pool.query(`SELECT lote_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [id]);
+    const previousLoteId = previousRows[0]?.lote_id;
+    if (!previousLoteId) {
+      return NextResponse.json({ message: "Ubicacion no encontrada." }, { status: 404 });
+    }
+
+    const stockValidation = await validateLotLocationStock(pool, loteId, stock, id);
+    if (!stockValidation.ok) {
+      return NextResponse.json({ message: stockValidation.message }, { status: 400 });
+    }
+
     await pool.query(
-      `UPDATE posventa_stock
-       SET producto_id = ?, centro_id = ?, taller_id = ?, mostrador_id = ?, stock = ?
+      `UPDATE posventa_lotes_ubicaciones
+       SET lote_id = ?, anaquel_id = ?, nivel_id = ?, posicion_id = ?, cantidad = ?
        WHERE id = ?`,
-      [productoId, centroId, tallerId, mostradorId, stock, id]
+      [loteId, anaquelId, nivelId, posicionId, stock, id]
     );
-    await syncProductStock(productoId);
+    await syncProductStockByLot(loteId);
+    if (previousLoteId && Number(previousLoteId) !== Number(loteId)) await syncProductStockByLot(previousLoteId);
 
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -34,11 +61,14 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(_request, { params }) {
   try {
+    const allowed = await requireLocationPermission("delete");
+    if (allowed.error) return allowed.error;
+
     const { id: rawId } = await params;
-    const [rows] = await pool.query(`SELECT producto_id FROM posventa_stock WHERE id = ?`, [Number(rawId)]);
-    const productoId = rows[0]?.producto_id;
-    await pool.query(`DELETE FROM posventa_stock WHERE id = ?`, [Number(rawId)]);
-    if (productoId) await syncProductStock(productoId);
+    const [rows] = await pool.query(`SELECT lote_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [Number(rawId)]);
+    const loteId = rows[0]?.lote_id;
+    await pool.query(`DELETE FROM posventa_lotes_ubicaciones WHERE id = ?`, [Number(rawId)]);
+    if (loteId) await syncProductStockByLot(loteId);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Error deleting stock:", error);
@@ -46,9 +76,15 @@ export async function DELETE(_request, { params }) {
   }
 }
 
-async function syncProductStock(productoId) {
+async function syncProductStockByLot(loteId) {
+  const [lotRows] = await pool.query(`SELECT producto_id FROM posventa_productos_lotes WHERE id = ?`, [loteId]);
+  const productoId = lotRows[0]?.producto_id;
+  if (!productoId) return;
   const [sumRows] = await pool.query(
-    `SELECT COALESCE(SUM(stock), 0) AS usado FROM posventa_stock WHERE producto_id = ?`,
+    `SELECT COALESCE(SUM(u.cantidad), 0) AS usado
+     FROM posventa_lotes_ubicaciones u
+     INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
+     WHERE l.producto_id = ?`,
     [productoId]
   );
   const [productRows] = await pool.query(

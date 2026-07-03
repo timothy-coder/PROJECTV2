@@ -6,13 +6,20 @@ function mapStock(row) {
   return {
     id: row.id,
     productoId: row.producto_id,
-    centroId: row.centro_id,
-    tallerId: row.taller_id,
-    mostradorId: row.mostrador_id,
-    centroName: row.centro_name || "",
+    loteId: row.lote_id,
+    loteLabel: `Lote ${row.lote_id}`,
+    numeroParte: row.numero_parte || "",
+    descripcion: row.descripcion || "",
+    anaquelId: row.anaquel_id,
+    nivelId: row.nivel_id,
+    posicionId: row.posicion_id,
+    anaquelCodigo: row.anaquel_codigo || "",
+    anaquelDescripcion: row.anaquel_descripcion || "",
+    nivelCodigo: row.codigo_nivel || "",
+    posicion: row.posicion || "",
     tallerName: row.taller_name || "",
     mostradorName: row.mostrador_name || "",
-    stock: Number(row.stock || 0),
+    stock: Number(row.cantidad || 0),
     createdAt: row.created_at,
   };
 }
@@ -59,13 +66,21 @@ export async function GET() {
        ORDER BY p.numero_parte ASC`
     );
     const [stockRows] = await pool.query(
-      `SELECT s.id, s.producto_id, s.centro_id, s.taller_id, s.mostrador_id, s.stock, s.created_at,
-              c.nombre AS centro_name, ta.nombre AS taller_name, mo.nombre AS mostrador_name
-       FROM posventa_stock s
-       LEFT JOIN configuracion_centros c ON c.id = s.centro_id
-       LEFT JOIN configuracion_talleres ta ON ta.id = s.taller_id
-       LEFT JOIN configuracion_mostradores mo ON mo.id = s.mostrador_id
-       ORDER BY s.created_at DESC`
+      `SELECT u.id, u.lote_id, u.anaquel_id, u.nivel_id, u.posicion_id, u.cantidad, u.created_at,
+              l.producto_id,
+              p.numero_parte, p.descripcion,
+              a.codigo AS anaquel_codigo, a.descripcion AS anaquel_descripcion,
+              n.codigo_nivel, po.posicion,
+              ta.nombre AS taller_name, mo.nombre AS mostrador_name
+       FROM posventa_lotes_ubicaciones u
+       INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
+       INNER JOIN posventa_productos p ON p.id = l.producto_id
+       INNER JOIN almacen_anaqueles a ON a.id = u.anaquel_id
+       LEFT JOIN almacen_anaquel_niveles n ON n.id = u.nivel_id
+       LEFT JOIN almacen_nivel_posiciones po ON po.id = u.posicion_id
+       LEFT JOIN configuracion_talleres ta ON ta.id = a.taller_id
+       LEFT JOIN configuracion_mostradores mo ON mo.id = a.mostrador_id
+       ORDER BY u.created_at DESC`
     );
     const [typeRows] = await pool.query(
       `SELECT id, nombre FROM configuracion_inventario_tipo ORDER BY nombre ASC`
@@ -84,6 +99,33 @@ export async function GET() {
     );
     const [counterRows] = await pool.query(
       `SELECT id, centro_id, nombre FROM configuracion_mostradores ORDER BY nombre ASC`
+    );
+    const [lotRows] = await pool.query(
+      `SELECT l.id, l.producto_id, p.numero_parte, p.descripcion
+       FROM posventa_productos_lotes l
+       INNER JOIN posventa_productos p ON p.id = l.producto_id
+       ORDER BY p.numero_parte ASC, l.id DESC`
+    );
+    const [shelfRows] = await pool.query(
+      `SELECT a.id, a.codigo, a.descripcion, a.taller_id, a.mostrador_id,
+              ta.nombre AS taller_name, mo.nombre AS mostrador_name
+       FROM almacen_anaqueles a
+       LEFT JOIN configuracion_talleres ta ON ta.id = a.taller_id
+       LEFT JOIN configuracion_mostradores mo ON mo.id = a.mostrador_id
+       WHERE a.activo = 1
+       ORDER BY a.codigo ASC`
+    );
+    const [shelfLevelRows] = await pool.query(
+      `SELECT id, anaquel_id, codigo_nivel, orden_nivel
+       FROM almacen_anaquel_niveles
+       WHERE activo = 1
+       ORDER BY orden_nivel ASC`
+    );
+    const [shelfPositionRows] = await pool.query(
+      `SELECT id, nivel_id, posicion
+       FROM almacen_nivel_posiciones
+       WHERE activo = 1
+       ORDER BY posicion ASC`
     );
     const [comboRows] = await pool.query(
       `SELECT id, codigo, nombre, descripcion, is_active, created_at, updated_at
@@ -152,6 +194,10 @@ export async function GET() {
         centers: centerRows.map((row) => ({ id: row.id, nombre: row.nombre })),
         workshops: workshopRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         counters: counterRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
+        lots: lotRows.map((row) => ({ id: row.id, productoId: row.producto_id, numeroParte: row.numero_parte, descripcion: row.descripcion, label: `${row.numero_parte} - Lote ${row.id}` })),
+        shelves: shelfRows.map((row) => ({ id: row.id, codigo: row.codigo, descripcion: row.descripcion || "", tallerId: row.taller_id, mostradorId: row.mostrador_id, tallerName: row.taller_name || "", mostradorName: row.mostrador_name || "" })),
+        shelfLevels: shelfLevelRows.map((row) => ({ id: row.id, anaquelId: row.anaquel_id, codigoNivel: row.codigo_nivel, ordenNivel: row.orden_nivel })),
+        shelfPositions: shelfPositionRows.map((row) => ({ id: row.id, nivelId: row.nivel_id, posicion: row.posicion })),
       },
     });
   } catch (error) {

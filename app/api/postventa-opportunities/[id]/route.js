@@ -67,8 +67,8 @@ async function loadOpportunity(connection, id, user, canAll) {
     `SELECT o.id, o.cliente_id, o.vehiculo_id, o.origen_id, o.suborigen_id, o.etapasconversionpv_id,
             o.created_by, o.asignado_a, o.created_at, o.updated_at, o.oportunidad_id,
             CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente_nombre,
-            c.email, c.celular, c.identificacion_fiscal,
-            v.placas, v.vin, v.anio, v.color, ma.name AS marca_nombre, mo.name AS modelo_nombre,
+            c.nombre AS cliente_first_name, c.apellido AS cliente_last_name, c.email, c.celular, c.tipo_identificacion, c.identificacion_fiscal,
+            v.placas, v.vin, v.marca_id, v.modelo_id, v.anio, v.color, v.kilometraje, v.fecha_ultima_visita, ma.name AS marca_nombre, mo.name AS modelo_nombre,
             og.name AS origen_nombre, so.name AS suborigen_nombre,
             e.nombre AS etapa_nombre, e.color AS etapa_color, e.descripcion AS etapa_temp, e.sort_order,
             cu.fullname AS creado_nombre, au.fullname AS asignado_nombre
@@ -141,6 +141,9 @@ export async function GET(_request, { params }) {
     const [origins] = await connection.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await connection.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
     const [closingOptions] = await connection.query(`SELECT id,detalle FROM configuracion_posventas_cierres_detalle ORDER BY id DESC`);
+    const [brandRows] = await connection.query(`SELECT id,name FROM administracion_marcas ORDER BY name ASC`);
+    const [modelRows] = await connection.query(`SELECT id,marca_id,clase_id,name FROM administracion_modelos ORDER BY name ASC`);
+    const [classRows] = await connection.query(`SELECT id,name FROM administracion_clases ORDER BY name ASC`);
     const [closures] = await connection.query(
       `SELECT c.id, c.detalle, c.cierre_detalle_id, c.created_at, u.fullname AS user_name, cd.detalle AS motivo
        FROM posventa_oportunidades_cierres c
@@ -156,6 +159,7 @@ export async function GET(_request, { params }) {
         id: user.id,
         fullname: user.fullname,
         canViewAll: canAll,
+        canEditOpportunity: canEdit(user, permission),
         canCreateQuote: hasPerm(user.permissions, ["cotizacion", "create"]),
         canCreateAppointment: hasPerm(user.permissions, ["citas", "create"]),
       },
@@ -163,16 +167,23 @@ export async function GET(_request, { params }) {
         id: opportunity.id,
         code: opportunity.oportunidad_id,
         clienteId: opportunity.cliente_id,
+        clienteNombreRaw: opportunity.cliente_first_name || "",
+        clienteApellido: opportunity.cliente_last_name || "",
         clienteNombre: opportunity.cliente_nombre.trim(),
         email: opportunity.email || "",
         celular: opportunity.celular || "",
+        tipoIdentificacion: opportunity.tipo_identificacion || "",
         dni: opportunity.identificacion_fiscal || "",
         vehiculoId: opportunity.vehiculo_id,
         vehiculoNombre: [opportunity.marca_nombre, opportunity.modelo_nombre].filter(Boolean).join(" ") || opportunity.placas || opportunity.vin || "-",
         placa: opportunity.placas || "",
         vin: opportunity.vin || "",
+        marcaId: opportunity.marca_id,
+        modeloId: opportunity.modelo_id,
         anio: opportunity.anio || "",
         color: opportunity.color || "",
+        kilometraje: opportunity.kilometraje || "",
+        fechaUltimaVisita: datePart(opportunity.fecha_ultima_visita),
         origenId: opportunity.origen_id,
         origenNombre: opportunity.origen_nombre,
         suborigenNombre: opportunity.suborigen_nombre || "",
@@ -221,6 +232,11 @@ export async function GET(_request, { params }) {
         workshops: workshops.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+      },
+      vehicleOptions: {
+        marcas: brandRows.map((row) => ({ id: row.id, name: row.name })),
+        modelos: modelRows.map((row) => ({ id: row.id, marcaId: row.marca_id, claseId: row.clase_id, name: row.name })),
+        clases: classRows.map((row) => ({ id: row.id, name: row.name })),
       },
       closings: closingOptions.map((row) => ({ id: row.id, detalle: row.detalle || "" })),
       closures: closures.map((row) => ({
@@ -321,6 +337,69 @@ export async function POST(request, { params }) {
          SET detalle=?
          WHERE id=? AND oportunidad_id=?`,
         [detalle, Number(body.activityId), id]
+      );
+    }
+    if (body.action === "client-update") {
+      if (!canEdit(user, permission)) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No tienes permiso para editar este registro." }, { status: 403 });
+      }
+      const nombre = String(body.nombre || "").trim();
+      if (!nombre) {
+        await connection.rollback();
+        return NextResponse.json({ message: "El nombre del cliente es obligatorio." }, { status: 400 });
+      }
+      await connection.query(
+        `UPDATE administracion_clientes
+         SET nombre=?, apellido=?, email=?, celular=?, tipo_identificacion=?, identificacion_fiscal=?
+         WHERE id=?`,
+        [
+          nombre,
+          String(body.apellido || "").trim() || null,
+          String(body.email || "").trim() || null,
+          String(body.celular || "").trim() || null,
+          String(body.tipoIdentificacion || "").trim() || null,
+          String(body.identificacionFiscal || "").trim() || null,
+          opportunity.cliente_id,
+        ]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, opportunity.etapasconversionpv_id, "Datos del cliente actualizados", user.id]
+      );
+    }
+    if (body.action === "vehicle-update") {
+      if (!canEdit(user, permission)) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No tienes permiso para editar este registro." }, { status: 403 });
+      }
+      const placas = String(body.placas || "").trim();
+      if (!placas) {
+        await connection.rollback();
+        return NextResponse.json({ message: "La placa del vehiculo es obligatoria." }, { status: 400 });
+      }
+      await connection.query(
+        `UPDATE administracion_vehiculos
+         SET cliente_id=?, placas=?, vin=?, marca_id=?, modelo_id=?, anio=?, color=?, kilometraje=?, fecha_ultima_visita=?
+         WHERE id=?`,
+        [
+          opportunity.cliente_id,
+          placas,
+          String(body.vin || "").trim() || null,
+          body.marcaId ? Number(body.marcaId) : null,
+          body.modeloId ? Number(body.modeloId) : null,
+          body.anio ? Number(body.anio) : null,
+          String(body.color || "").trim() || null,
+          body.kilometraje ? Number(body.kilometraje) : null,
+          body.fechaUltimaVisita || null,
+          opportunity.vehiculo_id,
+        ]
+      );
+      await connection.query(
+        `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+         VALUES (?, ?, ?, ?)`,
+        [id, opportunity.etapasconversionpv_id, "Datos del vehiculo actualizados", user.id]
       );
     }
     if (body.action === "agenda") {

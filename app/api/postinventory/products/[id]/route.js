@@ -21,7 +21,10 @@ export async function PUT(request, { params }) {
     }
 
     const [stockRows] = await pool.query(
-      `SELECT COALESCE(SUM(stock), 0) AS usado FROM posventa_stock WHERE producto_id = ?`,
+      `SELECT COALESCE(SUM(u.cantidad), 0) AS usado
+       FROM posventa_lotes_ubicaciones u
+       INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
+       WHERE l.producto_id = ?`,
       [id]
     );
     const stockUsado = Number(stockRows[0]?.usado || 0);
