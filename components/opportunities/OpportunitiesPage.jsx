@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, CalendarDays, ChevronDown, Edit3, Eye, Kanban, Loader2, MoreVertical, Plus, RefreshCw, Search, Send, Table2 } from "lucide-react";
+import { ArrowUpDown, CalendarDays, ChevronDown, Edit3, Eye, Info as InfoIcon, Kanban, Loader2, MoreVertical, Plus, RefreshCw, Search, Send, Table2 } from "lucide-react";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useOpportunities } from "@/hooks/opportunities/useOpportunities";
 import { useClients } from "@/hooks/clients/useClients";
 import { hasPerm } from "@/lib/permissions";
+import { apiFetch } from "@/app/api/client";
 
 function permissionKey(kind) {
   return kind === "lead" ? "leads" : "oportunidades";
@@ -32,6 +33,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const paginationRef = useRef(null);
   const [dialog, setDialog] = useState({ open: false, item: null, mode: "edit" });
   const [assignDialog, setAssignDialog] = useState({ open: false, item: null });
+  const [summaryDialog, setSummaryDialog] = useState({ open: false, item: null, data: null, loading: false, error: "" });
   const [conflict, setConflict] = useState(null);
   const canViewAll = Boolean(
     hasPerm(userPermissions, [permissionKey(kind), "viewall"]) ||
@@ -143,6 +145,16 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
     }
   }
 
+  async function openSummary(item) {
+    setSummaryDialog({ open: true, item, data: null, loading: true, error: "" });
+    try {
+      const response = await apiFetch(`/api/opportunities/${item.id}/detail?skipAutoAttention=1`);
+      setSummaryDialog({ open: true, item, data: response, loading: false, error: "" });
+    } catch (error) {
+      setSummaryDialog({ open: true, item, data: null, loading: false, error: error.message || "No se pudo cargar el resumen." });
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
@@ -186,6 +198,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
             onView={(item) => { window.location.href = `${copy.detailPath}/${item.id}`; }}
             onEdit={(item) => setDialog({ open: true, item, mode: "edit" })}
             onAssign={(item) => setAssignDialog({ open: true, item })}
+            onSummary={openSummary}
             tableContainerRef={tableContainerRef}
             paginationRef={paginationRef}
             page={currentPage}
@@ -198,6 +211,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
         {view === "kanban" ? <KanbanView data={filtered} stages={data.options.stages} detailPath={copy.detailPath} /> : null}
         {dialog.open ? <OpportunityDialog state={dialog} options={data.options} currentUser={data.currentUser} canViewAll={canViewAll} canCreateClient={canCreateClient} onClose={() => setDialog({ open: false, item: null, mode: "edit" })} onSubmit={saveOpportunity} /> : null}
         {assignDialog.open ? <AssignDialog state={assignDialog} users={data.options.users} onClose={() => setAssignDialog({ open: false, item: null })} onSubmit={async (payload) => { await data.assign(assignDialog.item.id, payload); setAssignDialog({ open: false, item: null }); }} /> : null}
+        {summaryDialog.open ? <OpportunitySummaryDialog state={summaryDialog} onClose={() => setSummaryDialog({ open: false, item: null, data: null, loading: false, error: "" })} /> : null}
         {conflict ? <ConflictDialog conflict={conflict} onClose={() => setConflict(null)} /> : null}
       </div>
     </TooltipProvider>
@@ -214,6 +228,7 @@ function GeneralView({
   onView,
   onEdit,
   onAssign,
+  onSummary,
   tableContainerRef,
   paginationRef,
   page,
@@ -269,6 +284,7 @@ function GeneralView({
                     {openMenu === item.id ? (
                       <div className="absolute right-2 top-10 z-30 w-36 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl">
                         <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onView(item))}>Ver</button>
+                        <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onSummary(item))}>Resumen</button>
                         {canEdit ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onEdit(item))}>Editar</button> : null}
                         {canViewAll ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobileAction(() => onAssign(item))}>Asignar</button> : null}
                       </div>
@@ -329,7 +345,7 @@ function GeneralView({
                   </td>
                   <td className="px-2 py-2 font-semibold"><DateTimeStack value={item.nextAgenda} /></td>
                   <td className="px-2 py-2 font-semibold">{item.latestQuoteModelName || "-"}</td>
-                  <td className="px-2 py-2"><TemperatureBadge item={item} /></td>
+                  <td className="px-2 py-2"><TemperatureCell item={item} onSummary={onSummary} /></td>
                   <td className="max-w-[140px] px-2 py-2 leading-tight">{item.detail}</td>
                   <td className="px-2 py-2">
                     <div className="flex justify-end gap-1">
@@ -818,6 +834,91 @@ function ConflictDialog({ conflict, onClose }) {
   return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent className="bg-white text-slate-950"><DialogHeader><DialogTitle>Oportunidad abierta</DialogTitle><DialogDescription>{conflict.message}</DialogDescription></DialogHeader><div className="rounded-lg bg-violet-50 p-3 text-sm font-bold text-violet-700">{conflict.opportunity?.oportunidad_id} - Etapa {conflict.opportunity?.etapa_nombre}</div><DialogFooter><Button variant="outline" onClick={onClose}>Cerrar</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+function OpportunitySummaryDialog({ state, onClose }) {
+  const payload = state.data || {};
+  const opportunity = payload.opportunity || state.item || {};
+  const quotes = payload.quotes || [];
+  const reservations = payload.reservations || [];
+  const details = payload.details || [];
+  const activities = payload.activities || [];
+  const testDrives = payload.testDrives || [];
+  const closures = payload.closures || [];
+  const createdAt = opportunity.createdAt || opportunity.created_at || state.item?.createdAt;
+  const firstQuote = earliestByDate(quotes, (item) => item.created_at || item.createdAt);
+  const firstReservation = earliestByDate(reservations, (item) => item.createdAt || item.created_at);
+  const lastAgenda = latestByDate(details, (item) => item.createdAt || item.fechaAgenda);
+  const completedTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "realizado").length;
+  const cancelledTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "cancelado").length;
+  const rows = [
+    ["Creacion", formatSummaryDateTime(createdAt)],
+    ["Primera cotizacion", firstQuote ? `${formatSummaryDateTime(firstQuote.created_at || firstQuote.createdAt)} (${daysText(createdAt, firstQuote.created_at || firstQuote.createdAt)})` : "Sin cotizacion"],
+    ["Primera nota de pedido", firstReservation ? `${formatSummaryDateTime(firstReservation.createdAt || firstReservation.created_at)} (${daysText(createdAt, firstReservation.createdAt || firstReservation.created_at)})` : "Sin nota de pedido"],
+    ["Agendas registradas", String(details.length)],
+    ["Reprogramaciones", String(Math.max(details.length - 1, 0))],
+    ["Ultima agenda registrada", lastAgenda ? `${formatSummaryDate(lastAgenda.fechaAgenda)} ${formatSummaryTime(lastAgenda.horaAgenda)}` : "Sin agenda"],
+    ["Actividades registradas", String(activities.length)],
+    ["Test drives", `${testDrives.length} total, ${completedTestDrives} realizados, ${cancelledTestDrives} cancelados`],
+    ["Cierres registrados", String(closures.length)],
+  ];
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(94vw,680px)] bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+            <InfoIcon className="size-5" />Resumen de oportunidad
+          </DialogTitle>
+          <DialogDescription>{opportunity.code || state.item?.code || "Oportunidad"} - {opportunity.clienteNombre || state.item?.clienteNombre || ""}</DialogDescription>
+        </DialogHeader>
+        {state.loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 p-8 text-sm font-semibold text-slate-500">
+            <Loader2 className="size-4 animate-spin" />Cargando resumen...
+          </div>
+        ) : state.error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{state.error}</div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {rows.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function earliestByDate(items, getter) {
+  return [...items]
+    .filter((item) => readValidDate(getter(item)))
+    .sort((a, b) => readValidDate(getter(a)).getTime() - readValidDate(getter(b)).getTime())[0] || null;
+}
+
+function latestByDate(items, getter) {
+  return [...items]
+    .filter((item) => readValidDate(getter(item)))
+    .sort((a, b) => readValidDate(getter(b)).getTime() - readValidDate(getter(a)).getTime())[0] || null;
+}
+
+function readValidDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysText(startValue, endValue) {
+  const start = readValidDate(startValue);
+  const end = readValidDate(endValue);
+  if (!start || !end) return "sin fecha base";
+  const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+  if (days === 0) return "mismo dia";
+  if (days === 1) return "1 dia despues";
+  return `${days} dias despues`;
+}
+
 function HistoryBox({ title, empty, children }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return <section className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="mb-3 font-bold text-slate-950">{title}</h3><div className="space-y-2">{hasChildren ? children : <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">{empty}</p>}</div></section>;
@@ -837,6 +938,24 @@ function ViewButton({ active, onClick, icon: Icon, label }) {
 
 function StageBadge({ item }) {
   return <span className="rounded-full px-2 py-1 text-xs font-bold text-blue-700" style={{ backgroundColor: `${item.etapaColor}22` }}>{item.etapaNombre}</span>;
+}
+
+function TemperatureCell({ item, onSummary }) {
+  return (
+    <div className="flex items-center gap-1">
+      <TemperatureBadge item={item} />
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="size-7 rounded-full text-violet-700 hover:bg-violet-50 hover:text-violet-800"
+        title="Resumen de oportunidad"
+        onClick={() => onSummary(item)}
+      >
+        <InfoIcon className="size-3.5" />
+      </Button>
+    </div>
+  );
 }
 
 function TemperatureBadge({ item }) {
@@ -891,6 +1010,23 @@ function formatDateTime(value) {
   if (Number.isNaN(date.getTime())) return "";
   const pad = (number) => String(number).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatSummaryDate(value) {
+  const date = readValidDate(value);
+  if (!date) return "-";
+  return date.toLocaleDateString("es-PE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatSummaryTime(value) {
+  if (!value) return "-";
+  return String(value).slice(0, 5);
+}
+
+function formatSummaryDateTime(value) {
+  const date = readValidDate(value);
+  if (!date) return "-";
+  return date.toLocaleString("es-PE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function DateTimeStack({ value }) {

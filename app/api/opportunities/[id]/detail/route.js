@@ -126,6 +126,7 @@ export async function GET(request, { params }) {
       opportunity: {
         id: opportunity.id,
         code: opportunity.oportunidad_id,
+        createdAt: opportunity.created_at,
         clienteId: opportunity.cliente_id,
         clienteNombre: opportunity.cliente_nombre.trim(),
         email: opportunity.email || "",

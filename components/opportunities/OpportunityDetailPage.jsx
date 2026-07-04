@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Copy, Eye, FileText, Gift, Link, MessageSquare, MoreVertical, Package, Pencil, Plus, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Calendar, Copy, Eye, FileText, Gift, Info as InfoIcon, Link, MessageSquare, MoreVertical, Package, Pencil, Plus, RotateCcw, Send, Trash2 } from "lucide-react";
 import { apiFetch } from "@/app/api/client";
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +20,7 @@ export default function OpportunityDetailPage({ id }) {
   const [dialog, setDialog] = useState({ type: "", item: null });
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
   if (loading || !data) return <div className="p-4">Cargando...</div>;
@@ -46,6 +47,9 @@ export default function OpportunityDetailPage({ id }) {
                   <RotateCcw className="size-3.5" />Inicio
                 </Button>
               ) : null}
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-slate-500 hover:bg-violet-50 hover:text-violet-700" onClick={() => setSummaryOpen(true)} title="Resumen de oportunidad">
+                <InfoIcon className="size-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={() => history.back()}>x</Button>
             </div>
           </div>
@@ -80,6 +84,17 @@ export default function OpportunityDetailPage({ id }) {
         {dialog.type === "quote" ? <EditableQuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "quote", ...payload })} /> : null}
         {dialog.type === "testdrive" ? <TestDriveDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "testdrive", ...payload })} /> : null}
         {dialog.type === "closure" ? <ClosureDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "closure", ...payload })} /> : null}
+        <OpportunitySummaryDialog
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          opportunity={opportunity}
+          quotes={quotes}
+          reservations={reservations || []}
+          details={details}
+          activities={activities}
+          testDrives={testDrives}
+          closures={closures}
+        />
         <ClientDialog
           open={clientDialogOpen}
           mode="edit"
@@ -119,6 +134,74 @@ function InfoSection({ opportunity, canEditClient, onEditClient }) {
       </div>
     </section>
   );
+}
+
+function OpportunitySummaryDialog({ open, onClose, opportunity, quotes = [], reservations = [], details = [], activities = [], testDrives = [], closures = [] }) {
+  const createdAt = opportunity.createdAt;
+  const firstQuote = earliestByDate(quotes, (item) => item.created_at);
+  const firstReservation = earliestByDate(reservations, (item) => item.createdAt);
+  const lastAgenda = latestByDate(details, (item) => item.createdAt || item.fechaAgenda);
+  const completedTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "realizado").length;
+  const cancelledTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "cancelado").length;
+  const rows = [
+    ["Creación", formatDateTimeEs(createdAt)],
+    ["Primera cotización", firstQuote ? `${formatDateTimeEs(firstQuote.created_at)} (${daysText(createdAt, firstQuote.created_at)})` : "Sin cotización"],
+    ["Primera nota de pedido", firstReservation ? `${formatDateTimeEs(firstReservation.createdAt)} (${daysText(createdAt, firstReservation.createdAt)})` : "Sin nota de pedido"],
+    ["Agendas registradas", String(details.length)],
+    ["Reprogramaciones", String(Math.max(details.length - 1, 0))],
+    ["Última agenda registrada", lastAgenda ? `${formatDateEs(lastAgenda.fechaAgenda)} ${formatTimeEs(lastAgenda.horaAgenda)}` : "Sin agenda"],
+    ["Actividades registradas", String(activities.length)],
+    ["Test drives", `${testDrives.length} total, ${completedTestDrives} realizados, ${cancelledTestDrives} cancelados`],
+    ["Cierres registrados", String(closures.length)],
+  ];
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-[min(94vw,680px)] bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+            <InfoIcon className="size-5" />Resumen de oportunidad
+          </DialogTitle>
+          <DialogDescription>{opportunity.code} - {opportunity.clienteNombre}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {rows.map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function earliestByDate(items, getter) {
+  return [...items]
+    .filter((item) => readValidDate(getter(item)))
+    .sort((a, b) => readValidDate(getter(a)).getTime() - readValidDate(getter(b)).getTime())[0] || null;
+}
+
+function latestByDate(items, getter) {
+  return [...items]
+    .filter((item) => readValidDate(getter(item)))
+    .sort((a, b) => readValidDate(getter(b)).getTime() - readValidDate(getter(a)).getTime())[0] || null;
+}
+
+function readValidDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysText(startValue, endValue) {
+  const start = readValidDate(startValue);
+  const end = readValidDate(endValue);
+  if (!start || !end) return "sin fecha base";
+  const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+  if (days === 0) return "mismo día";
+  if (days === 1) return "1 día después";
+  return `${days} días después`;
 }
 function ActivitySection({ activity, setActivity, activities, onSubmit }) {
   const rows = [...activities].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));

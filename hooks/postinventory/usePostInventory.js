@@ -5,11 +5,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
 export function usePostInventory() {
-<<<<<<< Updated upstream
-  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { types: [], currencies: [], centers: [], workshops: [], counters: [], lots: [], shelves: [], shelfLevels: [], shelfPositions: [] } });
-=======
-  const [data, setData] = useState({ products: [], combos: [], soldProducts: [], stocks: [], options: { settings: {}, types: [], measureTypes: [], providers: [], currencies: [], centers: [], workshops: [], counters: [] } });
->>>>>>> Stashed changes
+  const [data, setData] = useState({
+    products: [],
+    combos: [],
+    soldProducts: [],
+    stocks: [],
+    options: {
+      settings: {},
+      types: [],
+      measureTypes: [],
+      providers: [],
+      currencies: [],
+      centers: [],
+      workshops: [],
+      counters: [],
+      lots: [],
+      shelves: [],
+      shelfLevels: [],
+      shelfPositions: [],
+    },
+  });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {

@@ -21,13 +21,6 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ message: "Producto invalido." }, { status: 400 });
     }
 
-<<<<<<< Updated upstream
-    const [stockRows] = await pool.query(
-      `SELECT COALESCE(SUM(u.cantidad), 0) AS usado
-       FROM posventa_lotes_ubicaciones u
-       INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
-       WHERE l.producto_id = ?`,
-=======
     const [lotRows] = await pool.query(
       `SELECT COUNT(*) AS total_lotes,
               COALESCE(SUM(stock_lote), 0) AS total,
@@ -35,7 +28,6 @@ export async function PUT(request, { params }) {
               COALESCE(SUM(stock_disponible), 0) AS disponible
        FROM posventa_productos_lotes
        WHERE producto_id = ?`,
->>>>>>> Stashed changes
       [id]
     );
     const hasLots = Number(lotRows[0]?.total_lotes || 0) > 0;

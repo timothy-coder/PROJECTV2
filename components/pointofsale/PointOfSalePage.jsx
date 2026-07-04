@@ -1,44 +1,70 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Banknote, Barcode, CreditCard, Minus, Plus, ReceiptText, Search, ShoppingBag, Trash2 } from "lucide-react";
+import { Banknote, Barcode, CreditCard, Loader2, MapPin, Minus, PackageSearch, Plus, ReceiptText, Search, ShoppingBag, Trash2, UserRound } from "lucide-react";
 
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useClients } from "@/hooks/clients/useClients";
+import { usePostInventory } from "@/hooks/postinventory/usePostInventory";
 
-const categories = ["Todos", "Servicios", "Repuestos", "Accesorios", "Combos"];
+function money(value, symbol = "S/") {
+  const number = Number(value || 0);
+  return `${symbol} ${number.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
-const products = [
-  { id: 1, name: "Cambio de aceite 5W30", category: "Servicios", sku: "SERV-001", price: 180, stock: "Disponible" },
-  { id: 2, name: "Filtro de aceite original", category: "Repuestos", sku: "REP-118", price: 48, stock: "24 und." },
-  { id: 3, name: "Kit mantenimiento basico", category: "Combos", sku: "COM-010", price: 260, stock: "Disponible" },
-  { id: 4, name: "Ambientador premium", category: "Accesorios", sku: "ACC-044", price: 25, stock: "38 und." },
-  { id: 5, name: "Escaneo computarizado", category: "Servicios", sku: "SERV-012", price: 95, stock: "Disponible" },
-  { id: 6, name: "Limpiaparabrisas set x2", category: "Accesorios", sku: "ACC-071", price: 72, stock: "15 und." },
-];
+function stockLabel(stock) {
+  const parts = [stock.anaquelCodigo, stock.nivelCodigo, stock.posicion ? `Pos. ${stock.posicion}` : ""].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "Sin ubicacion";
+}
 
-function money(value) {
-  return new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(Number(value || 0));
+function clientName(client) {
+  return [client?.nombre, client?.apellido].filter(Boolean).join(" ") || client?.nombreComercial || client?.razonSocial || "Cliente sin nombre";
 }
 
 export default function PointOfSalePage() {
+  const inventory = usePostInventory();
+  const clientsData = useClients();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todos");
-  const [cart, setCart] = useState([
-    { ...products[0], qty: 1 },
-    { ...products[1], qty: 1 },
-  ]);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [locationProduct, setLocationProduct] = useState(null);
+  const [cart, setCart] = useState([]);
+
+  const clientOptions = useMemo(() => clientsData.clients.map((client) => ({
+    value: client.id,
+    label: [clientName(client), client.celular, client.identificacionFiscal || client.numeroDocumento].filter(Boolean).join(" - "),
+  })), [clientsData.clients]);
+
+  const selectedClient = useMemo(
+    () => clientsData.clients.find((client) => Number(client.id) === Number(selectedClientId)) || null,
+    [clientsData.clients, selectedClientId]
+  );
+
+  const categories = useMemo(() => {
+    const names = new Set(inventory.products.map((product) => product.tipoNombre).filter(Boolean));
+    return ["Todos", ...Array.from(names).sort((a, b) => a.localeCompare(b))];
+  }, [inventory.products]);
 
   const filteredProducts = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return products.filter((product) => {
-      const matchesCategory = category === "Todos" || product.category === category;
-      const matchesQuery = !needle || `${product.name} ${product.sku} ${product.category}`.toLowerCase().includes(needle);
-      return matchesCategory && matchesQuery;
+    return inventory.products.filter((product) => {
+      const available = Number(product.stockDisponible ?? product.stockTotal ?? 0);
+      const matchesCategory = category === "Todos" || product.tipoNombre === category;
+      const haystack = [
+        product.numeroParte,
+        product.descripcion,
+        product.marca,
+        product.tipoNombre,
+        product.monedaCodigo,
+      ].join(" ").toLowerCase();
+      return available > 0 && matchesCategory && (!needle || haystack.includes(needle));
     });
-  }, [category, query]);
+  }, [category, inventory.products, query]);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.precioVenta || 0) * item.qty, 0);
   const tax = subtotal * 0.18;
   const total = subtotal + tax;
 
@@ -83,24 +109,57 @@ export default function PointOfSalePage() {
         </div>
       </header>
 
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_390px]">
+      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_460px] 2xl:grid-cols-[minmax(0,1fr)_520px]">
         <div className="min-w-0 space-y-3">
           <div className="rounded-lg border bg-white p-3 shadow-sm">
-            <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Buscar por producto, servicio o codigo..."
-                  className="h-9 bg-white pl-8 text-sm"
+            <div className="grid gap-2 lg:grid-cols-[minmax(260px,420px)_minmax(0,1fr)_auto] lg:items-end">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-violet-700">Cliente</p>
+                <SearchableSelect
+                  value={selectedClientId}
+                  options={clientOptions}
+                  placeholder={clientsData.loading ? "Cargando clientes..." : "Selecciona cliente..."}
+                  onChange={setSelectedClientId}
                 />
               </div>
-              <Button variant="outline" className="h-9 justify-center">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-violet-700">Buscar producto</p>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Buscar por producto, codigo, marca o tipo..."
+                    className="h-10 bg-white pl-8 text-sm"
+                  />
+                </div>
+              </div>
+              <Button variant="outline" className="h-10 justify-center">
                 <Barcode className="size-4" />
                 Escanear
               </Button>
             </div>
+
+            {selectedClient ? (
+              <div className="mt-3 grid gap-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3 text-xs sm:grid-cols-4">
+                <div className="flex items-center gap-2 sm:col-span-2">
+                  <UserRound className="size-4 text-violet-700" />
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-900">{clientName(selectedClient)}</p>
+                    <p className="text-slate-500">{selectedClient.celular || "Sin celular"}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-500">Documento</p>
+                  <p className="font-semibold text-slate-900">{selectedClient.identificacionFiscal || selectedClient.numeroDocumento || "-"}</p>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-500">Vehiculos</p>
+                  <p className="font-semibold text-slate-900">{selectedClient.vehicles?.length || 0}</p>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {categories.map((item) => (
                 <button
@@ -115,33 +174,51 @@ export default function PointOfSalePage() {
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredProducts.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className="rounded-lg border bg-white p-3 text-left shadow-sm transition hover:border-violet-300 hover:shadow-md"
-                onClick={() => addProduct(product)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="line-clamp-2 text-sm font-bold text-slate-900">{product.name}</p>
-                    <p className="mt-1 text-[11px] font-semibold text-slate-400">{product.sku}</p>
+          {inventory.loading ? (
+            <div className="grid min-h-60 place-items-center rounded-lg border bg-white text-sm font-semibold text-slate-500">
+              <span className="inline-flex items-center gap-2"><Loader2 className="size-4 animate-spin" />Cargando productos...</span>
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+              {filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="rounded-lg border bg-white p-3 text-left shadow-sm transition hover:border-violet-300 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="line-clamp-2 text-sm font-bold text-slate-900">{product.descripcion || "Producto sin descripcion"}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-400">{product.numeroParte || "Sin codigo"}</p>
+                    </div>
+                    <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">{product.tipoNombre || "Sin tipo"}</span>
                   </div>
-                  <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">{product.category}</span>
-                </div>
-                <div className="mt-4 flex items-end justify-between gap-2">
-                  <div>
-                    <p className="text-lg font-black text-emerald-700">{money(product.price)}</p>
-                    <p className="text-[11px] font-semibold text-slate-400">{product.stock}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] font-bold text-slate-500">
+                    <span className="rounded bg-slate-100 px-2 py-0.5">{product.marca || "Sin marca"}</span>
+                    <span className="rounded bg-emerald-50 px-2 py-0.5 text-emerald-700">Stock {Number(product.stockDisponible ?? product.stockTotal ?? 0)}</span>
                   </div>
-                  <span className="grid size-8 place-items-center rounded-md bg-violet-700 text-white">
-                    <Plus className="size-4" />
-                  </span>
+                  <div className="mt-4 flex items-end justify-between gap-2">
+                    <div>
+                      <p className="text-lg font-black text-emerald-700">{money(product.precioVenta, product.monedaSimbolo || "S/")}</p>
+                      <p className="text-[11px] font-semibold text-slate-400">{product.monedaCodigo || "Sin moneda"}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button type="button" size="icon" variant="outline" title="Ver ubicacion" onClick={() => setLocationProduct(product)}>
+                        <MapPin className="size-4" />
+                      </Button>
+                      <Button type="button" size="icon" className="bg-violet-700 text-white hover:bg-violet-800" title="Agregar" onClick={() => addProduct(product)}>
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </button>
-            ))}
-          </div>
+              ))}
+              {!filteredProducts.length ? (
+                <div className="rounded-lg border border-dashed bg-white p-8 text-center text-sm font-semibold text-slate-500 sm:col-span-2 2xl:col-span-3">
+                  No hay productos disponibles para la busqueda.
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
 
         <aside className="rounded-lg border bg-white shadow-sm">
@@ -153,32 +230,40 @@ export default function PointOfSalePage() {
             <ShoppingBag className="size-5 text-violet-700" />
           </div>
 
-          <div className="max-h-[46svh] space-y-2 overflow-y-auto p-3 xl:max-h-[calc(100svh-360px)]">
+          <div className="max-h-[50svh] space-y-2 overflow-y-auto p-3 xl:max-h-[calc(100svh-330px)]">
             {cart.map((item) => (
-              <div key={item.id} className="rounded-lg border border-slate-200 p-2">
+              <div key={item.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="line-clamp-1 text-xs font-bold text-slate-900">{item.name}</p>
-                    <p className="text-[11px] font-semibold text-slate-400">{item.sku}</p>
+                    <p className="line-clamp-2 text-sm font-bold text-slate-900">{item.descripcion}</p>
+                    <p className="text-[11px] font-semibold text-slate-400">{item.numeroParte} · {item.marca || "Sin marca"}</p>
                   </div>
                   <button type="button" className="rounded-md p-1 text-red-500 hover:bg-red-50" onClick={() => removeProduct(item.id)}>
                     <Trash2 className="size-4" />
                   </button>
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="mt-3 flex items-center justify-between gap-2">
                   <div className="flex items-center rounded-md border">
-                    <button type="button" className="grid size-7 place-items-center text-slate-600 hover:bg-slate-50" onClick={() => updateQty(item.id, -1)}>
+                    <button type="button" className="grid size-8 place-items-center text-slate-600 hover:bg-slate-50" onClick={() => updateQty(item.id, -1)}>
                       <Minus className="size-3.5" />
                     </button>
-                    <span className="grid h-7 min-w-8 place-items-center border-x px-2 text-xs font-bold">{item.qty}</span>
-                    <button type="button" className="grid size-7 place-items-center text-slate-600 hover:bg-slate-50" onClick={() => updateQty(item.id, 1)}>
+                    <span className="grid h-8 min-w-10 place-items-center border-x px-2 text-xs font-bold">{item.qty}</span>
+                    <button type="button" className="grid size-8 place-items-center text-slate-600 hover:bg-slate-50" onClick={() => updateQty(item.id, 1)}>
                       <Plus className="size-3.5" />
                     </button>
                   </div>
-                  <p className="text-sm font-black text-slate-900">{money(item.price * item.qty)}</p>
+                  <p className="text-base font-black text-slate-900">{money(Number(item.precioVenta || 0) * item.qty, item.monedaSimbolo || "S/")}</p>
                 </div>
               </div>
             ))}
+            {!cart.length ? (
+              <div className="grid min-h-44 place-items-center rounded-lg border border-dashed border-slate-300 text-center text-sm font-semibold text-slate-500">
+                <div>
+                  <PackageSearch className="mx-auto mb-2 size-6 text-slate-400" />
+                  Selecciona productos para iniciar la venta.
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-t bg-slate-50 p-4">
@@ -206,13 +291,53 @@ export default function PointOfSalePage() {
                 Tarjeta
               </Button>
             </div>
-            <Button className="mt-2 h-11 w-full bg-violet-700 text-white hover:bg-violet-800">
+            <Button className="mt-2 h-11 w-full bg-violet-700 text-white hover:bg-violet-800" disabled={!cart.length}>
               <ReceiptText className="size-4" />
               Generar comprobante
             </Button>
           </div>
         </aside>
       </section>
+
+      <ProductLocationDialog product={locationProduct} onClose={() => setLocationProduct(null)} />
     </main>
+  );
+}
+
+function ProductLocationDialog({ product, onClose }) {
+  if (!product) return null;
+  const locations = product.stock || [];
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(94vw,720px)] bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+            <MapPin className="size-5" />Ubicacion de producto
+          </DialogTitle>
+          <DialogDescription>{product.numeroParte} - {product.descripcion}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {locations.map((stock) => (
+            <div key={stock.id} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+              <div>
+                <p className="font-bold text-slate-900">{stockLabel(stock)}</p>
+                <p className="text-xs font-medium text-slate-500">
+                  {[stock.tallerName, stock.mostradorName, stock.loteLabel || `Lote ${stock.loteId}`].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              <div className="rounded-md bg-violet-100 px-3 py-2 text-center text-violet-700">
+                <p className="text-[10px] font-bold uppercase">Stock</p>
+                <p className="text-base font-black">{stock.stock}</p>
+              </div>
+            </div>
+          ))}
+          {!locations.length ? (
+            <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">
+              Este producto no tiene ubicaciones registradas.
+            </div>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -7,12 +7,8 @@ export const USER_PERMISSION_GROUPS = [
   { key: "modelos", label: "Modelos", actions: ["view", "create", "edit", "delete"] },
   { key: "clases", label: "Clases de Vehiculos", actions: ["view", "create", "edit", "delete"] },
   { key: "algoritmo_visita", label: "F. de mantenimiento", actions: ["view", "create", "edit", "delete"] },
-<<<<<<< Updated upstream
-  { key: "inventario", label: "Inventario", actions: ["view", "create", "edit", "delete"] },
-  { key: "ubicacion_inventario", label: "Ubicacion Inventario", actions: ["view", "create", "edit", "delete", "import"] },
-=======
   { key: "inventario", label: "Inventario", actions: ["view", "create", "edit", "delete", "lotes"] },
->>>>>>> Stashed changes
+  { key: "ubicacion_inventario", label: "Ubicacion Inventario", actions: ["view", "create", "edit", "delete", "import"] },
   { key: "combomantenimiento", label: "Mantenimientos", actions: ["view", "create", "edit", "delete"] },
   { key: "submantenimiento", label: "Submantenimientos", actions: ["view", "create", "edit", "delete"] },
   { key: "configinventario", label: "Config. Inventario", actions: ["view", "create", "edit", "delete"] },

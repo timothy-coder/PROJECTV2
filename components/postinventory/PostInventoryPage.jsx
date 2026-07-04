@@ -59,27 +59,21 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   const [comboDialog, setComboDialog] = useState({ open: false, item: null, readonly: false });
   const [soldDialog, setSoldDialog] = useState({ open: false, item: null, readonly: false });
   const [stockDialog, setStockDialog] = useState({ open: false, product: null });
-<<<<<<< Updated upstream
   const [locationDialog, setLocationDialog] = useState({ open: false, item: null });
-=======
   const [lotDialog, setLotDialog] = useState({ open: false, product: null, item: null, readonly: false });
->>>>>>> Stashed changes
   const [deleteDialog, setDeleteDialog] = useState({ open: false, title: "", onConfirm: null });
   const [formatsMenuOpen, setFormatsMenuOpen] = useState(false);
   const canView = hasPerm(userPermissions, ["inventario", "view"]);
   const canCreate = hasPerm(userPermissions, ["inventario", "create"]);
   const canEdit = hasPerm(userPermissions, ["inventario", "edit"]);
   const canDelete = hasPerm(userPermissions, ["inventario", "delete"]);
-<<<<<<< Updated upstream
   const canLocationView = hasPerm(userPermissions, ["ubicacion_inventario", "view"]);
   const canLocationCreate = hasPerm(userPermissions, ["ubicacion_inventario", "create"]);
   const canLocationEdit = hasPerm(userPermissions, ["ubicacion_inventario", "edit"]);
   const canLocationDelete = hasPerm(userPermissions, ["ubicacion_inventario", "delete"]);
   const canLocationImport = hasPerm(userPermissions, ["ubicacion_inventario", "import"]);
-=======
   const canLots = canEdit || hasPerm(userPermissions, ["inventario", "lotes"]);
   const inventorySettings = data.options?.settings || {};
->>>>>>> Stashed changes
 
   const filteredProducts = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -282,12 +276,9 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         total={data.products.length}
         canEdit={canEdit}
         canDelete={canDelete}
-<<<<<<< Updated upstream
         canStock={canLocationView}
-=======
         canLots={canLots}
         settings={inventorySettings}
->>>>>>> Stashed changes
         onView={(product) => setProductDialog({ open: true, item: product, readonly: true })}
         onEdit={(product) => setProductDialog({ open: true, item: product, readonly: false })}
         onStock={(product) => setStockDialog({ open: true, product })}
@@ -431,12 +422,8 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   );
 }
 
-<<<<<<< Updated upstream
-function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, onView, onEdit, onStock, onDelete }) {
-=======
-function ProductsTable({ loading, products, total, canEdit, canDelete, canLots, settings, onView, onEdit, onStock, onLot, onEditLot, onDeleteLot, onDelete }) {
+function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, canLots, settings, onView, onEdit, onStock, onLot, onEditLot, onDeleteLot, onDelete }) {
   const useLots = settings?.habilitarLotes !== false;
->>>>>>> Stashed changes
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -473,12 +460,8 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canLots, 
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" onClick={() => onView(product)}><Eye className="size-4" /></Button>
                       {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(product)}><Edit3 className="size-4" /></Button> : null}
-<<<<<<< Updated upstream
-                      {canStock ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
-=======
                       {useLots && canLots ? <Button variant="ghost" size="icon" onClick={() => onLot(product)} title="Agregar lote"><Layers3 className="size-4" /></Button> : null}
-                      {canEdit ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
->>>>>>> Stashed changes
+                      {canStock ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
                       {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(product)}><Trash2 className="size-4" /></Button> : null}
                     </div>
                     {useLots && product.lotes?.length ? (

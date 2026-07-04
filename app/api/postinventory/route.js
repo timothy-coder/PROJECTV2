@@ -119,7 +119,7 @@ export async function GET() {
        WHERE is_active = 1
        ORDER BY razon_social ASC`
     );
-    const [lotRows] = await pool.query(
+    const [productLotRows] = await pool.query(
       `SELECT l.id, l.producto_id, l.tipo_medida_id, l.proveedor_id, l.numero_factura,
               l.fecha_vencimiento, l.precio_compra, l.stock_lote, l.stock_usado,
               l.stock_disponible, l.created_at,
@@ -139,7 +139,7 @@ export async function GET() {
     const [counterRows] = await pool.query(
       `SELECT id, centro_id, nombre FROM configuracion_mostradores ORDER BY nombre ASC`
     );
-    const [lotRows] = await pool.query(
+    const [locationLotRows] = await pool.query(
       `SELECT l.id, l.producto_id, p.numero_parte, p.descripcion
        FROM posventa_productos_lotes l
        INNER JOIN posventa_productos p ON p.id = l.producto_id
@@ -212,7 +212,7 @@ export async function GET() {
       monedaCodigo: row.moneda_codigo || "",
       monedaNombre: row.moneda_nombre || "",
       monedaSimbolo: row.moneda_simbolo || "S/",
-      lotes: lotRows.filter((lot) => lot.producto_id === row.id).map((lot) => ({
+      lotes: productLotRows.filter((lot) => lot.producto_id === row.id).map((lot) => ({
         id: lot.id,
         productoId: lot.producto_id,
         tipoMedidaId: lot.tipo_medida_id,
@@ -253,7 +253,7 @@ export async function GET() {
         centers: centerRows.map((row) => ({ id: row.id, nombre: row.nombre })),
         workshops: workshopRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         counters: counterRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
-        lots: lotRows.map((row) => ({ id: row.id, productoId: row.producto_id, numeroParte: row.numero_parte, descripcion: row.descripcion, label: `${row.numero_parte} - Lote ${row.id}` })),
+        lots: locationLotRows.map((row) => ({ id: row.id, productoId: row.producto_id, numeroParte: row.numero_parte, descripcion: row.descripcion, label: `${row.numero_parte} - Lote ${row.id}` })),
         shelves: shelfRows.map((row) => ({ id: row.id, codigo: row.codigo, descripcion: row.descripcion || "", tallerId: row.taller_id, mostradorId: row.mostrador_id, tallerName: row.taller_name || "", mostradorName: row.mostrador_name || "" })),
         shelfLevels: shelfLevelRows.map((row) => ({ id: row.id, anaquelId: row.anaquel_id, codigoNivel: row.codigo_nivel, ordenNivel: row.orden_nivel })),
         shelfPositions: shelfPositionRows.map((row) => ({ id: row.id, nivelId: row.nivel_id, posicion: row.posicion })),

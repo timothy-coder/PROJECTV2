@@ -1,7 +1,6 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Expand, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Expand, Info, Loader2, RotateCcw } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -19,65 +18,53 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-
 const COLORS = ["#188ff2", "#df3f4f", "#1429a6", "#ec6a2e", "#8b0fa8", "#d83eb5", "#6e48c7", "#1ea34a", "#e4bd00", "#0f766e"];
 const STAGE_COLORS = ["#ee6b2f", "#209947", "#e3bb00", "#d9435d", "#7148c7", "#188ff2", "#8b0fa8"];
 const EMPTY = "(En blanco)";
-
 function readDate(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
-
 function dateKey(value) {
   const date = readDate(value);
   if (!date) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
 function monthKey(value) {
   return dateKey(value).slice(0, 7);
 }
-
 function monthLabel(key) {
   if (!key) return "Todas";
   const [year, month] = key.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString("es-PE", { year: "numeric", month: "long" });
 }
-
 function yearKey(value) {
   return dateKey(value).slice(0, 4);
 }
-
 function dayNumber(key) {
   return String(Number(String(key || "").slice(8, 10)) || "");
 }
-
 function dateFromKey(key) {
   const [year, month, day] = String(key || "").split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
 }
-
 function dateKeyFromParts(year, month, day) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
-
 function workdayWeight(date) {
   const day = date.getDay();
   if (day >= 1 && day <= 5) return 1;
   if (day === 6) return 0.5;
   return 0;
 }
-
 function laborableDaysBetween(startKey, endKey) {
   const start = dateFromKey(startKey);
   const end = dateFromKey(endKey);
@@ -90,7 +77,6 @@ function laborableDaysBetween(startKey, endKey) {
   }
   return total;
 }
-
 function dateRangeForContext(filters, records) {
   if (filters.dateLevel === "day" && filters.dateValue) {
     return { start: filters.dateValue, end: filters.dateValue };
@@ -107,28 +93,23 @@ function dateRangeForContext(filters, records) {
   if (!days.length) return { start: "", end: "" };
   return { start: days[0], end: days[days.length - 1] };
 }
-
 function todayKey() {
   const today = new Date();
   return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
 }
-
 function currentMonthKey() {
   return todayKey().slice(0, 7);
 }
-
 function minDateKey(a, b) {
   if (!a) return b || "";
   if (!b) return a || "";
   return a <= b ? a : b;
 }
-
 function laborableDaysForContext(filters, records) {
   const range = dateRangeForContext(filters, records);
   if (!range.start || !range.end) return 0;
   return laborableDaysBetween(range.start, range.end);
 }
-
 function elapsedLaborableDaysForContext(filters, records) {
   const range = dateRangeForContext(filters, records);
   if (!range.start || !range.end) return 0;
@@ -136,44 +117,35 @@ function elapsedLaborableDaysForContext(filters, records) {
   if (elapsedEnd < range.start) return 0;
   return laborableDaysBetween(range.start, elapsedEnd);
 }
-
 function monthNameFromNumber(month) {
   return new Date(2026, Number(month) - 1, 1).toLocaleDateString("es-PE", { month: "long" });
 }
-
 function daysBetween(startValue, endValue) {
   const start = readDate(startValue);
   const end = readDate(endValue);
   if (!start || !end) return null;
   return Math.max(0, (end.getTime() - start.getTime()) / 86400000);
 }
-
 function clean(value, fallback = EMPTY) {
   const text = String(value ?? "").trim();
   return text || fallback;
 }
-
 function hasRealValue(value) {
   const text = String(value ?? "").trim();
   return Boolean(text) && text !== EMPTY && text.toLowerCase() !== "(en blanco)";
 }
-
 function isClosedStage(value) {
   return String(value || "").trim().toLowerCase() === "cerrada";
 }
-
 function uniqueCount(values) {
   return new Set(values.filter((value) => value !== null && value !== undefined && String(value).trim() !== "")).size;
 }
-
 function countVisitQuoteTokens(rows) {
   return uniqueCount(rows.map((row) => row.tokenvistacotizacion));
 }
-
 function pickFirstValue(...values) {
   return values.find((value) => hasRealValue(value)) ?? "";
 }
-
 function uniqueRows(rows, keyGetter) {
   const map = new Map();
   rows.forEach((row) => {
@@ -182,25 +154,20 @@ function uniqueRows(rows, keyGetter) {
   });
   return Array.from(map.values());
 }
-
 function latestRow(rows, dateField) {
   return [...rows].sort((a, b) => (readDate(b[dateField])?.getTime() || 0) - (readDate(a[dateField])?.getTime() || 0))[0] || rows[0] || {};
 }
-
 function moneyNumber(value) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number : 0;
 }
-
 function formatNumber(value, decimals = 0) {
   const number = Number(value || 0);
   return number.toLocaleString("es-PE", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 }
-
 function formatDollar(value, decimals = 0) {
   return `$ ${formatNumber(value, decimals)}`;
 }
-
 function buildOpportunityRecords(rows) {
   const groups = new Map();
   rows.forEach((row) => {
@@ -209,7 +176,6 @@ function buildOpportunityRecords(rows) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   });
-
   return Array.from(groups.entries()).map(([id, group]) => {
     const base = latestRow(group, "fechacreacionoportunidad");
     const quoteRows = uniqueRows(group, (row) => row.cotizacion_id);
@@ -269,7 +235,13 @@ function buildOpportunityRecords(rows) {
       fuel: clean(latestQuote.combnuistilbe),
       closureReason,
       quoteCount: uniqueCount(group.map((row) => row.cotizacion_id)),
+      quoteEvents: quoteRows
+        .filter((row) => row.cotizacion_id && row.fechacreaciocotizacion)
+        .map((row) => ({ id: row.cotizacion_id, date: row.fechacreaciocotizacion, opportunityDate: base.fechacreacionoportunidad, code: clean(base.codigodeoportunidad), client: clean(base.nombreapelidocomlpetoclietne) })),
       reservationCount: uniqueCount(group.map((row) => row.reserva_id)),
+      reservationEvents: reserveRows
+        .filter((row) => row.reserva_id && row.reserva_detalle_created_at)
+        .map((row) => ({ id: row.reserva_id, date: row.reserva_detalle_created_at, opportunityDate: base.fechacreacionoportunidad, code: clean(base.codigodeoportunidad), client: clean(base.nombreapelidocomlpetoclietne) })),
       virtualQuoteCount: countVisitQuoteTokens(group),
       totalViews,
       soldValue,
@@ -287,7 +259,6 @@ function buildOpportunityRecords(rows) {
     };
   });
 }
-
 function groupCount(records, key, limit = 10) {
   const map = new Map();
   records.forEach((record) => {
@@ -301,13 +272,11 @@ function groupCount(records, key, limit = 10) {
     .sort((a, b) => b.value - a.value)
     .slice(0, limit);
 }
-
 function avg(values) {
   const valid = values.filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
   if (!valid.length) return 0;
   return valid.reduce((sum, value) => sum + Number(value), 0) / valid.length;
 }
-
 function stackByAdvisorAndModel(records) {
   const topModels = groupCount(records, "model", 5).map((item) => item.name);
   const advisors = groupCount(records, "advisor", 6).map((item) => item.name);
@@ -330,7 +299,6 @@ function stackByAdvisorAndModel(records) {
     return row;
   });
 }
-
 function lineByDayAndAdvisor(records) {
   const advisors = groupCount(records, "advisor", 3).map((item) => item.name);
   const days = Array.from(new Set(records.map((item) => item.day).filter(Boolean))).sort();
@@ -342,7 +310,6 @@ function lineByDayAndAdvisor(records) {
     return row;
   });
 }
-
 function fordDashboardStats(records) {
   const sold = records.filter((record) => record.isSold);
   const soldCount = sold.length;
@@ -357,7 +324,6 @@ function fordDashboardStats(records) {
     leadAttentionHours: avg(records.map((record) => record.leadAttentionHours)),
   };
 }
-
 function buildDateTree(records) {
   const years = new Map();
   records.forEach((record) => {
@@ -382,7 +348,6 @@ function buildDateTree(records) {
         })),
     }));
 }
-
 function buildModelTree(records) {
   const map = new Map();
   records.forEach((record) => {
@@ -397,11 +362,20 @@ function buildModelTree(records) {
       versions: Array.from(versions).sort().map((version) => ({ key: version, label: version.replace(`${model} / `, "") || version })),
     }));
 }
-
-function filterRecords(records, filters, chartFilters) {
+function dateMatchesFilter(value, filters) {
+  if (!filters.dateValue) return true;
+  return (
+    (filters.dateLevel === "year" && yearKey(value) === filters.dateValue) ||
+    (filters.dateLevel === "month" && monthKey(value) === filters.dateValue) ||
+    (filters.dateLevel === "day" && dateKey(value) === filters.dateValue)
+  );
+}
+function filterRecords(records, filters, chartFilters, options = {}) {
+  const includeDate = options.includeDate !== false;
   return records.filter((record) => {
     const code = String(record.code || "").trim().toUpperCase();
     const matchesDate =
+      !includeDate ||
       !filters.dateValue ||
       (filters.dateLevel === "year" && record.year === filters.dateValue) ||
       (filters.dateLevel === "month" && record.month === filters.dateValue) ||
@@ -420,7 +394,64 @@ function filterRecords(records, filters, chartFilters) {
     return basic && chart;
   });
 }
-
+function countEventsByDate(records, eventKey, filters) {
+  const ids = new Set();
+  records.forEach((record) => {
+    (record[eventKey] || []).forEach((event) => {
+      if (!event.id || !dateMatchesFilter(event.date, filters)) return;
+      ids.add(event.id);
+    });
+  });
+  return ids.size;
+}
+function stageDetailLines(records) {
+  const stages = groupCount(records, "stage", 100);
+  if (!stages.length) return ["Sin oportunidades para detallar por etapa."];
+  return stages.map((item) => `${item.name}: ${formatNumber(item.value)} oportunidades.`);
+}
+function opportunityMetricLines(records, valueKey, label, options = {}) {
+  const decimals = options.decimals ?? 1;
+  const unit = options.unit ? ` ${options.unit}` : "";
+  const valid = records.filter((record) => {
+    const value = Number(record[valueKey]);
+    return Number.isFinite(value) && (options.includeZero || value > 0);
+  });
+  if (!valid.length) return [`Sin oportunidades con ${label.toLowerCase()}.`];
+  return valid.map((record) => `${record.code || "Sin código"} - ${record.client || "Sin cliente"}: ${formatNumber(record[valueKey], decimals)}${unit}.`);
+}
+function opportunityCountLines(records, valueKey, label, options = {}) {
+  const valid = records.filter((record) => Number(record[valueKey] || 0) > 0);
+  if (!valid.length) return [`Sin oportunidades con ${label.toLowerCase()}.`];
+  return valid.map((record) => `${record.code || "Sin código"} - ${record.client || "Sin cliente"}: ${formatNumber(record[valueKey], options.decimals ?? 0)}.`);
+}
+function followUpDetailLines(records) {
+  const valid = records.filter((record) => record.followUp && !isClosedStage(record.stage));
+  if (!valid.length) return ["Sin oportunidades abiertas con seguimiento."];
+  return valid.map((record) => `${record.code || "Sin código"} - ${record.client || "Sin cliente"}: ${record.stage || "Sin etapa"}.`);
+}
+function eventSummary(records, eventKey, filters, label) {
+  const events = [];
+  records.forEach((record) => {
+    (record[eventKey] || []).forEach((event) => {
+      if (!event.id || !dateMatchesFilter(event.date, filters)) return;
+      events.push(event);
+    });
+  });
+  const unique = new Map();
+  events.forEach((event) => {
+    if (!unique.has(event.id)) unique.set(event.id, event);
+  });
+  const outsideOpportunityRange = Array.from(unique.values()).filter((event) => !dateMatchesFilter(event.opportunityDate, filters));
+  return {
+    total: unique.size,
+    outsideOpportunityRange: outsideOpportunityRange.length,
+    detailLines: [
+      `${label} creadas en el rango: ${formatNumber(unique.size)}.`,
+      `${label} cuya oportunidad se creó en otro mes: ${formatNumber(outsideOpportunityRange.length)}.`,
+      ...outsideOpportunityRange.slice(0, 6).map((event) => `${event.code || "Sin código"} - ${event.client || "Sin cliente"}: oportunidad creada en ${monthLabel(monthKey(event.opportunityDate))}.`),
+    ],
+  };
+}
 export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -428,10 +459,10 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
   const [chartFilters, setChartFilters] = useState({});
   const [focusChart, setFocusChart] = useState(null);
+  const [kpiInfo, setKpiInfo] = useState(null);
   const [blankModelOpen, setBlankModelOpen] = useState(false);
   const [blankCityOpen, setBlankCityOpen] = useState(false);
   const [blankFuelOpen, setBlankFuelOpen] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     fetch("/api/powerbi/data?limit=100000")
@@ -453,10 +484,11 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       cancelled = true;
     };
   }, []);
-
   const records = useMemo(() => buildOpportunityRecords(rows), [rows]);
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
+  const metricRecords = useMemo(() => filterRecords(records, filters, chartFilters, { includeDate: false }), [records, filters, chartFilters]);
   const countedRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.model)), [filteredRecords]);
+  const countedMetricRecords = useMemo(() => metricRecords.filter((record) => hasRealValue(record.model)), [metricRecords]);
   const selectable = useMemo(() => ({
     months: Array.from(new Set(records.map((item) => item.month).filter(Boolean))).sort().reverse(),
     advisors: groupCount(records, "advisor", 100).map((item) => item.name).sort((a, b) => a.localeCompare(b)),
@@ -475,19 +507,21 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   }, [records]);
   const dateTree = useMemo(() => buildDateTree(records), [records]);
   const modelTree = useMemo(() => buildModelTree(records), [records]);
-
   const kpis = useMemo(() => {
     const prospectDays = laborableDaysForContext(filters, filteredRecords) || 1;
     const elapsedProspectDays = elapsedLaborableDaysForContext(filters, filteredRecords) || 1;
-    const quoteCount = countedRecords.reduce((sum, item) => sum + item.quoteCount, 0);
+    const quoteCount = countEventsByDate(countedMetricRecords, "quoteEvents", filters);
+    const reservationCount = countEventsByDate(countedMetricRecords, "reservationEvents", filters);
     const virtualQuotes = countedRecords.reduce((sum, item) => sum + item.virtualQuoteCount, 0);
     const platformBase = filteredRecords.length;
     return {
       prospects: filteredRecords.length,
       prospectsPerDay: filteredRecords.length / prospectDays,
       projected: (filteredRecords.length / elapsedProspectDays) * prospectDays,
+      prospectDays,
+      elapsedProspectDays,
       quotes: quoteCount,
-      reservations: countedRecords.reduce((sum, item) => sum + item.reservationCount, 0),
+      reservations: reservationCount,
       daysReserve: avg(countedRecords.map((item) => item.daysToReservation)),
       daysClose: avg(countedRecords.map((item) => item.daysToClose)),
       daysFact: avg(countedRecords.map((item) => item.daysToInvoice)),
@@ -496,8 +530,168 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       followUp: countedRecords.filter((item) => item.followUp && !isClosedStage(item.stage)).length,
       platformUse: platformBase ? (filteredRecords.reduce((sum, item) => sum + item.platformUseScore, 0) / platformBase) * 100 : 0,
     };
-  }, [countedRecords, filteredRecords, filters]);
-
+  }, [countedMetricRecords, countedRecords, filteredRecords, filters]);
+  const kpiRangeLabel = dateTreeDisplay(filters.dateLevel, filters.dateValue);
+  const quoteKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "quoteEvents", filters, "Cotizaciones"), [countedMetricRecords, filters]);
+  const reservationKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "reservationEvents", filters, "Reservas"), [countedMetricRecords, filters]);
+  const prospectStageLines = useMemo(() => stageDetailLines(filteredRecords), [filteredRecords]);
+  const kpiInfoMap = useMemo(() => {
+    const map = {
+    prospects: {
+      title: "Prospectos",
+      general: [
+        `Rango: ${kpiRangeLabel}.`,
+        `Oportunidades creadas: ${formatNumber(kpis.prospects)}.`,
+      ],
+      details: [
+        "Detalle por etapa:",
+        ...prospectStageLines,
+      ],
+    },
+    prospectsPerDay: {
+      title: "Pros/Día",
+      general: [
+        `Prospectos: ${formatNumber(kpis.prospects)}.`,
+        `Dias: ${formatNumber(kpis.prospectDays, 1)}.`,
+      ],
+      details: [
+        `Resultado: ${formatNumber(kpis.prospectsPerDay, 1)}.`,
+      ],
+    },
+    projected: {
+      title: "Proyectado",
+      general: [
+        `Prospectos: ${formatNumber(kpis.prospects)}.`,
+        `Proyectado: ${formatNumber(kpis.projected)}.`,
+      ],
+      details: [
+        `Dias transcurridos: ${formatNumber(kpis.elapsedProspectDays, 1)}.`,
+        `Dias del rango: ${formatNumber(kpis.prospectDays, 1)}.`,
+      ],
+    },
+    quotes: {
+      title: "Cotizaciones",
+      general: [
+        `Rango: ${kpiRangeLabel}.`,
+        `Cotizaciones creadas: ${formatNumber(quoteKpiSummary.total)}.`,
+      ],
+      details: [
+        "Detalle de cotizaciones:",
+        ...quoteKpiSummary.detailLines,
+      ],
+    },
+    reservations: {
+      title: "Reservas",
+      general: [
+        `Rango: ${kpiRangeLabel}.`,
+        `Reservas creadas: ${formatNumber(reservationKpiSummary.total)}.`,
+      ],
+      details: [
+        "Detalle de reservas:",
+        ...reservationKpiSummary.detailLines,
+      ],
+    },
+    daysReserve: {
+      title: "Días Reserva",
+      general: ["Promedio de días que tardaron las oportunidades en llegar a reserva."],
+      details: ["Se compara la fecha de reserva con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysReserve, 1)} días.`],
+    },
+    daysClose: {
+      title: "Días Cierre",
+      general: ["Promedio de días que tardaron las oportunidades en cerrarse."],
+      details: ["Se compara la fecha de cierre con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysClose, 1)} días.`],
+    },
+    daysFact: {
+      title: "Días Fact",
+      general: ["Promedio de días hasta facturación."],
+      details: ["Se compara la fecha de facturación con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysFact, 1)} días.`],
+    },
+    virtualQuotes: {
+      title: "Cant Coti Virtuales",
+      general: ["Suma de tokens de visita asociados a cotizaciones."],
+      details: [`Total contado: ${formatNumber(kpis.virtualQuotes)}.`],
+    },
+    totalViews: {
+      title: "Total Vistas",
+      general: ["Suma de vistas totales registradas en cotizaciones."],
+      details: [`Total contado: ${formatNumber(kpis.totalViews)} vistas.`],
+    },
+    followUp: {
+      title: "Seguimiento",
+      general: ["Cuenta oportunidades abiertas que tienen fecha u hora de agenda."],
+      details: [`Total contado: ${formatNumber(kpis.followUp)} seguimientos.`],
+    },
+    };
+    return {
+      ...map,
+      daysReserve: {
+        title: "Días Reserva",
+        general: [
+          `Promedio general: ${formatNumber(kpis.daysReserve, 1)} días.`,
+          `Oportunidades consideradas: ${formatNumber(countedRecords.filter((item) => Number.isFinite(Number(item.daysToReservation))).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityMetricLines(countedRecords, "daysToReservation", "Días Reserva", { unit: "días", includeZero: true }),
+        ],
+      },
+      daysClose: {
+        title: "Días Cierre",
+        general: [
+          `Promedio general: ${formatNumber(kpis.daysClose, 1)} días.`,
+          `Oportunidades consideradas: ${formatNumber(countedRecords.filter((item) => Number.isFinite(Number(item.daysToClose))).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityMetricLines(countedRecords, "daysToClose", "Días Cierre", { unit: "días", includeZero: true }),
+        ],
+      },
+      daysFact: {
+        title: "Días Fact",
+        general: [
+          `Promedio general: ${formatNumber(kpis.daysFact, 1)} días.`,
+          `Oportunidades consideradas: ${formatNumber(countedRecords.filter((item) => Number.isFinite(Number(item.daysToInvoice))).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityMetricLines(countedRecords, "daysToInvoice", "Días Fact", { unit: "días", includeZero: true }),
+        ],
+      },
+      virtualQuotes: {
+        title: "Cant Coti Virtuales",
+        general: [
+          `Total general: ${formatNumber(kpis.virtualQuotes)}.`,
+          `Oportunidades con cotización virtual: ${formatNumber(countedRecords.filter((item) => Number(item.virtualQuoteCount || 0) > 0).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityCountLines(countedRecords, "virtualQuoteCount", "Cant Coti Virtuales"),
+        ],
+      },
+      totalViews: {
+        title: "Total Vistas",
+        general: [
+          `Total general: ${formatNumber(kpis.totalViews)} vistas.`,
+          `Oportunidades con vistas: ${formatNumber(countedRecords.filter((item) => Number(item.totalViews || 0) > 0).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityCountLines(countedRecords, "totalViews", "Total Vistas"),
+        ],
+      },
+      followUp: {
+        title: "Seguimiento",
+        general: [
+          `Total general: ${formatNumber(kpis.followUp)} seguimientos.`,
+          `Oportunidades abiertas con seguimiento: ${formatNumber(kpis.followUp)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...followUpDetailLines(countedRecords),
+        ],
+      },
+    };
+  }, [countedRecords, kpiRangeLabel, kpis, prospectStageLines, quoteKpiSummary, reservationKpiSummary]);
   const charts = useMemo(() => ({
     model: groupCount(countedRecords, "model", 8),
     stage: groupCount(countedRecords, "stage", 8),
@@ -521,20 +715,16 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const blankModelRecords = useMemo(() => filteredRecords.filter((record) => !hasRealValue(record.model)), [filteredRecords]);
   const blankCityRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.city)), [countedRecords]);
   const blankFuelRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.fuel)), [countedRecords]);
-
   function toggleChartFilter(field, value) {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
   }
-
   function toggleAdvisorFilter(advisor) {
     setFilters((current) => ({ ...current, advisor: current.advisor === advisor ? "" : advisor }));
   }
-
   function clearAll() {
     setFilters({ dateLevel: "", dateValue: "", advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
     setChartFilters({});
   }
-
   return (
     <div className="min-h-full bg-[#e9eef2] text-slate-950">
       <div className="min-h-[calc(100svh-1rem)]">
@@ -582,26 +772,24 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
             </div>
           </section>
           </Card>
-
           {message ? <div className="mb-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{message}</div> : null}
           {loading ? (
             <ReportsLoadingState />
           ) : (
             <>
               <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-11">
-                <Kpi title="Prospectos" value={formatNumber(kpis.prospects)} />
-                <Kpi title="Pros/Día" value={formatNumber(kpis.prospectsPerDay, 1)} />
-                <Kpi title="Proyectado" value={formatNumber(kpis.projected)} />
-                <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} />
-                <Kpi title="Reservas" value={formatNumber(kpis.reservations)} />
-                <Kpi title="Días Reserva" value={formatNumber(kpis.daysReserve, 1)} />
-                <Kpi title="Días Cierre" value={formatNumber(kpis.daysClose, 1)} />
-                <Kpi title="Días Fact" value={formatNumber(kpis.daysFact, 1)} />
-                <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} />
-                <Kpi title="Total Vistas" value={formatNumber(kpis.totalViews)} />
-                <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} />
+                <Kpi title="Prospectos" value={formatNumber(kpis.prospects)} info={kpiInfoMap.prospects} onInfo={setKpiInfo} />
+                <Kpi title="Pros/Día" value={formatNumber(kpis.prospectsPerDay, 1)} info={kpiInfoMap.prospectsPerDay} onInfo={setKpiInfo} />
+                <Kpi title="Proyectado" value={formatNumber(kpis.projected)} info={kpiInfoMap.projected} onInfo={setKpiInfo} />
+                <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} info={kpiInfoMap.quotes} onInfo={setKpiInfo} />
+                <Kpi title="Reservas" value={formatNumber(kpis.reservations)} info={kpiInfoMap.reservations} onInfo={setKpiInfo} />
+                <Kpi title="Días Reserva" value={formatNumber(kpis.daysReserve, 1)} info={kpiInfoMap.daysReserve} onInfo={setKpiInfo} />
+                <Kpi title="Días Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
+                <Kpi title="Días Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
+                <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} info={kpiInfoMap.virtualQuotes} onInfo={setKpiInfo} />
+                <Kpi title="Total Vistas" value={formatNumber(kpis.totalViews)} info={kpiInfoMap.totalViews} onInfo={setKpiInfo} />
+                <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
               </section>
-
               {isFordLeadView ? (
                 <>
                   <section className="grid gap-2 xl:grid-cols-[.9fr_.9fr_1.25fr_1fr_.9fr]">
@@ -625,7 +813,6 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                       <ReasonBars data={fordStats.testDriveModels} active={chartFilters.model} onSelect={toggleChartFilter} field="model" />
                     </Panel>
                   </section>
-
                   <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
                     <Panel title="Prospectos por Día y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} advisorColors={advisorColors} activeAdvisor={filters.advisor} onSelectAdvisor={toggleAdvisorFilter} /></Panel>
                     <Panel
@@ -678,7 +865,6 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                   </>
                 )}
               </section>
-
               <section className="mt-2 grid gap-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">
                 <Panel title="Prospectos por Día y Asesor" summary={lineSummary(charts.dayAdvisor)} onFocus={() => setFocusChart("dayAdvisor")}><DayAdvisorLine data={charts.dayAdvisor} advisorColors={advisorColors} activeAdvisor={filters.advisor} onSelectAdvisor={toggleAdvisorFilter} /></Panel>
                 {isFordLeadView ? (
@@ -736,6 +922,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 emptyText="No hay cotizaciones con combustible en blanco."
                 onClose={() => setBlankFuelOpen(false)}
               />
+              <KpiInfoDialog info={kpiInfo} onClose={() => setKpiInfo(null)} />
             </>
           )}
         </main>
@@ -743,7 +930,6 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
     </div>
   );
 }
-
 function ReportsLoadingState() {
   const letters = "HUBCRM".split("");
   return (
@@ -785,7 +971,6 @@ function ReportsLoadingState() {
     </Card>
   );
 }
-
 function CommandFilterBox({ label, value, onChange, options, placeholder, searchPlaceholder }) {
   return (
     <div className="rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
@@ -802,7 +987,6 @@ function CommandFilterBox({ label, value, onChange, options, placeholder, search
     </div>
   );
 }
-
 function CodeTypeFilter({ value, available, onChange }) {
   const options = [
     { value: "", label: "Todos" },
@@ -832,7 +1016,6 @@ function CodeTypeFilter({ value, available, onChange }) {
     </div>
   );
 }
-
 function TreeFilterShell({ label, display, children, onClear }) {
   const [open, setOpen] = useState(false);
   return (
@@ -853,7 +1036,6 @@ function TreeFilterShell({ label, display, children, onClear }) {
     </div>
   );
 }
-
 function DateTreeFilter({ valueLevel, value, tree, onChange }) {
   const [openYears, setOpenYears] = useState({});
   const [openMonths, setOpenMonths] = useState({});
@@ -903,7 +1085,6 @@ function DateTreeFilter({ valueLevel, value, tree, onChange }) {
     </TreeFilterShell>
   );
 }
-
 function ModelTreeFilter({ valueLevel, value, tree, onChange }) {
   const [openModels, setOpenModels] = useState({});
   const display = !value ? "Todas" : valueLevel === "model" ? value : value;
@@ -935,7 +1116,6 @@ function ModelTreeFilter({ valueLevel, value, tree, onChange }) {
     </TreeFilterShell>
   );
 }
-
 function dateTreeDisplay(level, value) {
   if (!value) return "Todas";
   if (level === "year") return `${value} (Año)`;
@@ -943,16 +1123,54 @@ function dateTreeDisplay(level, value) {
   if (level === "day") return value.split("-").reverse().join("/");
   return "Todas";
 }
-
-function Kpi({ title, value }) {
+function Kpi({ title, value, info, onInfo }) {
   return (
     <Card className="gap-0 overflow-hidden bg-white py-0 shadow-sm">
-      <div className="bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-center text-xs font-black text-white">{title}</div>
+      <div className="grid grid-cols-[1fr_auto] items-center bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-xs font-black text-white">
+        <span className="truncate text-center">{title}</span>
+        {info ? (
+          <button
+            type="button"
+            className="ml-1 inline-flex size-5 items-center justify-center rounded-sm text-white/90 hover:bg-white/15 hover:text-white"
+            title="Ver detalle"
+            onClick={() => onInfo?.(info)}
+          >
+            <Info className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
       <CardContent className="flex h-14 items-center justify-center px-2 text-xl font-bold sm:text-2xl">{value || "-"}</CardContent>
     </Card>
   );
 }
-
+function KpiInfoDialog({ info, onClose }) {
+  return (
+    <Dialog open={Boolean(info)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(94vw,620px)] bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-black text-violet-700">
+            <Info className="size-5" />{info?.title || "Detalle"}
+          </DialogTitle>
+          <DialogDescription>Resumen del indicador y detalle encontrado.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
+            <p className="mb-2 text-sm font-black text-violet-700">Resumen general</p>
+            <ul className="space-y-2 text-sm font-medium text-slate-700">
+              {(info?.general || []).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <p className="mb-2 text-sm font-black text-slate-800">Detalle</p>
+            <ul className="space-y-2 text-sm font-medium text-slate-700">
+              {(info?.details || []).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 function Panel({ title, children, summary, onFocus, alertCount = 0, onAlert }) {
   return (
     <Card className={`min-h-[270px] gap-0 overflow-visible bg-white py-0 shadow-sm ring-slate-400 ${alertCount ? "ring-2 ring-red-300" : ""}`}>
@@ -984,7 +1202,6 @@ function Panel({ title, children, summary, onFocus, alertCount = 0, onAlert }) {
     </Card>
   );
 }
-
 function FordMetric({ value, label }) {
   return (
     <div className="flex h-full flex-col items-center justify-center rounded-md bg-slate-50 text-center">
@@ -993,7 +1210,6 @@ function FordMetric({ value, label }) {
     </div>
   );
 }
-
 function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdvisor, advisorColors, onClose, onSelect, onSelectAdvisor }) {
   if (!chartKey) return null;
   const config = {
@@ -1059,7 +1275,6 @@ function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdv
     },
   }[chartKey];
   if (!config) return null;
-
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92svh] max-w-[min(96vw,1180px)] overflow-hidden bg-white p-0 text-slate-950">
@@ -1074,7 +1289,6 @@ function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdv
     </Dialog>
   );
 }
-
 function Donut({ data, field, active, onSelect }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   return (
@@ -1111,7 +1325,6 @@ function Donut({ data, field, active, onSelect }) {
     </div>
   );
 }
-
 function chartSummary(data, label) {
   const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const top = data[0];
@@ -1119,25 +1332,21 @@ function chartSummary(data, label) {
   const percent = (Number(top.value || 0) / total) * 100;
   return `Mayor ${label}: ${top.name} con ${top.value} (${formatNumber(percent, 1)}% de ${total}).`;
 }
-
 function modelChartSummary(data, blankCount) {
   const base = chartSummary(data, "modelo");
   if (!blankCount) return base;
   return `${base} Alerta: ${blankCount} oportunidades tienen modelo en blanco y no se cuentan en el gráfico.`;
 }
-
 function cityChartSummary(data, blankCount) {
   const base = chartSummary(data, "ciudad");
   if (!blankCount) return base;
   return `${base} Alerta: ${blankCount} clientes tienen ciudad pendiente de actualizar.`;
 }
-
 function blankAwareChartSummary(data, label, blankCount, message) {
   const base = chartSummary(data, label);
   if (!blankCount) return base;
   return `${base} Alerta: ${blankCount} ${message}`;
 }
-
 function BlankModelDialog({ open, records, onClose }) {
   if (!open) return null;
   return (
@@ -1193,7 +1402,6 @@ function BlankModelDialog({ open, records, onClose }) {
     </Dialog>
   );
 }
-
 function BlankCityDialog({ open, records, onClose }) {
   if (!open) return null;
   return (
@@ -1249,7 +1457,6 @@ function BlankCityDialog({ open, records, onClose }) {
     </Dialog>
   );
 }
-
 function BlankFieldDialog({ open, records, title, description, emptyText, onClose }) {
   if (!open) return null;
   return (
@@ -1303,7 +1510,6 @@ function BlankFieldDialog({ open, records, title, description, emptyText, onClos
     </Dialog>
   );
 }
-
 function stackSummary(data) {
   if (!data.length) return "Sin registros por asesor.";
   const totals = data.map((row) => ({
@@ -1312,7 +1518,6 @@ function stackSummary(data) {
   })).sort((a, b) => b.value - a.value);
   return totals[0]?.value ? `Asesor con más oportunidades: ${totals[0].name} (${totals[0].value}).` : "Sin registros por asesor.";
 }
-
 function lineSummary(data) {
   if (!data.length) return "Sin registros por día.";
   const totals = data.map((row) => ({
@@ -1321,7 +1526,6 @@ function lineSummary(data) {
   })).sort((a, b) => b.value - a.value);
   return totals[0]?.value ? `Día con más prospectos: ${totals[0].name} (${totals[0].value}).` : "Sin registros por día.";
 }
-
 function StageFunnel({ data, active, onSelect, field = "stage" }) {
   const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   const percentData = data.map((item) => ({
@@ -1350,7 +1554,6 @@ function StageFunnel({ data, active, onSelect, field = "stage" }) {
     </ResponsiveContainer>
   );
 }
-
 function StageCenterLabel(props) {
   const box = props.viewBox || {};
   const x = Number(props.x ?? box.x ?? 0);
@@ -1361,14 +1564,12 @@ function StageCenterLabel(props) {
   const cx = x + width / 2;
   const cy = y + height / 2;
   const compact = height < 54;
-
   return (
     <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={compact ? 9 : 11} fontWeight={800} pointerEvents="none">
       <tspan>{payload.centerLabel}</tspan>
     </text>
   );
 }
-
 function StackedAdvisor({ data, models }) {
   const activeModels = models.slice(0, 5);
   return (
@@ -1392,7 +1593,6 @@ function StackedAdvisor({ data, models }) {
     </ResponsiveContainer>
   );
 }
-
 function StackedAdvisorTooltip({ active, payload, label, coordinate }) {
   if (!active || !payload?.length) return null;
   const items = [...payload]
@@ -1445,7 +1645,6 @@ function StackedAdvisorTooltip({ active, payload, label, coordinate }) {
     </div>
   );
 }
-
 function ReasonBars({ data, active, onSelect, field = "closureReason" }) {
   const max = Math.max(...data.map((item) => item.value), 1);
   return (
@@ -1464,7 +1663,6 @@ function ReasonBars({ data, active, onSelect, field = "closureReason" }) {
     </ResponsiveContainer>
   );
 }
-
 function DayAdvisorLine({ data, advisorColors = {}, activeAdvisor, onSelectAdvisor }) {
   const advisors = data.length ? Object.keys(data[0]).filter((key) => key !== "day" && key !== "fullDay") : [];
   return (
