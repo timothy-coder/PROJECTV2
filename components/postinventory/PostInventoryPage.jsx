@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Boxes, ChevronDown, Download, Edit3, Eye, Layers3, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, Upload, X } from "lucide-react";
+import { Boxes, ChevronDown, Download, Edit3, Eye, Layers3, List, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -61,6 +61,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   const [stockDialog, setStockDialog] = useState({ open: false, product: null });
   const [locationDialog, setLocationDialog] = useState({ open: false, item: null });
   const [lotDialog, setLotDialog] = useState({ open: false, product: null, item: null, readonly: false });
+  const [lotListDialog, setLotListDialog] = useState({ open: false, product: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, title: "", onConfirm: null });
   const [formatsMenuOpen, setFormatsMenuOpen] = useState(false);
   const canView = hasPerm(userPermissions, ["inventario", "view"]);
@@ -283,6 +284,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         onEdit={(product) => setProductDialog({ open: true, item: product, readonly: false })}
         onStock={(product) => setStockDialog({ open: true, product })}
         onLot={(product) => setLotDialog({ open: true, product, item: null, readonly: false })}
+        onManageLots={(product) => setLotListDialog({ open: true, product })}
         onEditLot={(product, item) => setLotDialog({ open: true, product, item, readonly: false })}
         onDeleteLot={(lot) => setDeleteDialog({ open: true, title: `Eliminar lote ${lot.numeroFactura}`, onConfirm: () => data.deleteLot(lot.id) })}
         onDelete={(product) => setDeleteDialog({ open: true, title: `Eliminar ${product.numeroParte}`, onConfirm: () => data.deleteProduct(product.id) })}
@@ -350,6 +352,19 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
             }
             setLotDialog({ open: false, product: null, item: null, readonly: false });
           }}
+        />
+      ) : null}
+      {lotListDialog.open ? (
+        <LotsListDialog
+          product={lotListDialog.product}
+          canEdit={canLots}
+          canDelete={canDelete}
+          onClose={() => setLotListDialog({ open: false, product: null })}
+          onEditLot={(product, lot) => {
+            setLotListDialog({ open: false, product: null });
+            setLotDialog({ open: true, product, item: lot, readonly: false });
+          }}
+          onDeleteLot={(lot) => setDeleteDialog({ open: true, title: `Eliminar lote ${lot.numeroFactura}`, onConfirm: () => data.deleteLot(lot.id) })}
         />
       ) : null}
       {comboDialog.open ? (
@@ -422,7 +437,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   );
 }
 
-function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, canLots, settings, onView, onEdit, onStock, onLot, onEditLot, onDeleteLot, onDelete }) {
+function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, canLots, settings, onView, onEdit, onStock, onLot, onManageLots, onEditLot, onDeleteLot, onDelete }) {
   const useLots = settings?.habilitarLotes !== false;
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -461,6 +476,7 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                       <Button variant="ghost" size="icon" onClick={() => onView(product)}><Eye className="size-4" /></Button>
                       {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(product)}><Edit3 className="size-4" /></Button> : null}
                       {useLots && canLots ? <Button variant="ghost" size="icon" onClick={() => onLot(product)} title="Agregar lote"><Layers3 className="size-4" /></Button> : null}
+                      {useLots ? <Button variant="ghost" size="icon" onClick={() => onManageLots(product)} title="Ver lotes"><List className="size-4" /></Button> : null}
                       {canStock ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
                       {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(product)}><Trash2 className="size-4" /></Button> : null}
                     </div>
@@ -488,6 +504,63 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
           <div className="flex gap-2"><Button variant="outline" disabled>Anterior</Button><Button variant="outline" disabled>Siguiente</Button></div>
         </div>
       </section>
+  );
+}
+
+function LotsListDialog({ product, canEdit, canDelete, onClose, onEditLot, onDeleteLot }) {
+  const lots = product?.lotes || [];
+  return (
+    <Dialog open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] max-w-[min(96vw,920px)] overflow-hidden bg-white p-0 text-slate-950">
+        <DialogHeader className="border-b border-violet-100 p-4">
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+            <Layers3 className="size-5" />Lotes ingresados
+          </DialogTitle>
+          <DialogDescription>{product?.numeroParte} - {product?.descripcion}</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[70svh] overflow-auto p-3">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="sticky top-0 bg-white text-xs font-bold text-slate-500">
+              <tr>
+                <th className="border-b px-3 py-2">Factura</th>
+                <th className="border-b px-3 py-2">Proveedor</th>
+                <th className="border-b px-3 py-2">Medida</th>
+                <th className="border-b px-3 py-2">Vencimiento</th>
+                <th className="border-b px-3 py-2">Compra</th>
+                <th className="border-b px-3 py-2">Stock</th>
+                <th className="border-b px-3 py-2 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {lots.length ? lots.map((lot) => (
+                <tr key={lot.id}>
+                  <td className="px-3 py-2 font-bold text-slate-950">{lot.numeroFactura || "-"}</td>
+                  <td className="px-3 py-2 text-slate-600">{lot.proveedorNombre || "-"}</td>
+                  <td className="px-3 py-2 text-slate-600">{lot.tipoMedidaNombre || lot.tipoMedidaAbreviatura || "-"}</td>
+                  <td className="px-3 py-2 text-slate-600">{lot.fechaVencimiento ? new Date(lot.fechaVencimiento).toLocaleDateString("es-PE") : "-"}</td>
+                  <td className="px-3 py-2 font-semibold text-slate-950">{money(lot.precioCompra, product?.monedaSimbolo)}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-bold text-emerald-700">{lot.stockDisponible}</div>
+                    <div className="text-xs text-slate-500">Total {lot.stockLote} / usado {lot.stockUsado}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEditLot(product, lot)} title="Editar lote"><Edit3 className="size-4" /></Button> : null}
+                      {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDeleteLot(lot)} title="Eliminar lote"><Trash2 className="size-4" /></Button> : null}
+                    </div>
+                  </td>
+                </tr>
+              )) : (
+                <tr><td colSpan={7} className="py-10 text-center text-slate-500">No hay lotes registrados para este producto.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <DialogFooter className="border-t border-slate-200 p-3">
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

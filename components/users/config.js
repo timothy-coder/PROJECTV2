@@ -43,6 +43,7 @@ export const USER_PERMISSION_GROUPS = [
   { key: "sistema_logistico", label: "Sistema Logistico", actions: ["view"] },
   { key: "puntoventa", label: "Punto de Venta", actions: ["view"] },
   { key: "config_puntoventa", label: "Config. Punto de Venta", actions: ["view", "create", "edit", "delete"] },
+  { key: "external_api", label: "API Externa", actions: ["view"] },
   { key: "mensajes", label: "Mensajes", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion", label: "Configuracion", actions: ["view", "create", "edit", "delete"] },
   { key: "configuracion_centros", label: "Config. Centros", actions: ["view", "create", "edit", "delete"] },
