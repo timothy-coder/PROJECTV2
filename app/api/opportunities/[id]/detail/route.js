@@ -113,7 +113,19 @@ export async function GET(request, { params }) {
       : [[]];
     const [testDrives] = await connection.query(`SELECT t.*, mo.name AS modelo FROM ventas_oportunidades_test_drives t LEFT JOIN administracion_modelos mo ON mo.id=t.modelo_id WHERE t.oportunidad_id=? ORDER BY t.created_at DESC`, [id]);
     const [closures] = await connection.query(`SELECT c.*, u.fullname AS user_name, cd.detalle AS clasificacion FROM ventas_oportunidades_cierres c INNER JOIN administracion_usuarios u ON u.id=c.created_by LEFT JOIN configuracion_ventas_cierres_detalle cd ON cd.id=c.cierre_detalle_id WHERE c.oportunidad_id=? ORDER BY c.created_at DESC`, [id]);
-    const [reservations] = await connection.query(`SELECT id, estado, created_at FROM ventas_reservas WHERE oportunidad_id=? ORDER BY created_at DESC`, [id]);
+    const [reservations] = await connection.query(
+      `SELECT r.id, r.estado, r.created_at, rd.tipo_persona
+       FROM ventas_reservas r
+       LEFT JOIN (
+         SELECT reserva_id, MAX(tipo_persona) AS tipo_persona
+         FROM ventas_reserva_detalles
+         WHERE oportunidad_id=?
+         GROUP BY reserva_id
+       ) rd ON rd.reserva_id=r.id
+       WHERE r.oportunidad_id=?
+       ORDER BY r.created_at DESC`,
+      [id, id]
+    );
     const [closeOptions] = await connection.query(`SELECT id, detalle FROM configuracion_ventas_cierres_detalle ORDER BY id DESC`);
     const [accessories] = await connection.query(`SELECT id, marca_id, modelo_id, detalle, numero_parte, precio, precio_venta, moneda_id FROM ventas_accesorios_disponibles ORDER BY detalle ASC`);
     const [gifts] = await connection.query(`SELECT id, detalle, lote, precio_compra, precio_venta, moneda_id FROM ventas_regalos_disponibles ORDER BY detalle ASC`);
@@ -185,7 +197,7 @@ export async function GET(request, { params }) {
         horaFin: timePart(row.hora_fin),
       })),
       closures,
-      reservations: reservations.map((row) => ({ id: row.id, estado: row.estado || "borrador", createdAt: row.created_at })),
+      reservations: reservations.map((row) => ({ id: row.id, estado: row.estado || "borrador", createdAt: row.created_at, tipoPersona: row.tipo_persona || "" })),
       options: {
         brands,
         models,

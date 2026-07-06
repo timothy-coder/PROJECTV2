@@ -104,6 +104,7 @@ SELECT
   cita_asesor.fullname AS cita_asesor_nombre,
   cita_origen.name AS cita_origen_nombre,
   cierre.detalle AS cierre_detalle,
+  cierre_config.detalle AS cierre_motivo_configurado,
   cierre.created_at AS cierre_created_at,
   cierre_creador.fullname AS cierre_creado_por,
   cot.id AS cotizacion_id,
@@ -190,6 +191,7 @@ LEFT JOIN configuracion_talleres taller ON taller.id = cita.taller_id
 LEFT JOIN administracion_usuarios cita_asesor ON cita_asesor.id = cita.asesor_id
 LEFT JOIN configuracion_origenes_citas cita_origen ON cita_origen.id = cita.origen_id
 LEFT JOIN posventa_oportunidades_cierres cierre ON cierre.oportunidad_id = o.id
+LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id = cierre.cierre_detalle_id
 LEFT JOIN administracion_usuarios cierre_creador ON cierre_creador.id = cierre.created_by
 LEFT JOIN posventa_cotizaciones cot ON cot.cliente_id = o.cliente_id
 LEFT JOIN administracion_usuarios cot_usuario ON cot_usuario.id = cot.usuario_id
@@ -225,9 +227,31 @@ export async function GET(request) {
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
     const offset = clampOffset(url.searchParams.get("offset"));
+    const withMeta = url.searchParams.get("withMeta") === "1";
     const scopeSql = scopeUserId ? "WHERE (o.created_by = ? OR o.asignado_a = ?)" : "";
     const query = POWERBI_POSVENTA_QUERY.replace("ORDER BY o.created_at DESC, o.id DESC", `${scopeSql} ORDER BY o.created_at DESC, o.id DESC`);
     const [rows] = await pool.query(`${query} LIMIT ${limit} OFFSET ${offset}`, scopeUserId ? [scopeUserId, scopeUserId] : []);
+
+    if (withMeta) {
+      const [timeRows] = await pool.query(
+        `SELECT id, nombre, estado, minutos_desde, minutos_hasta, color_hexadecimal, descripcion
+         FROM configuracion_posventa_estados_tiempo
+         WHERE activo = 1
+         ORDER BY minutos_desde ASC`
+      );
+      return NextResponse.json({
+        rows,
+        timeStates: timeRows.map((row) => ({
+          id: row.id,
+          nombre: row.nombre,
+          estado: row.estado,
+          minutosDesde: row.minutos_desde,
+          minutosHasta: row.minutos_hasta,
+          colorHexadecimal: row.color_hexadecimal,
+          descripcion: row.descripcion || "",
+        })),
+      });
+    }
 
     return NextResponse.json(rows);
   } catch (error) {

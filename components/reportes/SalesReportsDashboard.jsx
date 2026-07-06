@@ -126,6 +126,40 @@ function daysBetween(startValue, endValue) {
   if (!start || !end) return null;
   return Math.max(0, (end.getTime() - start.getTime()) / 86400000);
 }
+function agendaDateTime(fechaAgenda, horaAgenda) {
+  const date = readDate(fechaAgenda);
+  if (!date) return null;
+  const timeText = String(horaAgenda || "00:00:00").trim();
+  const match = timeText.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  const hours = match ? Number(match[1]) : 0;
+  const minutes = match ? Number(match[2]) : 0;
+  const seconds = match ? Number(match[3] || 0) : 0;
+  const agenda = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, seconds);
+  return Number.isNaN(agenda.getTime()) ? null : agenda;
+}
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+function findAgendaTimeState(fechaAgenda, horaAgenda, timeStates = []) {
+  const agenda = agendaDateTime(fechaAgenda, horaAgenda);
+  if (!agenda) return null;
+  const minutesUntilAgenda = Math.round((agenda.getTime() - Date.now()) / 60000);
+  return timeStates.find((state) => minutesUntilAgenda >= Number(state.minutosDesde) && minutesUntilAgenda <= Number(state.minutosHasta)) || null;
+}
+function isGreenTimeState(state) {
+  const text = normalizeText(`${state?.nombre || ""} ${state?.estado || ""} ${state?.descripcion || ""} ${state?.colorHexadecimal || ""}`);
+  return Boolean(
+    state &&
+      (text.includes("tiempo suficiente") ||
+        text.includes("cerca de la hora") ||
+        text.includes("#28a745") ||
+        text.includes("#ffc107"))
+  );
+}
 function clean(value, fallback = EMPTY) {
   const text = String(value ?? "").trim();
   return text || fallback;
@@ -145,6 +179,14 @@ function countVisitQuoteTokens(rows) {
 }
 function pickFirstValue(...values) {
   return values.find((value) => hasRealValue(value)) ?? "";
+}
+function pickFirstRowValue(rows, ...keys) {
+  for (const row of rows) {
+    for (const key of keys) {
+      if (hasRealValue(row?.[key])) return row[key];
+    }
+  }
+  return "";
 }
 function uniqueRows(rows, keyGetter) {
   const map = new Map();
@@ -168,7 +210,7 @@ function formatNumber(value, decimals = 0) {
 function formatDollar(value, decimals = 0) {
   return `$ ${formatNumber(value, decimals)}`;
 }
-function buildOpportunityRecords(rows) {
+function buildOpportunityRecords(rows, timeStates = []) {
   const groups = new Map();
   rows.forEach((row) => {
     const key = row.oportunidad_db_id || row.codigodeoportunidad;
@@ -189,6 +231,7 @@ function buildOpportunityRecords(rows) {
     const modelName = clean(latestQuote.modelo_catalogo || latestQuote.modelo_historial);
     const version = clean(latestQuote.version, "");
     const closureReason = clean(closure.motivocierreoportunidad || closure.cierreoportunidaddetalle || base.motivocierreoportunidad);
+    const platformClosureReason = pickFirstRowValue(group, "motivocierreoportunidad");
     const platformFields = [
       base.codigodeoportunidad,
       base.nombreapelidocomlpetoclietne,
@@ -196,14 +239,14 @@ function buildOpportunityRecords(rows) {
       base.ocupacioncleitne,
       base.nombredepar,
       base.nombreprovi,
-      pickFirstValue(latestQuote["añocarro"], latestQuote["aÃ±ocarro"]),
-      latestQuote.fechacreaciocotizacion,
-      base.tipopersona || latestQuote.tipopersona,
-      latestQuote.preciocatalogo,
-      latestQuote.version,
-      latestQuote.estadocotizacion,
+      pickFirstRowValue(group, "añocarro", "aÃ±ocarro"),
+      pickFirstRowValue(group, "fechacreaciocotizacion"),
+      pickFirstRowValue(group, "tipopersona"),
+      pickFirstRowValue(group, "preciocatalogo"),
+      pickFirstRowValue(group, "version"),
+      pickFirstRowValue(group, "estadocotizacion"),
       base.nombreditri,
-      closure.motivocierreoportunidad || closure.cierreoportunidaddetalle || base.motivocierreoportunidad,
+      platformClosureReason,
     ];
     const soldValue = moneyNumber(latestQuote.preciocotizacion || latestQuote.precio_unitario || latestQuote.preciocatalogo);
     const isInvoiced = Boolean(latestQuote.evento_fecha_facturacion || latestQuote.evento_numero_factura || latestQuote.historial_created_at_facturacion);
@@ -250,7 +293,9 @@ function buildOpportunityRecords(rows) {
       hasTestDrive: testDriveRows.length > 0,
       noTestDriveReason: testDriveRows.length ? "" : clean(closureReason !== EMPTY ? closureReason : base.testdrive_descripcion, "Sin test drive registrado"),
       matriculaStatus,
-      followUp: Boolean(base.fecha_agenda || base.hora_agenda),
+      agendaAt: agendaDateTime(base.fecha_agenda, base.hora_agenda),
+      agendaTimeState: findAgendaTimeState(base.fecha_agenda, base.hora_agenda, timeStates),
+      agendaGreen: isGreenTimeState(findAgendaTimeState(base.fecha_agenda, base.hora_agenda, timeStates)),
       daysToReservation: daysBetween(base.fechacreacionoportunidad, firstReserve.reserva_detalle_created_at),
       daysToClose: daysBetween(base.fechacreacionoportunidad, closure.fechacreacioncierre),
       daysToInvoice: daysBetween(base.fechacreacionoportunidad, latestQuote.evento_fecha_facturacion),
@@ -425,8 +470,8 @@ function opportunityCountLines(records, valueKey, label, options = {}) {
   return valid.map((record) => `${record.code || "Sin código"} - ${record.client || "Sin cliente"}: ${formatNumber(record[valueKey], options.decimals ?? 0)}.`);
 }
 function followUpDetailLines(records) {
-  const valid = records.filter((record) => record.followUp && !isClosedStage(record.stage));
-  if (!valid.length) return ["Sin oportunidades abiertas con seguimiento."];
+  const valid = records.filter((record) => record.agendaGreen && !isClosedStage(record.stage));
+  if (!valid.length) return ["Sin oportunidades abiertas con agenda vigente."];
   return valid.map((record) => `${record.code || "Sin código"} - ${record.client || "Sin cliente"}: ${record.stage || "Sin etapa"}.`);
 }
 function eventSummary(records, eventKey, filters, label) {
@@ -446,7 +491,7 @@ function eventSummary(records, eventKey, filters, label) {
     total: unique.size,
     outsideOpportunityRange: outsideOpportunityRange.length,
     detailLines: [
-      `${label} creadas en el rango: ${formatNumber(unique.size)}.`,
+      `${label} creadas en el filtro: ${formatNumber(unique.size)}.`,
       `${label} cuya oportunidad se creó en otro mes: ${formatNumber(outsideOpportunityRange.length)}.`,
       ...outsideOpportunityRange.slice(0, 6).map((event) => `${event.code || "Sin código"} - ${event.client || "Sin cliente"}: oportunidad creada en ${monthLabel(monthKey(event.opportunityDate))}.`),
     ],
@@ -454,6 +499,7 @@ function eventSummary(records, eventKey, filters, label) {
 }
 export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
+  const [timeStates, setTimeStates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
@@ -465,14 +511,17 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [blankFuelOpen, setBlankFuelOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/powerbi/data?limit=100000")
+    fetch("/api/powerbi/data?limit=100000&withMeta=1")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.message || "No se pudo cargar la data.");
         return payload;
       })
       .then((payload) => {
-        if (!cancelled) setRows(Array.isArray(payload) ? payload : []);
+        if (!cancelled) {
+          setRows(Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []);
+          setTimeStates(Array.isArray(payload?.timeStates) ? payload.timeStates : []);
+        }
       })
       .catch((error) => {
         if (!cancelled) setMessage(error.message);
@@ -484,7 +533,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       cancelled = true;
     };
   }, []);
-  const records = useMemo(() => buildOpportunityRecords(rows), [rows]);
+  const records = useMemo(() => buildOpportunityRecords(rows, timeStates), [rows, timeStates]);
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
   const metricRecords = useMemo(() => filterRecords(records, filters, chartFilters, { includeDate: false }), [records, filters, chartFilters]);
   const countedRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.model)), [filteredRecords]);
@@ -527,7 +576,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       daysFact: avg(countedRecords.map((item) => item.daysToInvoice)),
       virtualQuotes,
       totalViews: countedRecords.reduce((sum, item) => sum + item.totalViews, 0),
-      followUp: countedRecords.filter((item) => item.followUp && !isClosedStage(item.stage)).length,
+      followUp: countedRecords.filter((item) => item.agendaGreen && !isClosedStage(item.stage)).length,
       platformUse: platformBase ? (filteredRecords.reduce((sum, item) => sum + item.platformUseScore, 0) / platformBase) * 100 : 0,
     };
   }, [countedMetricRecords, countedRecords, filteredRecords, filters]);
@@ -540,7 +589,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
     prospects: {
       title: "Prospectos",
       general: [
-        `Rango: ${kpiRangeLabel}.`,
+        `Filtro: ${kpiRangeLabel}.`,
         `Oportunidades creadas: ${formatNumber(kpis.prospects)}.`,
       ],
       details: [
@@ -566,13 +615,13 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       ],
       details: [
         `Dias transcurridos: ${formatNumber(kpis.elapsedProspectDays, 1)}.`,
-        `Dias del rango: ${formatNumber(kpis.prospectDays, 1)}.`,
+        `Dias del filtro: ${formatNumber(kpis.prospectDays, 1)}.`,
       ],
     },
     quotes: {
       title: "Cotizaciones",
       general: [
-        `Rango: ${kpiRangeLabel}.`,
+        `Filtro: ${kpiRangeLabel}.`,
         `Cotizaciones creadas: ${formatNumber(quoteKpiSummary.total)}.`,
       ],
       details: [
@@ -583,7 +632,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
     reservations: {
       title: "Reservas",
       general: [
-        `Rango: ${kpiRangeLabel}.`,
+        `Filtro: ${kpiRangeLabel}.`,
         `Reservas creadas: ${formatNumber(reservationKpiSummary.total)}.`,
       ],
       details: [
@@ -618,7 +667,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
     },
     followUp: {
       title: "Seguimiento",
-      general: ["Cuenta oportunidades abiertas que tienen fecha u hora de agenda."],
+      general: ["Cuenta oportunidades abiertas con agenda vigente."],
       details: [`Total contado: ${formatNumber(kpis.followUp)} seguimientos.`],
     },
     };
@@ -683,7 +732,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         title: "Seguimiento",
         general: [
           `Total general: ${formatNumber(kpis.followUp)} seguimientos.`,
-          `Oportunidades abiertas con seguimiento: ${formatNumber(kpis.followUp)}.`,
+          `Oportunidades abiertas con agenda vigente: ${formatNumber(kpis.followUp)}.`,
         ],
         details: [
           "Resultado por oportunidad:",
@@ -694,15 +743,16 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   }, [countedRecords, kpiRangeLabel, kpis, prospectStageLines, quoteKpiSummary, reservationKpiSummary]);
   const charts = useMemo(() => ({
     model: groupCount(countedRecords, "model", 8),
-    stage: groupCount(countedRecords, "stage", 8),
+    stage: groupCount(filteredRecords, "stage", 8),
     advisorModel: stackByAdvisorAndModel(countedRecords),
-    clientType: groupCount(countedRecords, "clientType", 8),
+    clientType: groupCount(filteredRecords, "clientType", 8),
     closureReason: groupCount(countedRecords, "closureReason", 6),
     dayAdvisor: lineByDayAndAdvisor(countedRecords),
-    campaign: groupCount(countedRecords, "campaign", 8),
-    city: groupCount(countedRecords, "city", 8),
-    fuel: groupCount(countedRecords, "fuel", 6),
-  }), [countedRecords]);
+    campaign: groupCount(filteredRecords, "campaign", 8),
+    city: groupCount(filteredRecords, "city", 8),
+    fuel: groupCount(filteredRecords, "fuel", 6),
+  }), [countedRecords, filteredRecords]);
+  const stageTotal = filteredRecords.length;
   const isFordLeadView = filters.codeType === "LF";
   const fordStats = useMemo(() => fordDashboardStats(countedRecords), [countedRecords]);
   const advisorColors = useMemo(() => {
@@ -713,8 +763,8 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
     return map;
   }, [countedRecords]);
   const blankModelRecords = useMemo(() => filteredRecords.filter((record) => !hasRealValue(record.model)), [filteredRecords]);
-  const blankCityRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.city)), [countedRecords]);
-  const blankFuelRecords = useMemo(() => countedRecords.filter((record) => !hasRealValue(record.fuel)), [countedRecords]);
+  const blankCityRecords = useMemo(() => filteredRecords.filter((record) => !hasRealValue(record.city)), [filteredRecords]);
+  const blankFuelRecords = useMemo(() => filteredRecords.filter((record) => !hasRealValue(record.fuel)), [filteredRecords]);
   function toggleChartFilter(field, value) {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
   }
@@ -791,14 +841,14 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
               </section>
               {isFordLeadView ? (
+                <section className="mb-2 grid gap-1.5 sm:grid-cols-2 xl:w-[520px]">
+                  <FordMiniMetric title="Ticket Promedio" value={formatDollar(fordStats.ticketAverage, 0)} detail={`${fordStats.soldCount} vehículos vendidos/facturados`} />
+                  <FordMiniMetric title="Tiempo de Atención Lead" value={`${formatNumber(fordStats.leadAttentionHours, 1)} h`} detail="Promedio de atención" />
+                </section>
+              ) : null}
+              {isFordLeadView ? (
                 <>
-                  <section className="grid gap-2 xl:grid-cols-[.9fr_.9fr_1.25fr_1fr_.9fr]">
-                    <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados en dólares.`}>
-                      <FordMetric value={formatDollar(fordStats.ticketAverage, 0)} label="Promedio valor VH vendidos" />
-                    </Panel>
-                    <Panel title="Tiempo de Atención Lead" summary="Promedio desde derivación de marca hasta primera actividad del asesor.">
-                      <FordMetric value={`${formatNumber(fordStats.leadAttentionHours, 1)} h`} label="Tiempo promedio de atención" />
-                    </Panel>
+                  <section className="grid gap-2 xl:grid-cols-[1.25fr_1fr_.9fr]">
                     <Panel
                       title="Oportunidad por Modelo"
                       summary={modelChartSummary(charts.model, blankModelRecords.length)}
@@ -808,7 +858,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                     >
                       <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} />
                     </Panel>
-                    <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                    <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
                     <Panel title="Test Drives Aplicados" summary={chartSummary(fordStats.testDriveModels, "modelo")} onFocus={() => setFocusChart("fordTestDriveModels")}>
                       <ReasonBars data={fordStats.testDriveModels} active={chartFilters.model} onSelect={toggleChartFilter} field="model" />
                     </Panel>
@@ -827,8 +877,8 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                     <Panel title="Status Matrícula" summary={chartSummary(fordStats.matriculaStatus, "estado")} onFocus={() => setFocusChart("fordMatriculaStatus")}>
                       <ReasonBars data={fordStats.matriculaStatus} active={chartFilters.matriculaStatus} onSelect={toggleChartFilter} field="matriculaStatus" />
                     </Panel>
-                    <Panel title="Razones sin Test Drive" summary={chartSummary(fordStats.testDriveReasons, "razón")} onFocus={() => setFocusChart("fordTestDriveReasons")}>
-                      <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} field="noTestDriveReason" />
+                    <Panel title="Razones sin Test Drive" summary={testDriveReasonSummary(fordStats.testDriveReasons)} alertCount={fordStats.testDriveReasons.reduce((sum, item) => sum + Number(item.value || 0), 0)}>
+                      <TestDriveReasonAlerts data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} />
                     </Panel>
                   </section>
                 </>
@@ -844,7 +894,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 >
                   <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} />
                 </Panel>
-                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
                 {isFordLeadView ? (
                   <>
                     <Panel title="Ticket Promedio" summary={`${fordStats.soldCount} vehículos vendidos/facturados considerados en dólares.`}>
@@ -853,8 +903,8 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                     <Panel title="Test Drives Aplicados" summary={`${fordStats.testDriveApplied} vehículos tienen test drive registrado.`}>
                       <FordMetric value={formatNumber(fordStats.testDriveApplied)} label="Cantidad de VH con test drive" />
                     </Panel>
-                    <Panel title="Razones sin Test Drive" summary={chartSummary(fordStats.testDriveReasons, "razón")} onFocus={() => setFocusChart("fordTestDriveReasons")}>
-                      <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} field="noTestDriveReason" />
+                    <Panel title="Razones sin Test Drive" summary={testDriveReasonSummary(fordStats.testDriveReasons)} alertCount={fordStats.testDriveReasons.reduce((sum, item) => sum + Number(item.value || 0), 0)}>
+                      <TestDriveReasonAlerts data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={toggleChartFilter} />
                     </Panel>
                   </>
                 ) : (
@@ -904,6 +954,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
               <FocusChartDialog
                 chartKey={focusChart}
                 charts={charts}
+                stageTotal={stageTotal}
                 fordStats={fordStats}
                 chartFilters={chartFilters}
                 activeAdvisor={filters.advisor}
@@ -1180,8 +1231,8 @@ function Panel({ title, children, summary, onFocus, alertCount = 0, onAlert }) {
           {alertCount ? (
             <button
               type="button"
-              className="inline-flex h-5 items-center gap-1 rounded-sm bg-red-500 px-1.5 text-[10px] font-black text-white hover:bg-red-600"
-              title="Modelos en blanco"
+              className={`inline-flex h-5 items-center gap-1 rounded-sm bg-red-500 px-1.5 text-[10px] font-black text-white ${onAlert ? "hover:bg-red-600" : "cursor-default"}`}
+              title="Alertas"
               onClick={onAlert}
             >
               <AlertTriangle className="size-3" />
@@ -1202,6 +1253,17 @@ function Panel({ title, children, summary, onFocus, alertCount = 0, onAlert }) {
     </Card>
   );
 }
+function FordMiniMetric({ title, value, detail }) {
+  return (
+    <div className="rounded-md border border-violet-200 bg-white px-3 py-2 shadow-sm">
+      <p className="text-[10px] font-black uppercase leading-tight text-violet-600">{title}</p>
+      <div className="mt-1 flex items-end justify-between gap-2">
+        <p className="text-xl font-black leading-none text-slate-950">{value}</p>
+        <p className="max-w-[150px] text-right text-[10px] font-bold leading-tight text-slate-500">{detail}</p>
+      </div>
+    </div>
+  );
+}
 function FordMetric({ value, label }) {
   return (
     <div className="flex h-full flex-col items-center justify-center rounded-md bg-slate-50 text-center">
@@ -1210,7 +1272,39 @@ function FordMetric({ value, label }) {
     </div>
   );
 }
-function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdvisor, advisorColors, onClose, onSelect, onSelectAdvisor }) {
+function TestDriveReasonAlerts({ data, active, onSelect }) {
+  if (!data.length) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-md border border-dashed border-emerald-200 bg-emerald-50 p-4 text-center text-xs font-bold text-emerald-700">
+        No hay alertas de test drive.
+      </div>
+    );
+  }
+  return (
+    <div className="h-full overflow-auto rounded-md border border-red-200 bg-red-50 p-2">
+      <div className="mb-2 flex items-center gap-2 text-xs font-black text-red-700">
+        <AlertTriangle className="size-4" />
+        Oportunidades sin test drive aplicado
+      </div>
+      <div className="space-y-2">
+        {data.map((item) => (
+          <button
+            key={item.name}
+            type="button"
+            className={`flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs shadow-sm transition ${
+              active === item.name ? "border-red-500 bg-white text-red-800 ring-2 ring-red-200" : "border-red-100 bg-white text-slate-700 hover:border-red-300 hover:bg-red-50"
+            }`}
+            onClick={() => onSelect("noTestDriveReason", item.name)}
+          >
+            <span className="line-clamp-2 font-bold leading-tight">{item.name}</span>
+            <span className="shrink-0 rounded-full bg-red-100 px-2 py-1 font-black text-red-700">{formatNumber(item.value)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+function FocusChartDialog({ chartKey, charts, stageTotal, fordStats, chartFilters, activeAdvisor, advisorColors, onClose, onSelect, onSelectAdvisor }) {
   if (!chartKey) return null;
   const config = {
     model: {
@@ -1220,8 +1314,8 @@ function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdv
     },
     stage: {
       title: "Etapas",
-      summary: chartSummary(charts.stage, "etapa"),
-      content: <StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={onSelect} />,
+      summary: chartSummary(charts.stage, "etapa", stageTotal),
+      content: <StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={onSelect} />,
     },
     advisorModel: {
       title: "Modelo por Asesor",
@@ -1260,8 +1354,8 @@ function FocusChartDialog({ chartKey, charts, fordStats, chartFilters, activeAdv
     },
     fordTestDriveReasons: {
       title: "Razones sin Test Drive",
-      summary: chartSummary(fordStats.testDriveReasons, "razón"),
-      content: <ReasonBars data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={onSelect} field="noTestDriveReason" />,
+      summary: testDriveReasonSummary(fordStats.testDriveReasons),
+      content: <TestDriveReasonAlerts data={fordStats.testDriveReasons} active={chartFilters.noTestDriveReason} onSelect={onSelect} />,
     },
     fordTestDriveModels: {
       title: "Test Drives Aplicados",
@@ -1325,12 +1419,18 @@ function Donut({ data, field, active, onSelect }) {
     </div>
   );
 }
-function chartSummary(data, label) {
-  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+function chartSummary(data, label, totalCount) {
+  const total = Number(totalCount ?? data.reduce((sum, item) => sum + Number(item.value || 0), 0));
   const top = data[0];
   if (!top || !total) return "Sin registros para este gráfico.";
   const percent = (Number(top.value || 0) / total) * 100;
   return `Mayor ${label}: ${top.name} con ${top.value} (${formatNumber(percent, 1)}% de ${total}).`;
+}
+function testDriveReasonSummary(data) {
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const top = data[0];
+  if (!top || !total) return "Sin alertas de test drive.";
+  return `Alerta principal: ${top.name} con ${top.value} de ${total} oportunidades sin test drive.`;
 }
 function modelChartSummary(data, blankCount) {
   const base = chartSummary(data, "modelo");
@@ -1526,8 +1626,8 @@ function lineSummary(data) {
   })).sort((a, b) => b.value - a.value);
   return totals[0]?.value ? `Día con más prospectos: ${totals[0].name} (${totals[0].value}).` : "Sin registros por día.";
 }
-function StageFunnel({ data, active, onSelect, field = "stage" }) {
-  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+function StageFunnel({ data, totalCount, active, onSelect, field = "stage" }) {
+  const total = Number(totalCount ?? data.reduce((sum, item) => sum + Number(item.value || 0), 0));
   const percentData = data.map((item) => ({
     ...item,
     percent: total ? (Number(item.value || 0) / total) * 100 : 0,

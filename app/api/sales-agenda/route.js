@@ -85,7 +85,9 @@ export async function GET(request) {
               e.nombre AS etapa_nombre, e.color AS etapa_color,
               au.fullname AS asignado_nombre, cu.fullname AS creado_nombre,
               d.fecha_agenda, d.hora_agenda, d.created_at AS detalle_created_at,
-              a.detalle AS ultimo_detalle
+              a.detalle AS ultimo_detalle,
+              ma.id AS marca_id, ma.name AS marca_nombre,
+              mo.id AS modelo_id, mo.name AS modelo_nombre
        FROM ventas_oportunidades o
        INNER JOIN administracion_clientes c ON c.id=o.cliente_id
        INNER JOIN ventas_etapasconversion e ON e.id=o.etapasconversion_id
@@ -105,6 +107,16 @@ export async function GET(request) {
            SELECT oportunidad_id, MAX(id) AS max_id FROM ventas_oportunidades_actividades GROUP BY oportunidad_id
          ) ax ON ax.max_id=act.id
        ) a ON a.oportunidad_id=o.id
+       LEFT JOIN (
+         SELECT q.*
+         FROM ventas_cotizaciones q
+         INNER JOIN (
+           SELECT oportunidad_id, MAX(id) AS max_id FROM ventas_cotizaciones GROUP BY oportunidad_id
+         ) latest_quote ON latest_quote.max_id=q.id
+       ) q ON q.oportunidad_id=o.id
+       LEFT JOIN ventas_precios p ON p.id=q.precio_id
+       LEFT JOIN administracion_marcas ma ON ma.id=p.marca_id
+       LEFT JOIN administracion_modelos mo ON mo.id=p.modelo_id
        ${canAll ? "" : "WHERE o.created_by=? OR o.asignado_a=?"}
        ORDER BY COALESCE(d.fecha_agenda, o.created_at) ASC, COALESCE(d.hora_agenda, '00:00:00') ASC`,
       canAll ? [] : [user.id, user.id]
@@ -154,6 +166,10 @@ export async function GET(request) {
           createdBy: row.created_by,
           agendaDate,
           agendaTime,
+          marcaId: row.marca_id || null,
+          marcaNombre: row.marca_nombre || "",
+          modeloId: row.modelo_id || null,
+          modeloNombre: row.modelo_nombre || "",
           detail: row.ultimo_detalle || "",
           timeState: timeState ? { nombre: timeState.nombre, color: timeState.color_hexadecimal, descripcion: timeState.descripcion || "" } : null,
         };

@@ -37,6 +37,19 @@ function isFinalizedStatus(value) {
   return String(value || "").toLowerCase().startsWith("finalizad");
 }
 
+async function stageIdByNames(connection, names) {
+  const normalized = names.map((name) => String(name).toLowerCase());
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM configuracion_posventa_etapasconversion
+     WHERE LOWER(nombre) IN (?)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [normalized]
+  );
+  return rows[0]?.id || null;
+}
+
 export async function GET(_request, { params }) {
   try {
     const user = await getCurrentUser();
@@ -130,7 +143,7 @@ export async function PUT(request, { params }) {
 
     const canAll = hasPerm(user.permissions, ["citas", "viewall"]);
     const [[appointment]] = await connection.query(
-      `SELECT pc.id, pc.vehiculo_id, pc.created_by, pc.asesor_id, pc.oportunidadespv_id
+      `SELECT pc.id, pc.vehiculo_id, pc.created_by, pc.asesor_id, pc.oportunidadespv_id, pc.start_at
        FROM posventa_citas pc
        WHERE pc.id=? ${canAll ? "" : "AND (pc.created_by=? OR pc.asesor_id=?)"}
        LIMIT 1`,
@@ -178,6 +191,28 @@ export async function PUT(request, { params }) {
         [appointment.vehiculo_id, startAt, maintenanceKm, user.id]
       );
       await updateVehicleNextMaintenanceDate(connection, appointment.vehiculo_id);
+    }
+
+    if (appointment.oportunidadespv_id) {
+      const oldStart = appointment.start_at ? new Date(appointment.start_at).getTime() : null;
+      const newStart = startAt ? new Date(startAt).getTime() : null;
+      const isReprogrammed = String(body.estado || "").toLowerCase().includes("reprogram") || (oldStart && newStart && oldStart !== newStart);
+      const nextStageId = shouldRegisterMaintenance
+        ? await stageIdByNames(connection, ["Cita efectiva"])
+        : isReprogrammed ? await stageIdByNames(connection, ["Reprogramado", "Reprogramada"]) : null;
+      if (nextStageId) {
+        await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [nextStageId, appointment.oportunidadespv_id]);
+        await connection.query(
+          `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+           VALUES (?, ?, ?, ?)`,
+          [
+            appointment.oportunidadespv_id,
+            nextStageId,
+            shouldRegisterMaintenance ? `Cita efectiva: ${body.startDate} ${body.startTime}` : `Cita reprogramada: ${body.startDate} ${body.startTime}`,
+            user.id,
+          ]
+        );
+      }
     }
 
     await connection.commit();

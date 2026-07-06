@@ -35,6 +35,16 @@ function clean(value, fallback = EMPTY) {
   return text || fallback;
 }
 
+function cleanUpper(value, fallback = "") {
+  const text = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleUpperCase("es-PE");
+  return text || fallback;
+}
+
 function hasRealValue(value) {
   const text = String(value ?? "").trim();
   return Boolean(text && text !== EMPTY);
@@ -170,6 +180,48 @@ function daysBetween(startValue, endValue) {
   return Math.max(0, (end.getTime() - start.getTime()) / 86400000);
 }
 
+function agendaDateTime(fechaAgenda, horaAgenda) {
+  const date = readDate(fechaAgenda);
+  if (!date) return null;
+  const timeText = String(horaAgenda || "00:00:00").trim();
+  const match = timeText.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  const hours = match ? Number(match[1]) : 0;
+  const minutes = match ? Number(match[2]) : 0;
+  const seconds = match ? Number(match[3] || 0) : 0;
+  const agenda = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, seconds);
+  return Number.isNaN(agenda.getTime()) ? null : agenda;
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function findAgendaTimeState(fechaAgenda, horaAgenda, timeStates = []) {
+  const agenda = agendaDateTime(fechaAgenda, horaAgenda);
+  if (!agenda) return null;
+  const minutesUntilAgenda = Math.round((agenda.getTime() - Date.now()) / 60000);
+  return timeStates.find((state) => minutesUntilAgenda >= Number(state.minutosDesde) && minutesUntilAgenda <= Number(state.minutosHasta)) || null;
+}
+
+function isGreenTimeState(state) {
+  const text = normalizeText(`${state?.nombre || ""} ${state?.estado || ""} ${state?.descripcion || ""} ${state?.colorHexadecimal || ""}`);
+  return Boolean(
+    state &&
+      (text.includes("tiempo suficiente") ||
+        text.includes("cerca de la hora") ||
+        text.includes("#28a745") ||
+        text.includes("#ffc107"))
+  );
+}
+
+function isClosedStage(value) {
+  return String(value || "").trim().toLowerCase().includes("cerrad");
+}
+
 function avg(values) {
   const valid = values.filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
   if (!valid.length) return 0;
@@ -221,7 +273,7 @@ function uniqueRows(rows, keyGetter) {
   return Array.from(map.values());
 }
 
-function buildRecords(rows) {
+function buildRecords(rows, timeStates = []) {
   const groups = new Map();
   rows.forEach((row) => {
     const key = row.oportunidadpv_db_id || row.codigooportunidadpv;
@@ -269,10 +321,12 @@ function buildRecords(rows) {
       daysToEffectiveAppointments: effectiveCitaRows.map((row) => daysBetween(base.fechacreacionoportunidadpv, row.cita_start_at || row.cita_created_at)),
       viewCount: viewRows.length,
       virtualQuoteCount: quoteRows.filter((row) => clean(row.cotizacion_public_token, "") !== "").length,
-      closureReason: clean(close.cierre_detalle || base.cierre_detalle),
+      closureReason: cleanUpper(close.cierre_motivo_configurado || base.cierre_motivo_configurado),
       closedAt: close.cierre_created_at,
       daysToClose: daysBetween(base.fechacreacionoportunidadpv, close.cierre_created_at),
-      followUp: Boolean(base.fecha_agenda || base.hora_agenda || base.ultima_actividad_created_at),
+      agendaAt: agendaDateTime(base.fecha_agenda, base.hora_agenda),
+      agendaTimeState: findAgendaTimeState(base.fecha_agenda, base.hora_agenda, timeStates),
+      agendaGreen: isGreenTimeState(findAgendaTimeState(base.fecha_agenda, base.hora_agenda, timeStates)),
     };
   });
 }
@@ -339,23 +393,28 @@ function buildVehicleTree(records) {
 
 export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
+  const [timeStates, setTimeStates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", vehicleLevel: "", vehicleValue: "", stage: "" });
   const [chartFilters, setChartFilters] = useState({});
   const [focusChart, setFocusChart] = useState(null);
   const [vehiclesWithoutOpportunity, setVehiclesWithoutOpportunity] = useState(0);
+  const [maintenanceDueTotal, setMaintenanceDueTotal] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/powerbi/posventa/data?limit=100000")
+    fetch("/api/powerbi/posventa/data?limit=100000&withMeta=1")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.message || "No se pudo cargar la data.");
         return payload;
       })
       .then((payload) => {
-        if (!cancelled) setRows(Array.isArray(payload) ? payload : []);
+        if (!cancelled) {
+          setRows(Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []);
+          setTimeStates(Array.isArray(payload?.timeStates) ? payload.timeStates : []);
+        }
       })
       .catch((error) => {
         if (!cancelled) setMessage(error.message);
@@ -387,7 +446,26 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     };
   }, []);
 
-  const records = useMemo(() => buildRecords(rows), [rows]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/postventa-maintenance-due?page=1&limit=1")
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.message || "No se pudo cargar proximos mantenimientos.");
+        return payload;
+      })
+      .then((payload) => {
+        if (!cancelled) setMaintenanceDueTotal(Number(payload?.meta?.total || 0));
+      })
+      .catch(() => {
+        if (!cancelled) setMaintenanceDueTotal(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const records = useMemo(() => buildRecords(rows, timeStates), [rows, timeStates]);
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
   const reportRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.code)), [filteredRecords]);
   const selectable = useMemo(() => ({
@@ -408,8 +486,8 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
     return {
-      opportunities: reportRecords.length,
-      managed: reportRecords.filter((item) => item.followUp || item.quoteCount || item.appointmentCount || item.closedAt).length,
+      opportunities: maintenanceDueTotal,
+      managed: reportRecords.filter((item) => item.agendaGreen || item.quoteCount || item.appointmentCount || item.closedAt).length,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
       quoted: reportRecords.reduce((sum, item) => sum + item.quoteTotal, 0),
@@ -423,13 +501,13 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       products: reportRecords.reduce((sum, item) => sum + item.productCount, 0),
       views: reportRecords.reduce((sum, item) => sum + item.viewCount, 0),
       virtualQuotes: reportRecords.reduce((sum, item) => sum + item.virtualQuoteCount, 0),
-      followUp: reportRecords.filter((item) => item.followUp).length,
+      followUp: reportRecords.filter((item) => item.agendaGreen && !item.closedAt && !isClosedStage(item.stage)).length,
       closed: reportRecords.filter((item) => item.closedAt).length,
       daysClose: avg(reportRecords.map((item) => item.daysToClose)),
       withoutOpportunity: vehiclesWithoutOpportunity,
       platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [reportRecords, filters, vehiclesWithoutOpportunity]);
+  }, [reportRecords, filters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
@@ -443,6 +521,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     closureReason: groupCount(reportRecords, "closureReason", 6),
     days: lineByDay(reportRecords),
   }), [reportRecords]);
+  const stageTotal = reportRecords.length;
 
   function toggleChartFilter(field, value) {
     setChartFilters((current) => ({ ...current, [field]: current[field] === value ? "" : value }));
@@ -498,7 +577,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
 
               <section className="grid gap-2 xl:grid-cols-[1fr_1fr_1fr_1fr]">
                 <Panel title="Oportunidad por Modelo" summary={chartSummary(charts.model, "modelo")} onFocus={() => setFocusChart("model")}><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa")} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Asesor" summary={chartSummary(charts.advisor, "asesor")} onFocus={() => setFocusChart("advisor")}><BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Servicio" summary={chartSummary(charts.service, "servicio")} onFocus={() => setFocusChart("service")}><Donut data={charts.service} field="service" active={chartFilters.service} onSelect={toggleChartFilter} /></Panel>
               </section>
@@ -510,7 +589,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
                 <Panel title="Tipo de Cliente" summary={chartSummary(charts.clientType, "tipo")} onFocus={() => setFocusChart("clientType")}><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Motivo de Cierre" summary={chartSummary(charts.closureReason, "motivo")} onFocus={() => setFocusChart("closureReason")}><BarList data={charts.closureReason} field="closureReason" active={chartFilters.closureReason} onSelect={toggleChartFilter} /></Panel>
               </section>
-              <FocusChartDialog chartKey={focusChart} charts={charts} chartFilters={chartFilters} onClose={() => setFocusChart(null)} onSelect={toggleChartFilter} />
+              <FocusChartDialog chartKey={focusChart} charts={charts} stageTotal={stageTotal} chartFilters={chartFilters} onClose={() => setFocusChart(null)} onSelect={toggleChartFilter} />
             </>
           )}
         </main>
@@ -680,8 +759,8 @@ function Panel({ title, children, summary, onFocus }) {
   );
 }
 
-function chartSummary(data, label) {
-  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+function chartSummary(data, label, totalCount) {
+  const total = Number(totalCount ?? data.reduce((sum, item) => sum + Number(item.value || 0), 0));
   const top = data[0];
   if (!top || !total) return "Sin registros para este grafico.";
   return `Mayor ${label}: ${top.name} con ${top.value} (${formatNumber((Number(top.value || 0) / total) * 100, 1)}% de ${total}).`;
@@ -693,11 +772,11 @@ function lineSummary(data) {
   return top?.value ? `Dia con mas oportunidades: ${top.day} (${top.value}).` : "Sin registros por dia.";
 }
 
-function FocusChartDialog({ chartKey, charts, chartFilters, onClose, onSelect }) {
+function FocusChartDialog({ chartKey, charts, stageTotal, chartFilters, onClose, onSelect }) {
   if (!chartKey) return null;
   const config = {
     model: { title: "Oportunidad por Modelo", summary: chartSummary(charts.model, "modelo"), content: <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={onSelect} /> },
-    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa"), content: <StageFunnel data={charts.stage} active={chartFilters.stage} onSelect={onSelect} /> },
+    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa", stageTotal), content: <StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={onSelect} /> },
     advisor: { title: "Asesor", summary: chartSummary(charts.advisor, "asesor"), content: <BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={onSelect} /> },
     vehicle: { title: "Vehiculo", summary: chartSummary(charts.vehicle, "vehiculo"), content: <Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={onSelect} /> },
     service: { title: "Tipo de Servicio", summary: chartSummary(charts.service, "servicio"), content: <Donut data={charts.service} field="service" active={chartFilters.service} onSelect={onSelect} /> },
@@ -740,8 +819,8 @@ function BarList({ data, field, active, onSelect }) {
   );
 }
 
-function StageFunnel({ data, active, onSelect, field = "stage" }) {
-  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+function StageFunnel({ data, totalCount, active, onSelect, field = "stage" }) {
+  const total = Number(totalCount ?? data.reduce((sum, item) => sum + Number(item.value || 0), 0));
   const percentData = data.map((item, index) => ({
     ...item,
     color: STAGE_COLORS[index % STAGE_COLORS.length],

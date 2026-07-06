@@ -7,7 +7,12 @@ import { apiFetch } from "@/app/api/client";
 const DEFAULT_FILTERS = {};
 
 export function usePostventaOpportunities(kind = "opportunity", filters = DEFAULT_FILTERS) {
-  const [data, setData] = useState({ currentUser: null, opportunities: [], meta: { total: 0, page: 1, limit: 10, pages: 1 }, options: { stages: [], origins: [], suborigins: [], users: [] } });
+  const [data, setData] = useState({
+    currentUser: null,
+    opportunities: [],
+    meta: { total: 0, page: 1, limit: 10, pages: 1 },
+    options: { clients: [], stages: [], origins: [], suborigins: [], users: [], vehicleModels: [], timeStates: [] },
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const reload = useCallback(async () => {

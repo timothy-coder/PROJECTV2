@@ -57,8 +57,7 @@ function rowCitaAt(item) {
 
 export default function PostventaOpportunitiesPage({ userPermissions, kind = "opportunity" }) {
   const [query, setQuery] = useState("");
-  const [stageId, setStageId] = useState("");
-  const [timeStateId, setTimeStateId] = useState("");
+  const [filters, setFilters] = useState({ clientId: "", originId: "", stageId: "", assignedTo: "", createdBy: "", vehicleModelId: "", time: "all" });
   const [sortConfig, setSortConfig] = useState({ key: "", direction: "asc" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [mobileActionId, setMobileActionId] = useState(null);
@@ -72,8 +71,8 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     page,
     limit,
     q: query,
-    stageId,
-  }), [limit, page, query, stageId]);
+    ...filters,
+  }), [filters, limit, page, query]);
   const data = usePostventaOpportunities(kind, apiFilters);
   const perm = permissionKey(kind);
   const canViewAll = Boolean(hasPerm(userPermissions, [perm, "viewall"]) || data.currentUser?.canViewAll);
@@ -85,14 +84,23 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   const copy = kind === "lead"
     ? { title: "Leads PosVenta", subtitle: "Gestiona los leads de PosVenta" }
     : { title: "Oportunidades PosVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };
-  const rows = useMemo(() => {
-    const filtered = data.opportunities.filter((item) => {
-      const matchesTimeState = !timeStateId || Number(item.timeState?.id) === Number(timeStateId);
-      return matchesTimeState;
-    });
-    return sortPostventaRows(filtered, sortConfig);
-  }, [data.opportunities, sortConfig, timeStateId]);
+  const rows = useMemo(() => sortPostventaRows(data.opportunities, sortConfig), [data.opportunities, sortConfig]);
   const meta = data.meta || { total: rows.length, page, limit, pages: 1 };
+  const clientOptions = useMemo(() => [{ value: "", label: "Todos" }, ...(data.options.clients || []).map((item) => ({ value: item.id, label: [item.nombre, item.documento].filter(Boolean).join(" - ") }))], [data.options.clients]);
+  const originOptions = useMemo(() => [{ value: "", label: "Todos" }, ...(data.options.origins || []).map((item) => ({ value: item.id, label: item.name }))], [data.options.origins]);
+  const stageOptions = useMemo(() => [{ value: "", label: "Todos" }, ...(data.options.stages || []).map((item) => ({ value: item.id, label: item.nombre }))], [data.options.stages]);
+  const userOptions = useMemo(() => [{ value: "", label: "Todos" }, ...(data.options.users || []).map((item) => ({ value: item.id, label: item.fullname }))], [data.options.users]);
+  const vehicleModelOptions = useMemo(() => [{ value: "", label: "Todos" }, ...(data.options.vehicleModels || []).map((item) => ({ value: item.id, label: [item.marca, item.name].filter(Boolean).join(" - ") }))], [data.options.vehicleModels]);
+  const timeOptions = [
+    { value: "all", label: "Todas" },
+    { value: "day", label: "Hoy" },
+    { value: "week", label: "Semana" },
+    { value: "month", label: "Mes" },
+    { value: "late", label: "Retrasado" },
+    { value: "near", label: "Cerca de la hora" },
+    { value: "enough", label: "Tiempo suficiente" },
+  ];
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => value && !(key === "time" && value === "all")).length + (query.trim() ? 1 : 0);
 
   useEffect(() => {
     function updateLimit() {
@@ -130,6 +138,17 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
     }));
   }
 
+  function handleFilterChange(key, value) {
+    setPage(1);
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setFilters({ clientId: "", originId: "", stageId: "", assignedTo: "", createdBy: "", vehicleModelId: "", time: "all" });
+    setPage(1);
+  }
+
   async function openEdit(item) {
     const detail = await data.detail(item.id);
     setEditDialog({ open: true, item, detail });
@@ -150,39 +169,52 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
         </header>
         <section className="rounded-lg border bg-white p-3 shadow-sm">
           <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
-            Filtros
+            Filtros{activeFilterCount ? ` (${activeFilterCount})` : ""}
             <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
-          <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 md:grid md:grid-cols-[minmax(220px,1fr)_210px_210px_110px]`}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                className="pl-9"
-                placeholder="Buscar cliente, vehiculo o VIN..."
-                value={query}
-                onChange={(event) => {
-                  setPage(1);
-                  setQuery(event.target.value);
-                }}
-              />
+          <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 md:grid md:grid-cols-3 xl:grid-cols-8`}>
+            <Field label="Buscar">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  className="pl-9"
+                  placeholder="Cliente, vehiculo o VIN..."
+                  value={query}
+                  onChange={(event) => {
+                    setPage(1);
+                    setQuery(event.target.value);
+                  }}
+                />
+              </div>
+            </Field>
+            <Field label="Cliente">
+              <SearchableSelect value={filters.clientId} options={clientOptions} placeholder="Todos" onChange={(value) => handleFilterChange("clientId", value)} />
+            </Field>
+            <Field label="Origen">
+              <SearchableSelect value={filters.originId} options={originOptions} placeholder="Todos" onChange={(value) => handleFilterChange("originId", value)} />
+            </Field>
+            <Field label="Etapa">
+              <SearchableSelect value={filters.stageId} options={stageOptions} placeholder="Todos" onChange={(value) => handleFilterChange("stageId", value)} />
+            </Field>
+            {canViewAll ? (
+              <Field label="Asignado a">
+                <SearchableSelect value={filters.assignedTo} options={userOptions} placeholder="Todos" onChange={(value) => handleFilterChange("assignedTo", value)} />
+              </Field>
+            ) : null}
+            {canViewAll ? (
+              <Field label="Creado por">
+                <SearchableSelect value={filters.createdBy} options={userOptions} placeholder="Todos" onChange={(value) => handleFilterChange("createdBy", value)} />
+              </Field>
+            ) : null}
+            <Field label="Fecha agenda">
+              <SearchableSelect value={filters.time} options={timeOptions} placeholder="Todas" onChange={(value) => handleFilterChange("time", value)} />
+            </Field>
+            <Field label="Modelo">
+              <SearchableSelect value={filters.vehicleModelId} options={vehicleModelOptions} placeholder="Todos" onChange={(value) => handleFilterChange("vehicleModelId", value)} />
+            </Field>
+            <div className="flex items-end">
+              <Button className="w-full" variant="outline" onClick={clearFilters}>Limpiar</Button>
             </div>
-            <SearchableSelect
-              value={stageId}
-              options={[{ value: "", label: "Todas las etapas" }, ...data.options.stages.map((item) => ({ value: item.id, label: item.nombre }))]}
-              onChange={(value) => {
-                setPage(1);
-                setStageId(value);
-              }}
-            />
-            <SearchableSelect
-              value={timeStateId}
-              options={[{ value: "", label: "Todos los estados de tiempo" }, ...(data.options.timeStates || []).map((item) => ({ value: item.id, label: item.nombre }))]}
-              onChange={(value) => {
-                setPage(1);
-                setTimeStateId(value);
-              }}
-            />
-            <Button variant="outline" onClick={() => { setQuery(""); setStageId(""); setTimeStateId(""); setPage(1); }}>Limpiar</Button>
           </div>
         </section>
       </div>

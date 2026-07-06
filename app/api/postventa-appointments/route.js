@@ -47,7 +47,7 @@ async function stageIdByNames(connection, names) {
     `SELECT id
      FROM configuracion_posventa_etapasconversion
      WHERE LOWER(nombre) IN (?)
-     ORDER BY CASE LOWER(nombre) WHEN 'cita efectiva' THEN 0 ELSE 1 END
+     ORDER BY id ASC
      LIMIT 1`,
     [normalized]
   );
@@ -170,13 +170,15 @@ export async function POST(request) {
         body.notaInterna || null,
       ]
     );
-    const effectiveStageId = await stageIdByNames(connection, ["cita efectiva", "Cita efectiva"]);
-    if (effectiveStageId) {
-      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [effectiveStageId, opportunity.id]);
+    const nextStageId = shouldRegisterMaintenance
+      ? await stageIdByNames(connection, ["Cita efectiva"])
+      : await stageIdByNames(connection, ["Agendado", "Agendada"]);
+    if (nextStageId) {
+      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [nextStageId, opportunity.id]);
       await connection.query(
         `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
          VALUES (?, ?, ?, ?)`,
-        [opportunity.id, effectiveStageId, `Cita creada: ${body.startDate} ${body.startTime}`, user.id]
+        [opportunity.id, nextStageId, shouldRegisterMaintenance ? `Cita efectiva: ${body.startDate} ${body.startTime}` : `Cita agendada: ${body.startDate} ${body.startTime}`, user.id]
       );
     }
     if (shouldRegisterMaintenance) {

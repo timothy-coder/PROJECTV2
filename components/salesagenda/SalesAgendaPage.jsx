@@ -23,7 +23,7 @@ export default function SalesAgendaPage({ userPermissions }) {
   const [nowTime] = useState(() => Date.now());
   const [baseDate, setBaseDate] = useState(new Date());
   const [mode, setMode] = useState("week");
-  const [filters, setFilters] = useState({ createdBy: "", assignedTo: "", client: "", kind: "all", centerId: "" });
+  const [filters, setFilters] = useState({ createdBy: "", assignedTo: "", client: "", kind: "all", centerId: "", timeState: "all", model: "all" });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
   const [dialog, setDialog] = useState(null);
@@ -43,12 +43,18 @@ export default function SalesAgendaPage({ userPermissions }) {
     return options;
   }, [data.items]);
   const activeKind = filters.kind === "all" || kindOptions.some(([value]) => value === filters.kind) ? filters.kind : "all";
+  const modelOptions = useMemo(() => buildModelTreeOptions(data.items), [data.items]);
   const filteredItems = useMemo(() => data.items.filter((item) => {
     const matchKind = activeKind === "all" || item.kind === activeKind;
     const matchCreated = !filters.createdBy || Number(item.createdBy) === Number(filters.createdBy);
     const matchAssigned = !filters.assignedTo || Number(item.asignadoA) === Number(filters.assignedTo);
     const matchClient = !filters.client || item.clienteNombre.toLowerCase().includes(filters.client.toLowerCase()) || item.code.toLowerCase().includes(filters.client.toLowerCase());
-    return matchKind && matchCreated && matchAssigned && matchClient;
+    const matchTimeState = filters.timeState === "all" || matchesTimeState(item.timeState, filters.timeState);
+    const matchModel =
+      filters.model === "all" ||
+      (String(filters.model).startsWith("brand:") && String(item.marcaId) === String(filters.model).replace("brand:", "")) ||
+      (String(filters.model).startsWith("model:") && String(item.modeloId) === String(filters.model).replace("model:", ""));
+    return matchKind && matchCreated && matchAssigned && matchClient && matchTimeState && matchModel;
   }), [data.items, filters, activeKind]);
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
   const centerOptions = data.centers.map((item) => ({ value: item.id, label: item.nombre }));
@@ -73,25 +79,46 @@ export default function SalesAgendaPage({ userPermissions }) {
           <Button variant="outline" size="icon" onClick={data.reload}><RefreshCw className="size-4" /></Button>
         </div>
       </header>
-      <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2 sm:shrink-0 sm:flex sm:flex-wrap sm:items-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
+      <section className="mb-3 rounded-lg border border-slate-200 bg-white p-2 sm:shrink-0 sm:border-0 sm:bg-transparent sm:p-0">
         <button type="button" className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 px-3 text-xs font-bold text-slate-700 sm:hidden" onClick={() => setFiltersOpen((current) => !current)}>
           Filtros
           <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
         </button>
-        <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:contents`}>
+        <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:flex sm:items-end sm:gap-2 sm:overflow-x-auto sm:pb-2`}>
           <div className="hidden items-end gap-2 sm:flex">
             <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? -30 : -7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronLeft className="size-4" /></Button>
             <Button variant="outline" size="icon" onClick={() => { const nextDate = addDays(baseDate, mode === "month" ? 30 : 7); setBaseDate(nextDate); setSelectedDate(formatDate(nextDate)); }}><ChevronRight className="size-4" /></Button>
             <Button variant="outline" onClick={() => { const today = new Date(); setBaseDate(today); setSelectedDate(formatDate(today)); }}>Hoy</Button>
           </div>
-          <div className="hidden w-36 sm:block"><Field label="Vista"><SearchableSelect value={mode} options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]} onChange={setMode} /></Field></div>
-          <div className="hidden w-48 sm:block"><Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field></div>
+          <div className="hidden min-w-32 sm:block"><Field label="Vista"><SearchableSelect value={mode} options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]} onChange={setMode} /></Field></div>
+          <div className="hidden min-w-48 sm:block"><Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field></div>
           {canCreate ? <Button onClick={() => setDialog({ date: selectedDate || formatDate(new Date()), time: "" })} className="hidden bg-violet-700 text-white hover:bg-violet-800 sm:inline-flex"><Plus className="size-4" />Nueva</Button> : null}
           <Button variant="outline" size="icon" onClick={data.reload} className="hidden sm:inline-flex"><RefreshCw className="size-4" /></Button>
           <div className="sm:hidden"><Field label="Centro"><SearchableSelect value={centerId} options={centerOptions} placeholder="Centro" onChange={(value) => setFilters((current) => ({ ...current, centerId: value }))} /></Field></div>
-          {canViewAll ? <Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field> : null}
-          {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field> : null}
-          <Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field>
+          {canViewAll ? <FilterBox><Field label="Creado por"><SearchableSelect value={filters.createdBy} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, createdBy: value }))} /></Field></FilterBox> : null}
+          {canViewAll ? <FilterBox><Field label="Asignado a"><SearchableSelect value={filters.assignedTo} options={userOptions} onChange={(value) => setFilters((current) => ({ ...current, assignedTo: value }))} /></Field></FilterBox> : null}
+          <FilterBox wide><Field label="Cliente"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-500" /><Input className="pl-9" placeholder="Cliente" value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} /></div></Field></FilterBox>
+          <FilterBox><Field label="Fecha agenda">
+            <SearchableSelect
+              value={filters.timeState}
+              options={[
+                { value: "all", label: "Todas" },
+                { value: "late", label: "Retrasado" },
+                { value: "near", label: "Cerca de la hora" },
+                { value: "enough", label: "Tiempo suficiente" },
+              ]}
+              onChange={(value) => setFilters((current) => ({ ...current, timeState: value }))}
+            />
+          </Field></FilterBox>
+          <FilterBox wide><Field label="Modelo">
+            <SearchableSelect
+              value={filters.model}
+              options={modelOptions}
+              placeholder="Todos los modelos"
+              searchPlaceholder="Buscar marca o modelo..."
+              onChange={(value) => setFilters((current) => ({ ...current, model: value }))}
+            />
+          </Field></FilterBox>
           {kindOptions.length > 1 ? (
             <div className="flex rounded-lg border bg-white p-1">
               {kindOptions.map(([value, label]) => <button key={value} className={`h-8 rounded-md px-4 text-xs font-bold ${activeKind === value ? "bg-slate-950 text-white" : "text-slate-700"}`} onClick={() => setFilters((current) => ({ ...current, kind: value }))}>{label}</button>)}
@@ -368,6 +395,9 @@ function NewOpportunityDialog({ state, data, canViewAll, onClose, onSubmit }) {
   );
 }
 
+function FilterBox({ children, wide = false }) {
+  return <div className={`min-w-0 sm:shrink-0 ${wide ? "sm:w-64" : "sm:w-36"}`}>{children}</div>;
+}
 function Field({ label, children }) { return <div className="min-w-0 space-y-1"><Label className="text-xs">{label}</Label>{children}</div>; }
 function weekDays(date) { const start = addDays(date, -date.getDay() + 1); return Array.from({ length: 7 }, (_, i) => dayObj(addDays(start, i))); }
 function monthDays(date) { const start = new Date(date.getFullYear(), date.getMonth(), 1); const end = new Date(date.getFullYear(), date.getMonth() + 1, 0); return Array.from({ length: end.getDate() }, (_, i) => dayObj(addDays(start, i))); }
@@ -390,6 +420,33 @@ function filterActiveDays(days, week) {
   return activeDays.length ? activeDays : days;
 }
 function hasActiveConfig(week) { return Object.values(week || {}).some((value) => value?.active); }
+function matchesTimeState(timeState, mode) {
+  const text = normalizeText(`${timeState?.nombre || ""} ${timeState?.descripcion || ""} ${timeState?.color || ""}`);
+  if (!timeState) return false;
+  if (mode === "late") return text.includes("retras") || text.includes("venc") || text.includes("rojo") || text.includes("red") || text.includes("#dc3545") || text.includes("#ef4444");
+  if (mode === "near") return text.includes("cerca de la hora") || text.includes("#ffc107") || text.includes("amarillo") || text.includes("yellow");
+  if (mode === "enough") return text.includes("tiempo suficiente") || text.includes("#28a745") || text.includes("verde") || text.includes("green");
+  return true;
+}
+function normalizeText(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+function buildModelTreeOptions(items) {
+  const brands = new Map();
+  items.forEach((item) => {
+    if (!item.marcaId || !item.marcaNombre) return;
+    if (!brands.has(item.marcaId)) brands.set(item.marcaId, { id: item.marcaId, name: item.marcaNombre, models: new Map() });
+    if (item.modeloId && item.modeloNombre) brands.get(item.marcaId).models.set(item.modeloId, item.modeloNombre);
+  });
+  const options = [{ value: "all", label: "Todos los modelos" }];
+  Array.from(brands.values()).sort((a, b) => a.name.localeCompare(b.name)).forEach((brand) => {
+    options.push({ value: `brand:${brand.id}`, label: brand.name });
+    Array.from(brand.models.entries())
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+      .forEach(([modelId, modelName]) => options.push({ value: `model:${modelId}`, label: `  ${modelName}` }));
+  });
+  return options;
+}
 function timeSlots(week, step) {
   const active = Object.entries(week || {}).filter(([, value]) => value?.active);
   const start = active.map(([, value]) => value.start || "08:00").sort()[0] || "08:00";

@@ -36,6 +36,19 @@ async function closedStageId(connection) {
   return rows[0]?.id || null;
 }
 
+async function stageIdByNames(connection, names) {
+  const normalized = names.map((name) => String(name).toLowerCase());
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM configuracion_posventa_etapasconversion
+     WHERE LOWER(nombre) IN (?)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [normalized]
+  );
+  return rows[0]?.id || null;
+}
+
 function datePart(value) {
   if (!value) return "";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -425,10 +438,14 @@ export async function POST(request, { params }) {
         await connection.rollback();
         return NextResponse.json({ message: "La fecha de mantenimiento es obligatoria." }, { status: 400 });
       }
-      const closeStageId = await closedStageId(connection);
-      if (!closeStageId) {
+      if (kilometraje === null) {
         await connection.rollback();
-        return NextResponse.json({ message: "No existe una etapa Cerrada/Cerrado configurada." }, { status: 400 });
+        return NextResponse.json({ message: "El kilometraje de mantenimiento es obligatorio." }, { status: 400 });
+      }
+      const effectiveStageId = await stageIdByNames(connection, ["Cita efectiva"]);
+      if (!effectiveStageId) {
+        await connection.rollback();
+        return NextResponse.json({ message: "No existe una etapa Cita efectiva configurada." }, { status: 400 });
       }
       await connection.query(
         `INSERT INTO administracion_vehiculos_historial_mantenimientos
@@ -438,17 +455,11 @@ export async function POST(request, { params }) {
       );
       const nextDate = await updateVehicleNextMaintenanceDate(connection, opportunity.vehiculo_id);
       const maintenanceDate = datePart(fechaVisita);
-      const closeDetail = `Mantenimiento el dia ${maintenanceDate}`;
-      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [closeStageId, id]);
-      await connection.query(
-        `INSERT INTO posventa_oportunidades_cierres (oportunidad_id, detalle, cierre_detalle_id, created_by)
-         VALUES (?, ?, ?, ?)`,
-        [id, closeDetail, null, user.id]
-      );
+      await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [effectiveStageId, id]);
       await connection.query(
         `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
          VALUES (?, ?, ?, ?)`,
-        [id, closeStageId, `${closeDetail}. Proximo mantenimiento recalculado${nextDate ? `: ${nextDate}` : ""}`, user.id]
+        [id, effectiveStageId, `Cita efectiva: mantenimiento ${maintenanceDate} con KM ${kilometraje}. Proximo mantenimiento recalculado${nextDate ? `: ${nextDate}` : ""}`, user.id]
       );
     }
     await connection.commit();

@@ -60,6 +60,41 @@ function mapQuote(row) {
   };
 }
 
+async function stageIdByNames(connection, names) {
+  const normalized = names.map((name) => String(name).toLowerCase());
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM configuracion_posventa_etapasconversion
+     WHERE LOWER(nombre) IN (?)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [normalized]
+  );
+  return rows[0]?.id || null;
+}
+
+function canSeeAllPostventaOpportunities(user) {
+  return Boolean(hasPerm(user?.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user?.permissions, ["leadspv", "viewall"]));
+}
+
+async function touchOpportunityStageForQuote(connection, { oportunidadId, user, quoteId }) {
+  if (!oportunidadId) return;
+  const canAll = canSeeAllPostventaOpportunities(user);
+  const [[opportunity]] = await connection.query(
+    `SELECT id FROM posventa_oportunidades WHERE id=? ${canAll ? "" : "AND (created_by=? OR asignado_a=?)"} LIMIT 1`,
+    canAll ? [Number(oportunidadId)] : [Number(oportunidadId), user.id, user.id]
+  );
+  if (!opportunity) return;
+  const quoteStageId = await stageIdByNames(connection, ["Cotización", "Cotizacion"]);
+  if (!quoteStageId) return;
+  await connection.query(`UPDATE posventa_oportunidades SET etapasconversionpv_id=? WHERE id=?`, [quoteStageId, opportunity.id]);
+  await connection.query(
+    `INSERT INTO posventa_oportunidades_actividades (oportunidad_id, etapasconversion_id, detalle, created_by)
+     VALUES (?, ?, ?, ?)`,
+    [opportunity.id, quoteStageId, `Cotizacion creada: #${quoteId}`, user.id]
+  );
+}
+
 export async function GET(request) {
   try {
     const user = await getCurrentUser();
@@ -170,6 +205,7 @@ export async function POST(request) {
         extras.flatMap((item) => [quoteId, item.descripcion, item.monto || 0, item.descuentoTipo || "porcentaje", item.descuentoValor || 0])
       );
     }
+    await touchOpportunityStageForQuote(connection, { oportunidadId: body.oportunidadId, user, quoteId });
     await connection.commit();
     return NextResponse.json({ ok: true, id: quoteId, token: publicToken }, { status: 201 });
   } catch (error) {

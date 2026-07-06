@@ -53,6 +53,20 @@ async function stageIdByName(connection, name) {
   return fallback[0]?.id || null;
 }
 
+async function stageIdByNames(connection, names, { fallback = true } = {}) {
+  const normalized = names.map((name) => String(name).toLowerCase());
+  const [rows] = await connection.query(
+    `SELECT id
+     FROM configuracion_posventa_etapasconversion
+     WHERE LOWER(nombre) IN (?)
+     ORDER BY id ASC
+     LIMIT 1`,
+    [normalized]
+  );
+  if (rows[0]) return rows[0].id;
+  return fallback ? stageIdByName(connection, names[0]) : null;
+}
+
 async function closedStageId(connection) {
   const [rows] = await connection.query(
     `SELECT id
@@ -152,6 +166,12 @@ export async function GET(request) {
     const offset = (page - 1) * limit;
     const query = String(searchParams.get("q") || "").trim();
     const stageId = String(searchParams.get("stageId") || "").trim();
+    const clientId = String(searchParams.get("clientId") || "").trim();
+    const originId = String(searchParams.get("originId") || "").trim();
+    const assignedTo = String(searchParams.get("assignedTo") || "").trim();
+    const createdBy = String(searchParams.get("createdBy") || "").trim();
+    const vehicleModelId = String(searchParams.get("vehicleModelId") || "").trim();
+    const time = String(searchParams.get("time") || "all").trim();
     const where = ["o.oportunidad_id LIKE ?"];
     const whereParams = [`${config.prefix}-%`];
 
@@ -174,6 +194,45 @@ export async function GET(request) {
     if (stageId) {
       where.push("o.etapasconversionpv_id = ?");
       whereParams.push(Number(stageId));
+    }
+
+    if (clientId) {
+      where.push("o.cliente_id = ?");
+      whereParams.push(Number(clientId));
+    }
+
+    if (originId) {
+      where.push("o.origen_id = ?");
+      whereParams.push(Number(originId));
+    }
+
+    if (assignedTo) {
+      where.push("o.asignado_a = ?");
+      whereParams.push(Number(assignedTo));
+    }
+
+    if (createdBy) {
+      where.push("o.created_by = ?");
+      whereParams.push(Number(createdBy));
+    }
+
+    if (vehicleModelId) {
+      where.push("v.modelo_id = ?");
+      whereParams.push(Number(vehicleModelId));
+    }
+
+    if (time === "day") {
+      where.push("d.fecha_agenda = CURDATE()");
+    } else if (time === "week") {
+      where.push("YEARWEEK(d.fecha_agenda, 1) = YEARWEEK(CURDATE(), 1)");
+    } else if (time === "month") {
+      where.push("YEAR(d.fecha_agenda) = YEAR(CURDATE()) AND MONTH(d.fecha_agenda) = MONTH(CURDATE())");
+    } else if (time === "late") {
+      where.push("d.fecha_agenda IS NOT NULL AND d.hora_agenda IS NOT NULL AND TIMESTAMP(d.fecha_agenda, d.hora_agenda) < NOW()");
+    } else if (time === "near") {
+      where.push("d.fecha_agenda IS NOT NULL AND d.hora_agenda IS NOT NULL AND TIMESTAMPDIFF(MINUTE, NOW(), TIMESTAMP(d.fecha_agenda, d.hora_agenda)) BETWEEN 0 AND 14");
+    } else if (time === "enough") {
+      where.push("d.fecha_agenda IS NOT NULL AND d.hora_agenda IS NOT NULL AND TIMESTAMPDIFF(MINUTE, NOW(), TIMESTAMP(d.fecha_agenda, d.hora_agenda)) BETWEEN 15 AND 999999");
     }
 
     const fromSql = `
@@ -223,6 +282,27 @@ export async function GET(request) {
     const [origins] = await pool.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [suborigins] = await pool.query(`SELECT id,origen_id,name FROM configuracion_suborigenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await pool.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
+    const scopeParams = [`${config.prefix}-%`];
+    const scopeSql = canAll ? "" : "AND (o.created_by = ? OR o.asignado_a = ?)";
+    if (!canAll) scopeParams.push(user.id, user.id);
+    const [clients] = await pool.query(
+      `SELECT DISTINCT c.id, CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS nombre, c.identificacion_fiscal AS documento
+       FROM posventa_oportunidades o
+       INNER JOIN administracion_clientes c ON c.id=o.cliente_id
+       WHERE o.oportunidad_id LIKE ? ${scopeSql}
+       ORDER BY nombre ASC`,
+      scopeParams
+    );
+    const [vehicleModels] = await pool.query(
+      `SELECT DISTINCT mo.id, mo.name, ma.name AS marca
+       FROM posventa_oportunidades o
+       INNER JOIN administracion_vehiculos v ON v.id=o.vehiculo_id
+       LEFT JOIN administracion_modelos mo ON mo.id=v.modelo_id
+       LEFT JOIN administracion_marcas ma ON ma.id=v.marca_id
+       WHERE o.oportunidad_id LIKE ? ${scopeSql} AND mo.id IS NOT NULL
+       ORDER BY ma.name ASC, mo.name ASC`,
+      scopeParams
+    );
     const [timeStates] = await pool.query(
       `SELECT id,nombre,estado,minutos_desde,minutos_hasta,color_hexadecimal,descripcion
        FROM configuracion_posventa_estados_tiempo
@@ -286,10 +366,12 @@ export async function GET(request) {
         };
       }),
       options: {
+        clients: clients.map((row) => ({ id: row.id, nombre: String(row.nombre || "").trim() || `Cliente ${row.id}`, documento: row.documento || "" })),
         stages: stages.map((row) => ({ id: row.id, nombre: row.nombre, descripcion: Number(row.descripcion || 0), color: row.color || "#2563eb", sortOrder: row.sort_order || row.id })),
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         suborigins: suborigins.map((row) => ({ id: row.id, origenId: row.origen_id, name: row.name })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+        vehicleModels: vehicleModels.map((row) => ({ id: row.id, name: row.name, marca: row.marca || "" })),
         timeStates: timeStates.map((row) => ({ id: row.id, nombre: row.nombre, estado: row.estado, color: row.color_hexadecimal, descripcion: row.descripcion || "" })),
       },
     });
@@ -329,7 +411,7 @@ export async function POST(request) {
     const assignedTo = canAll ? (body.asignadoA ? Number(body.asignadoA) : null) : user.id;
     const stageId = closePayload
       ? await closedStageId(connection)
-      : Number(body.etapaId) || await stageIdByName(connection, assignedTo ? "En Atención" : "Nuevo");
+      : await stageIdByNames(connection, ["En Atención", "En Atencion"]);
     await connection.beginTransaction();
     const code = await nextCode(connection, config.prefix);
     const [result] = await connection.query(

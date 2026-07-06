@@ -446,7 +446,7 @@ function TimeTab({ data, canCreate, canEdit, canDelete, openDialog }) {
 }
 function ClosingTab({ data, scope, canCreate, canEdit, canDelete, openDialog }) {
   const subtitle = scope === "ventas" ? "Gestiona los detalles y notas de cierres de ventas" : "Gestiona los detalles disponibles para cierres de PostVenta";
-  return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
+  return <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"><Header icon={FileText} title="Detalles de Cierre" subtitle={subtitle} action={canCreate ? <Button onClick={() => openDialog(null)}><Plus className="size-4" />Nuevo</Button> : null} /><List>{data.closings.map((item) => <Row key={item.id} title={scope === "posventa" ? String(item.detalle || "").toUpperCase() : item.detalle} subtitle={`ID ${item.id}`} onEdit={canEdit ? () => openDialog(item) : null} onDelete={canDelete ? () => data.delete("closing", item.id) : null} />)}</List></section>;
 }
 
 function MeasurementTypesTab({ data, canCreate, canEdit, canDelete, openDialog }) {

@@ -18,14 +18,31 @@ export async function GET() {
               o.oportunidad_id AS oportunidad_code,
               CONCAT(COALESCE(c.nombre,''),' ',COALESCE(c.apellido,'')) AS cliente,
               u.fullname AS creado_por,
-              d.total, d.vin, d.cuota_inicial
+              d.total, d.vin, d.placa, d.numero_motor, d.cuota_inicial,
+              p.marca_id, p.modelo_id, p.version,
+              ma.name AS marca_nombre, mo.name AS modelo_nombre,
+              ev.id AS car_event_id
        FROM ventas_reservas r
        LEFT JOIN ventas_oportunidades o ON o.id=r.oportunidad_id
        LEFT JOIN administracion_clientes c ON c.id=o.cliente_id
        LEFT JOIN administracion_usuarios u ON u.id=r.created_by
        LEFT JOIN ventas_reserva_detalles d ON d.reserva_id=r.id
+       LEFT JOIN ventas_cotizaciones q ON q.id=d.cotizacion_id
+       LEFT JOIN ventas_precios p ON p.id=q.precio_id
+       LEFT JOIN administracion_marcas ma ON ma.id=p.marca_id
+       LEFT JOIN administracion_modelos mo ON mo.id=p.modelo_id
+       LEFT JOIN (
+         SELECT e1.*
+         FROM ventas_historial_carros_eventos e1
+         INNER JOIN (
+           SELECT vin, MAX(id) AS id
+           FROM ventas_historial_carros_eventos
+           WHERE vin IS NOT NULL AND vin <> ''
+           GROUP BY vin
+         ) latest_event ON latest_event.id=e1.id
+       ) ev ON ev.vin=d.vin
        WHERE ${viewAll ? "1=1" : "r.created_by=?"}
-       ORDER BY r.created_at DESC`,
+       ORDER BY CASE WHEN r.estado='firmado' THEN 1 ELSE 0 END ASC, r.created_at DESC`,
       viewAll ? [] : [user.id]
     );
     const stats = {
@@ -47,6 +64,15 @@ export async function GET() {
         observaciones: row.observaciones || "",
         total: row.total === null ? null : Number(row.total),
         vin: row.vin || "",
+        placa: row.placa || "",
+        numeroMotor: row.numero_motor || "",
+        marcaId: row.marca_id || null,
+        modeloId: row.modelo_id || null,
+        marca: row.marca_nombre || "",
+        modelo: row.modelo_nombre || "",
+        version: row.version || "",
+        modeloNota: [row.marca_nombre, row.modelo_nombre, row.version].filter(Boolean).join(" "),
+        faltaDatosCarro: row.estado === "firmado" && (!row.vin || !row.car_event_id),
         cuotaInicial: row.cuota_inicial === null ? null : Number(row.cuota_inicial),
         createdAt: row.created_at,
       })),

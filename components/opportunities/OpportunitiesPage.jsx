@@ -56,7 +56,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
     const matchStage = !selectedStageId || item.etapaId === Number(selectedStageId);
     const matchAssigned = !filters.asignadoA || item.asignadoA === Number(filters.asignadoA);
     const matchCreated = !filters.createdBy || item.createdBy === Number(filters.createdBy);
-    const matchTime = filters.time === "all" || matchesTime(item.nextAgenda || item.createdAt, filters.time);
+    const matchTime = filters.time === "all" || matchesTime(item, filters.time);
     const matchClosureReason = !filters.cierreMotivoId || (item.closureReasonIds || []).some((id) => Number(id) === Number(filters.cierreMotivoId));
     const matchQuoteModel = !filters.cotizacionModeloId || (item.quoteModelIds || []).some((id) => Number(id) === Number(filters.cotizacionModeloId));
     return matchClient && matchOrigin && matchStage && matchAssigned && matchCreated && matchTime && matchClosureReason && matchQuoteModel;
@@ -129,7 +129,15 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
   const userOptions = [{ value: "", label: "Todos" }, ...data.options.users.map((item) => ({ value: item.id, label: item.fullname }))];
   const closureReasonOptions = [{ value: "", label: "Todos" }, ...(data.options.closureReasons || []).map((item) => ({ value: item.id, label: item.detalle }))];
   const quoteModelOptions = [{ value: "", label: "Todos" }, ...(data.options.quoteModels || []).map((item) => ({ value: item.id, label: item.name }))];
-  const timeOptions = [{ value: "all", label: "Todas" }, { value: "day", label: "Hoy" }, { value: "week", label: "Semana" }, { value: "month", label: "Mes" }];
+  const timeOptions = [
+    { value: "all", label: "Todas" },
+    { value: "day", label: "Hoy" },
+    { value: "week", label: "Semana" },
+    { value: "month", label: "Mes" },
+    { value: "late", label: "Retrasado" },
+    { value: "near", label: "Cerca de la hora" },
+    { value: "enough", label: "Tiempo suficiente" },
+  ];
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => value && !(key === "time" && value === "all")).length;
 
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver {copy.title.toLowerCase()}.</div>;
@@ -837,6 +845,7 @@ function ConflictDialog({ conflict, onClose }) {
 function OpportunitySummaryDialog({ state, onClose }) {
   const payload = state.data || {};
   const opportunity = payload.opportunity || state.item || {};
+  const client = payload.client || {};
   const quotes = payload.quotes || [];
   const reservations = payload.reservations || [];
   const details = payload.details || [];
@@ -845,10 +854,20 @@ function OpportunitySummaryDialog({ state, onClose }) {
   const closures = payload.closures || [];
   const createdAt = opportunity.createdAt || opportunity.created_at || state.item?.createdAt;
   const firstQuote = earliestByDate(quotes, (item) => item.created_at || item.createdAt);
+  const latestQuote = latestByDate(quotes, (item) => item.created_at || item.createdAt) || {};
   const firstReservation = earliestByDate(reservations, (item) => item.createdAt || item.created_at);
+  const latestReservation = latestByDate(reservations, (item) => item.createdAt || item.created_at) || {};
+  const latestClosure = latestByDate(closures, (item) => item.created_at || item.createdAt) || {};
   const lastAgenda = latestByDate(details, (item) => item.createdAt || item.fechaAgenda);
   const completedTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "realizado").length;
   const cancelledTestDrives = testDrives.filter((item) => String(item.estado || "").toLowerCase() === "cancelado").length;
+  const missingPlatformFields = platformMissingFields({
+    opportunity,
+    client,
+    quote: latestQuote,
+    reservation: latestReservation,
+    closure: latestClosure,
+  });
   const rows = [
     ["Creacion", formatSummaryDateTime(createdAt)],
     ["Primera cotizacion", firstQuote ? `${formatSummaryDateTime(firstQuote.created_at || firstQuote.createdAt)} (${daysText(createdAt, firstQuote.created_at || firstQuote.createdAt)})` : "Sin cotizacion"],
@@ -877,18 +896,62 @@ function OpportunitySummaryDialog({ state, onClose }) {
         ) : state.error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{state.error}</div>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {rows.map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
-                <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {rows.map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">{label}</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+            <section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-amber-800">Datos pendientes para Uso Plataforma</h3>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-amber-700">
+                  {missingPlatformFields.length ? `${missingPlatformFields.length} pendiente${missingPlatformFields.length === 1 ? "" : "s"}` : "Completo"}
+                </span>
               </div>
-            ))}
+              {missingPlatformFields.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {missingPlatformFields.map((label) => (
+                    <span key={label} className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800">{label}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs font-semibold text-emerald-700">La oportunidad tiene todos los datos requeridos.</p>
+              )}
+            </section>
           </div>
         )}
       </DialogContent>
     </Dialog>
   );
+}
+
+function platformMissingFields({ opportunity, client, quote, reservation, closure }) {
+  const checks = [
+    ["Código de oportunidad", opportunity.code],
+    ["Cliente", opportunity.clienteNombre],
+    ["Fecha nacimiento", client.fechaNacimiento],
+    ["Ocupación", client.ocupacion],
+    ["Departamento", client.departamentoId],
+    ["Provincia", client.provinciaId],
+    ["Año del carro", quote.anio],
+    ["Fecha de cotización", quote.created_at || quote.createdAt],
+    ["Tipo de persona", reservation.tipoPersona],
+    ["Precio catálogo", quote.catalogo_precio_base ?? quote.precio_base],
+    ["Versión", quote.version],
+    ["Estado de cotización", quote.estado],
+    ["Distrito", client.distritoId],
+    ["Motivo de cierre", closure.clasificacion],
+  ];
+  return checks.filter(([, value]) => !hasSummaryValue(value)).map(([label]) => label);
+}
+
+function hasSummaryValue(value) {
+  const text = String(value ?? "").trim();
+  return Boolean(text && text !== "-" && text.toLowerCase() !== "(en blanco)");
 }
 
 function earliestByDate(items, getter) {
@@ -989,7 +1052,9 @@ function Field({ label, children }) {
   return <div className="space-y-1"><Label className="text-xs font-bold text-violet-700">{label}</Label>{children}</div>;
 }
 
-function matchesTime(value, mode) {
+function matchesTime(item, mode) {
+  if (["late", "near", "enough"].includes(mode)) return matchesTimeState(item?.timeState, mode);
+  const value = item?.nextAgenda || item?.createdAt;
   if (!value) return false;
   const date = new Date(value);
   const now = new Date();
@@ -997,6 +1062,23 @@ function matchesTime(value, mode) {
   if (mode === "week") return Math.abs(date - now) <= 7 * 24 * 60 * 60 * 1000;
   if (mode === "month") return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
   return true;
+}
+
+function matchesTimeState(timeState, mode) {
+  const text = normalizeText(`${timeState?.nombre || ""} ${timeState?.estado || ""} ${timeState?.descripcion || ""} ${timeState?.color || ""}`);
+  if (!timeState) return false;
+  if (mode === "late") return text.includes("retras") || text.includes("venc") || text.includes("rojo") || text.includes("red") || text.includes("#dc3545") || text.includes("#ef4444");
+  if (mode === "near") return text.includes("cerca de la hora") || text.includes("#ffc107") || text.includes("amarillo") || text.includes("yellow");
+  if (mode === "enough") return text.includes("tiempo suficiente") || text.includes("#28a745") || text.includes("verde") || text.includes("green");
+  return true;
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function formatShortDate(value) {

@@ -48,6 +48,14 @@ function vehicleName(vehicle = {}) {
   return [vehicle.model, vehicle.version].filter(Boolean).join(" ") || "-";
 }
 
+function normalizeFilterValue(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 async function readJson(response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -96,6 +104,37 @@ function itemSearchText(item = {}) {
 
 function uniqueOptions(values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function vehicleFilterKey(model = "", version = "") {
+  const modelKey = normalizeFilterValue(model);
+  const versionKey = normalizeFilterValue(version);
+  if (!modelKey && !versionKey) return "";
+  return versionKey ? `vehicle:${modelKey}::${versionKey}` : `model:${modelKey}`;
+}
+
+function buildVehicleOptions(items, getVehicle) {
+  const options = new Map();
+  for (const item of items) {
+    const vehicle = getVehicle(item) || {};
+    const model = String(vehicle.model || "").trim();
+    const version = String(vehicle.version || "").trim();
+    if (model) options.set(vehicleFilterKey(model), { value: vehicleFilterKey(model), label: model });
+    if (model && version) {
+      const label = `${model} - ${version}`;
+      options.set(vehicleFilterKey(model, version), { value: vehicleFilterKey(model, version), label });
+    }
+  }
+  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+}
+
+function matchesVehicleFilter(item, filterValue, getVehicle) {
+  if (!filterValue) return true;
+  const vehicle = getVehicle(item) || {};
+  const model = vehicle.model || "";
+  const version = vehicle.version || "";
+  if (filterValue.startsWith("vehicle:")) return vehicleFilterKey(model, version) === filterValue;
+  return vehicleFilterKey(model) === filterValue;
 }
 
 function skippedReasonText(skipped = []) {
@@ -199,7 +238,8 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const [typeStatus, setTypeStatus] = useState("");
   const [typeStatusOpen, setTypeStatusOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sentModelFilter, setSentModelFilter] = useState("");
+  const [fordVehicleFilter, setFordVehicleFilter] = useState("");
+  const [sentVehicleFilter, setSentVehicleFilter] = useState("");
   const [sentAdvisorFilter, setSentAdvisorFilter] = useState("");
   const [sentStartDate, setSentStartDate] = useState("");
   const [sentEndDate, setSentEndDate] = useState("");
@@ -223,9 +263,15 @@ export default function FordLeadsPage({ userPermissions = {} }) {
   const status = useMemo(() => (CLOSED_TYPE_STATUS.has(typeStatus) ? "closed" : "open"), [typeStatus]);
   const filteredItems = useMemo(() => {
     const needle = searchTerm.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) => itemSearchText(item).includes(needle));
-  }, [items, searchTerm]);
+    return items.filter((item) => {
+      const matchText = !needle || itemSearchText(item).includes(needle);
+      const matchVehicle = matchesVehicleFilter(item, fordVehicleFilter, (lead) => ({
+        model: lead.vehicle?.model || lead.vehicle?.modelo || "",
+        version: lead.vehicle?.version || "",
+      }));
+      return matchText && matchVehicle;
+    });
+  }, [fordVehicleFilter, items, searchTerm]);
   const sortedItems = useMemo(() => sortRows(filteredItems, fordSort, FORD_SORT_ACCESSORS), [filteredItems, fordSort]);
   const visibleLeadIds = useMemo(() => sortedItems.map((item) => item.id).filter(Boolean), [sortedItems]);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every((id) => selectedLeadIds.includes(id));
@@ -248,15 +294,25 @@ export default function FordLeadsPage({ userPermissions = {} }) {
       ].filter(Boolean).join(" ").toLowerCase();
       const itemDate = item.createdAt ? new Date(item.createdAt) : null;
       const matchText = !needle || text.includes(needle);
-      const matchModel = !sentModelFilter || String(item.modeloNombre || "") === sentModelFilter;
+      const matchVehicle = matchesVehicleFilter(item, sentVehicleFilter, (lead) => ({
+        model: lead.modeloNombre || "",
+        version: lead.version || "",
+      }));
       const matchAdvisor = !sentAdvisorFilter || String(item.asesorNombre || "") === sentAdvisorFilter;
       const matchStart = !start || (itemDate && itemDate >= start);
       const matchEnd = !end || (itemDate && itemDate <= end);
-      return matchText && matchModel && matchAdvisor && matchStart && matchEnd;
+      return matchText && matchVehicle && matchAdvisor && matchStart && matchEnd;
     });
-  }, [sentItems, searchTerm, sentAdvisorFilter, sentEndDate, sentModelFilter, sentStartDate]);
+  }, [sentItems, searchTerm, sentAdvisorFilter, sentEndDate, sentStartDate, sentVehicleFilter]);
   const sortedSentItems = useMemo(() => sortRows(filteredSentItems, sentSort, SENT_SORT_ACCESSORS), [filteredSentItems, sentSort]);
-  const sentModelOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.modeloNombre).filter(Boolean)), [sentItems]);
+  const fordVehicleOptions = useMemo(() => buildVehicleOptions(items, (item) => ({
+    model: item.vehicle?.model || item.vehicle?.modelo || "",
+    version: item.vehicle?.version || "",
+  })), [items]);
+  const sentVehicleOptions = useMemo(() => buildVehicleOptions(sentItems, (item) => ({
+    model: item.modeloNombre || "",
+    version: item.version || "",
+  })), [sentItems]);
   const sentAdvisorOptions = useMemo(() => uniqueOptions(sentItems.map((item) => item.asesorNombre).filter(Boolean)), [sentItems]);
 
   function handleFordSort(key) {
@@ -512,12 +568,18 @@ export default function FordLeadsPage({ userPermissions = {} }) {
 
         {tab === "sent" ? (
           <div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_180px_180px_160px_160px_auto_auto]">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_220px_180px_160px_160px_auto_auto]">
               <Field label="Buscar">
                 <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Token, oportunidad, cliente, modelo..." />
               </Field>
-              <Field label="Modelo">
-                <NativeSelect value={sentModelFilter} onChange={(event) => setSentModelFilter(event.target.value)} options={[["", "Todos"], ...sentModelOptions.map((item) => [item, item])]} />
+              <Field label="Vehículo">
+                <SearchableSelect
+                  value={sentVehicleFilter}
+                  onChange={setSentVehicleFilter}
+                  options={sentVehicleOptions}
+                  placeholder="Todos los vehículos"
+                  searchPlaceholder="Buscar vehículo..."
+                />
               </Field>
               <Field label="Asesor">
                 <NativeSelect value={sentAdvisorFilter} onChange={(event) => setSentAdvisorFilter(event.target.value)} options={[["", "Todos"], ...sentAdvisorOptions.map((item) => [item, item])]} />
@@ -529,7 +591,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                 <Input type="date" value={sentEndDate} onChange={(event) => setSentEndDate(event.target.value)} />
               </Field>
               <div className="flex items-end">
-                <Button variant="outline" className="w-full border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => { setSearchTerm(""); setSentModelFilter(""); setSentAdvisorFilter(""); setSentStartDate(""); setSentEndDate(""); }}>
+                <Button variant="outline" className="w-full border-violet-200 text-violet-700 hover:bg-violet-50" onClick={() => { setSearchTerm(""); setSentVehicleFilter(""); setSentAdvisorFilter(""); setSentStartDate(""); setSentEndDate(""); }}>
                   Limpiar
                 </Button>
               </div>
@@ -611,7 +673,7 @@ export default function FordLeadsPage({ userPermissions = {} }) {
             Filtros
             <ChevronDown className={`size-4 transition ${mobileFiltersOpen ? "rotate-180" : ""}`} />
           </button>
-          <div className={`${mobileFiltersOpen ? "grid" : "hidden"} gap-3 sm:grid md:grid-cols-2 xl:grid-cols-6`}>
+          <div className={`${mobileFiltersOpen ? "grid" : "hidden"} gap-3 sm:grid md:grid-cols-2 xl:grid-cols-7`}>
             <Field label="Inicio">
               <Input type="datetime-local" step="1" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
             </Field>
@@ -653,6 +715,15 @@ export default function FordLeadsPage({ userPermissions = {} }) {
                   </div>
                 ) : null}
               </div>
+            </Field>
+            <Field label="Vehículo">
+              <SearchableSelect
+                value={fordVehicleFilter}
+                onChange={setFordVehicleFilter}
+                options={fordVehicleOptions}
+                placeholder="Todos los vehículos"
+                searchPlaceholder="Buscar vehículo..."
+              />
             </Field>
             <Field label="Buscar">
               <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="ID, cliente, documento, modelo..." />
@@ -801,6 +872,51 @@ function Field({ label, children }) {
     <div className="space-y-1">
       <Label className="text-xs font-semibold uppercase text-black">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function SearchableSelect({ value, onChange, options = [], placeholder = "Todos", searchPlaceholder = "Buscar..." }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+  const allOptions = [{ value: "", label: "Todos" }, ...options];
+
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        variant="outline"
+        className="h-9 w-full justify-between border-violet-200 bg-white px-3 text-left text-sm font-normal text-black hover:bg-violet-50"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="truncate">{selected?.label || placeholder}</span>
+        <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-60" />
+      </Button>
+      {open ? (
+        <div className="absolute z-50 mt-1 w-full min-w-[220px] rounded-lg border border-violet-200 bg-white shadow-xl">
+          <Command>
+            <CommandInput placeholder={searchPlaceholder} />
+            <CommandList>
+              <CommandEmpty>Sin resultados.</CommandEmpty>
+              <CommandGroup>
+                {allOptions.map((option) => (
+                  <CommandItem
+                    key={option.value || "all"}
+                    value={option.label}
+                    onSelect={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {value === option.value ? <Check className="ml-auto size-4 shrink-0" /> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </div>
+      ) : null}
     </div>
   );
 }

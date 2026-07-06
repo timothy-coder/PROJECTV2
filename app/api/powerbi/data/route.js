@@ -295,9 +295,31 @@ export async function GET(request) {
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
     const offset = clampOffset(url.searchParams.get("offset"));
+    const withMeta = url.searchParams.get("withMeta") === "1";
     const scopeSql = scopeUserId ? "WHERE (o.created_by = ? OR o.asignado_a = ?)" : "";
     const query = POWERBI_QUERY.replace("ORDER BY o.created_at DESC, o.id DESC", `${scopeSql} ORDER BY o.created_at DESC, o.id DESC`);
     const [rows] = await pool.query(`${query} LIMIT ${limit} OFFSET ${offset}`, scopeUserId ? [scopeUserId, scopeUserId] : []);
+
+    if (withMeta) {
+      const [timeRows] = await pool.query(
+        `SELECT id, nombre, estado, minutos_desde, minutos_hasta, color_hexadecimal, descripcion
+         FROM ventas_configuracion_estados_tiempo
+         WHERE activo = 1
+         ORDER BY minutos_desde ASC`
+      );
+      return NextResponse.json({
+        rows,
+        timeStates: timeRows.map((row) => ({
+          id: row.id,
+          nombre: row.nombre,
+          estado: row.estado,
+          minutosDesde: row.minutos_desde,
+          minutosHasta: row.minutos_hasta,
+          colorHexadecimal: row.color_hexadecimal,
+          descripcion: row.descripcion || "",
+        })),
+      });
+    }
 
     return NextResponse.json(rows);
   } catch (error) {

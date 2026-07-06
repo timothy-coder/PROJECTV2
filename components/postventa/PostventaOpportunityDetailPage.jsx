@@ -53,10 +53,13 @@ export default function PostventaOpportunityDetailPage({ id }) {
   }
 
   async function addMaintenance() {
-    if (!maintenance.fechaVisitaTaller) return;
+    if (!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === "") {
+      toast.error("Completa la fecha y el kilometraje del mantenimiento.");
+      return;
+    }
     await save({ action: "maintenance", ...maintenance });
     setMaintenance({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
-    toast.success("Mantenimiento registrado, oportunidad cerrada y proximo mantenimiento recalculado");
+    toast.success("Mantenimiento registrado, etapa actualizada a Cita efectiva y proximo mantenimiento recalculado");
   }
 
   return (
@@ -159,6 +162,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
                 const result = await quoteData.createQuote({
                   ...payload,
                   clienteId: payload.clienteId || opportunity.clienteId,
+                  oportunidadId: opportunity.id,
                   descripcion: payload.descripcion || `Cotizacion para ${opportunity.code}`,
                 });
                 const link = result.token ? `${window.location.origin}/cotizacion-posventa/${result.token}` : "";
@@ -557,28 +561,30 @@ function MaintenanceSection({ maintenance, setMaintenance, onSubmit }) {
           <Wrench className="size-4" />Agregar mantenimiento
         </h2>
         <p className="text-xs font-medium text-slate-500">
-          Al guardar se cierra la oportunidad y se recalcula el proximo mantenimiento del vehiculo.
+          Al guardar se marca como cita efectiva y se recalcula el proximo mantenimiento del vehiculo.
         </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <Field label="Fecha de mantenimiento">
+        <Field label="Fecha de mantenimiento *">
           <Input
             type="date"
+            required
             value={maintenance.fechaVisitaTaller}
             onChange={(event) => setMaintenance((current) => ({ ...current, fechaVisitaTaller: event.target.value }))}
           />
         </Field>
-        <Field label="Kilometraje">
+        <Field label="Kilometraje *">
           <Input
             type="number"
             min="0"
             step="1"
+            required
             value={maintenance.kilometrajeTaller}
             onChange={(event) => setMaintenance((current) => ({ ...current, kilometrajeTaller: event.target.value }))}
-            placeholder="Opcional"
+            placeholder="Ingrese kilometraje"
           />
         </Field>
-        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={!maintenance.fechaVisitaTaller} onClick={onSubmit}>
+        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === ""} onClick={onSubmit}>
           <Wrench className="size-4" />Guardar
         </Button>
       </div>
