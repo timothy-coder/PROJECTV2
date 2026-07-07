@@ -123,6 +123,14 @@ function dateRangeForContext(filters, records) {
   return { start: days[0], end: days[days.length - 1] };
 }
 
+function periodStartForFilters(filters) {
+  if (!filters.dateValue) return "";
+  if (filters.dateLevel === "day") return filters.dateValue;
+  if (filters.dateLevel === "month") return `${filters.dateValue}-01`;
+  if (filters.dateLevel === "year") return `${filters.dateValue}-01-01`;
+  return "";
+}
+
 function todayKey() {
   const today = new Date();
   return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
@@ -355,6 +363,29 @@ function filterRecords(records, filters, chartFilters) {
   });
 }
 
+function filterRecordsWithoutDate(records, filters, chartFilters) {
+  return records.filter((record) => {
+    const matchesVehicle =
+      !filters.vehicleValue ||
+      (filters.vehicleLevel === "brand" && record.vehicle.toLowerCase().startsWith(filters.vehicleValue.toLowerCase())) ||
+      (filters.vehicleLevel === "vehicle" && record.vehicle === filters.vehicleValue);
+    const basic =
+      (!filters.advisor || record.advisor === filters.advisor) &&
+      matchesVehicle &&
+      (!filters.stage || record.stage === filters.stage);
+    const chart = Object.entries(chartFilters).every(([field, value]) => !value || record[field] === value);
+    return basic && chart;
+  });
+}
+
+function managedBeforePeriod(records, filters, chartFilters) {
+  const start = periodStartForFilters(filters);
+  if (!start) return 0;
+  return filterRecordsWithoutDate(records, filters, chartFilters)
+    .filter((record) => hasRealValue(record.code) && record.day && record.day < start)
+    .length;
+}
+
 function lineByDay(records) {
   const days = Array.from(new Set(records.map((item) => item.day).filter(Boolean))).sort();
   return days.map((day) => ({ day: dayNumber(day), value: records.filter((item) => item.day === day).length }));
@@ -488,8 +519,10 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const platformBase = reportRecords.length;
     const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
+    const previousManaged = managedBeforePeriod(records, filters, chartFilters);
+    const opportunityBalance = Math.max(Number(maintenanceDueTotal || 0) - previousManaged, 0);
     return {
-      opportunities: maintenanceDueTotal,
+      opportunities: opportunityBalance,
       managed: reportRecords.length,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
@@ -510,7 +543,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       withoutOpportunity: vehiclesWithoutOpportunity,
       platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [reportRecords, filters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
+  }, [records, reportRecords, filters, chartFilters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
