@@ -10,6 +10,13 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function value(row, keys) {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") return row[key];
+  }
+  return "";
+}
+
 function nullable(value) {
   const text = clean(value);
   return text ? text : null;
@@ -42,6 +49,29 @@ export async function POST(request) {
        INNER JOIN administracion_modelos mo ON mo.id = p.modelo_id`
     );
     const prices = new Map(priceRows.map((row) => [`${normalize(row.marca_name)}:${normalize(row.modelo_name)}:${normalize(row.version)}`, row.id]));
+    const priceIds = new Set(priceRows.map((row) => Number(row.id)));
+    const brands = new Set(priceRows.map((row) => normalize(row.marca_name)).filter(Boolean));
+    const modelsByBrand = new Map();
+    const modelLabelsByBrand = new Map();
+    const versionsByVehicle = new Map();
+    const versionLabelsByVehicle = new Map();
+    priceRows.forEach((row) => {
+      const brand = normalize(row.marca_name);
+      const model = normalize(row.modelo_name);
+      const version = normalize(row.version);
+      const brandModels = modelsByBrand.get(brand) || new Set();
+      brandModels.add(model);
+      modelsByBrand.set(brand, brandModels);
+      const brandModelLabels = modelLabelsByBrand.get(brand) || new Set();
+      brandModelLabels.add(row.modelo_name);
+      modelLabelsByBrand.set(brand, brandModelLabels);
+      const vehicleVersions = versionsByVehicle.get(`${brand}:${model}`) || new Set();
+      vehicleVersions.add(version);
+      versionsByVehicle.set(`${brand}:${model}`, vehicleVersions);
+      const vehicleVersionLabels = versionLabelsByVehicle.get(`${brand}:${model}`) || new Set();
+      vehicleVersionLabels.add(row.version);
+      versionLabelsByVehicle.set(`${brand}:${model}`, vehicleVersionLabels);
+    });
 
     let imported = 0;
     let updated = 0;
@@ -49,14 +79,31 @@ export async function POST(request) {
     await connection.beginTransaction();
 
     for (const [index, row] of rows.entries()) {
-      const vin = clean(row.vin || row.VIN);
-      const marca = clean(row.marca || row.marcaName);
-      const modelo = clean(row.modelo || row.modeloName);
-      const version = clean(row.version);
-      const precioId = Number(row.precio_id || row.precioId) || prices.get(`${normalize(marca)}:${normalize(modelo)}:${normalize(version)}`);
+      const vin = clean(value(row, ["vin", "VIN", "Vin"]));
+      const marca = clean(value(row, ["marca", "Marca", "marcaName", "Marca Name", "marca_name"]));
+      const modelo = clean(value(row, ["modelo", "Modelo", "modeloName", "Modelo Name", "modelo_name"]));
+      const version = clean(value(row, ["version", "Version", "versión", "Versión"]));
+      const rawPrecioId = Number(value(row, ["precio_id", "precioId", "Precio ID", "PrecioId"]));
+      const invalidPrecioId = Boolean(rawPrecioId && !priceIds.has(rawPrecioId));
+      const precioId = rawPrecioId || prices.get(`${normalize(marca)}:${normalize(modelo)}:${normalize(version)}`);
 
-      if (!vin || !precioId) {
-        errors.push(`Fila ${index + 2}: VIN y vehiculo exacto (marca, modelo, version) son obligatorios.`);
+      if (!vin || !precioId || invalidPrecioId) {
+        const rowErrors = [];
+        if (!vin) rowErrors.push("VIN vacio o encabezado no reconocido");
+        if (invalidPrecioId) rowErrors.push(`precio_id no existe: ${rawPrecioId}`);
+        if (!marca) rowErrors.push("marca vacia o encabezado no reconocido");
+        if (marca && !brands.has(normalize(marca))) rowErrors.push(`marca no encontrada: "${marca}"`);
+        if (!modelo) rowErrors.push("modelo vacio o encabezado no reconocido");
+        if (marca && modelo && !modelsByBrand.get(normalize(marca))?.has(normalize(modelo))) {
+          const available = Array.from(modelLabelsByBrand.get(normalize(marca)) || []).slice(0, 6).join(", ");
+          rowErrors.push(`modelo no encontrado para "${marca}": "${modelo}"${available ? `. Modelos disponibles: ${available}` : ""}`);
+        }
+        if (!version) rowErrors.push("version vacia o encabezado no reconocido");
+        if (marca && modelo && version && !precioId) {
+          const available = Array.from(versionLabelsByVehicle.get(`${normalize(marca)}:${normalize(modelo)}`) || []).slice(0, 6).join(", ");
+          rowErrors.push(`version no encontrada para "${marca} ${modelo}": "${version}"${available ? `. Versiones disponibles: ${available}` : ""}`);
+        }
+        errors.push(`Fila ${index + 2}: ${rowErrors.join("; ")}. Leido: VIN="${vin || "-"}", marca="${marca || "-"}", modelo="${modelo || "-"}", version="${version || "-"}".`);
         continue;
       }
 
@@ -72,15 +119,15 @@ export async function POST(request) {
         [
           vin,
           precioId,
-          nullable(row.color_externo ?? row.colorExterno),
-          nullable(row.color_interno ?? row.colorInterno),
-          nullable(row.numero_motor ?? row.numeroMotor),
-          nullable(row.numero_factura ?? row.numeroFactura),
-          numberOrNull(row.precio_compra ?? row.precioCompra),
-          numberOrNull(row.precio_venta ?? row.precioVenta),
-          dateOrNull(row.facturacion_at ?? row.facturacionAt),
-          dateOrNull(row.llegada_centro_at ?? row.llegadaCentroAt),
-          dateOrNull(row.entrega_at ?? row.entregaAt),
+          nullable(value(row, ["color_externo", "colorExterno", "Color Externo"])),
+          nullable(value(row, ["color_interno", "colorInterno", "Color Interno"])),
+          nullable(value(row, ["numero_motor", "numeroMotor", "Numero Motor", "N Motor"])),
+          nullable(value(row, ["numero_factura", "numeroFactura", "Numero Factura", "Factura"])),
+          numberOrNull(value(row, ["precio_compra", "precioCompra", "Precio Compra"])),
+          numberOrNull(value(row, ["precio_venta", "precioVenta", "Precio Venta"])),
+          dateOrNull(value(row, ["facturacion_at", "facturacionAt", "Facturacion", "Fecha Facturacion"])),
+          dateOrNull(value(row, ["llegada_centro_at", "llegadaCentroAt", "Llegada Centro", "Fecha Llegada Centro"])),
+          dateOrNull(value(row, ["entrega_at", "entregaAt", "Entrega", "Fecha Entrega"])),
         ]
       );
       imported += 1;

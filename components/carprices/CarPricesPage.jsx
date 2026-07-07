@@ -150,7 +150,8 @@ export default function CarPricesPage({ userPermissions }) {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
       const result = await data.importHistoryRows(rows);
-      setImportMessage(`Inventario importado ${result.imported}. Actualizados ${result.updated}.`);
+      const rowErrors = Array.isArray(result.errors) && result.errors.length ? ` Errores: ${result.errors.slice(0, 3).join(" | ")}` : "";
+      setImportMessage(`Inventario importado ${result.imported}. Actualizados ${result.updated}.${rowErrors}`);
     } catch (error) {
       setImportMessage(error.message || "No se pudo importar el inventario.");
     } finally {
