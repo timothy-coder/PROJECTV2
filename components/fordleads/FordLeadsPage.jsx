@@ -56,11 +56,19 @@ function normalizeFilterValue(value = "") {
     .toLowerCase();
 }
 
+function cleanFordUiError(value) {
+  const text = String(value || "").trim();
+  if (!text) return "Ocurrio un error.";
+  if (/<html[\s>]|<body[\s>]|Bad Gateway/i.test(text)) {
+    return "Ford no respondio correctamente (502 Bad Gateway). Intenta nuevamente en unos minutos.";
+  }
+  return text;
+}
+
 async function readJson(response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = payload?.detail ? ` ${JSON.stringify(payload.detail)}` : "";
-    throw new Error(`${payload?.message || "Ocurrio un error."}${detail}`);
+    throw new Error(cleanFordUiError(payload?.message || payload?.detail?.message));
   }
   return payload;
 }
