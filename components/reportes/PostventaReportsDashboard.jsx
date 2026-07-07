@@ -289,10 +289,12 @@ function buildRecords(rows, timeStates = []) {
     const viewRows = uniqueRows(group, (row) => row.cotizacion_vista_id);
     const close = latestRow(group.filter((row) => row.cierre_created_at), "cierre_created_at");
     const effectiveCitaRows = citaRows.filter((row) => row.cita_id || isEffectiveAppointment(row.cita_estado));
+    const effectiveStageCitaRows = citaRows.filter((row) => isEffectiveAppointment(row.cita_estado));
     const reprogrammedCitaRows = citaRows.filter((row) => isRescheduledAppointment(row.cita_estado));
     const vehicle = [base.vehiculo_marca, base.vehiculo_modelo].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
     const plate = clean(base.vehiculo_placa || base.vehiculo_vin, "");
     const center = clean(base.cotizacion_centro || base.cita_centro || base.cita_taller || base.cotizacion_taller || base.cotizacion_mostrador);
+    const stage = clean(base.etapa_nombre);
 
     return {
       id,
@@ -307,7 +309,8 @@ function buildRecords(rows, timeStates = []) {
       model: clean(base.vehiculo_modelo),
       vehicle,
       vehicleDetail: plate ? `${vehicle} / ${plate}` : vehicle,
-      stage: clean(base.etapa_nombre),
+      stage,
+      stageReport: effectiveStageCitaRows.length ? "Cita efectiva" : stage,
       origin: clean(base.suborigen_nombre || base.origen_nombre),
       center,
       service: clean(base.cita_tipo_servicio || base.cotizacion_tipo || base.producto_descripcion),
@@ -487,7 +490,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
     return {
       opportunities: maintenanceDueTotal,
-      managed: reportRecords.filter((item) => item.agendaGreen || item.quoteCount || item.appointmentCount || item.closedAt).length,
+      managed: reportRecords.length,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
       quoted: reportRecords.reduce((sum, item) => sum + item.quoteTotal, 0),
@@ -511,7 +514,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
-    stage: groupCount(reportRecords, "stage", 8),
+    stage: groupCount(reportRecords, "stageReport", 8),
     advisor: groupCount(reportRecords, "advisor", 8),
     vehicle: groupCount(reportRecords, "vehicle", 8),
     service: groupCount(reportRecords, "service", 8),
@@ -577,7 +580,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
 
               <section className="grid gap-2 xl:grid-cols-[1fr_1fr_1fr_1fr]">
                 <Panel title="Oportunidad por Modelo" summary={chartSummary(charts.model, "modelo")} onFocus={() => setFocusChart("model")}><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stageReport} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Asesor" summary={chartSummary(charts.advisor, "asesor")} onFocus={() => setFocusChart("advisor")}><BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Servicio" summary={chartSummary(charts.service, "servicio")} onFocus={() => setFocusChart("service")}><Donut data={charts.service} field="service" active={chartFilters.service} onSelect={toggleChartFilter} /></Panel>
               </section>
@@ -776,7 +779,7 @@ function FocusChartDialog({ chartKey, charts, stageTotal, chartFilters, onClose,
   if (!chartKey) return null;
   const config = {
     model: { title: "Oportunidad por Modelo", summary: chartSummary(charts.model, "modelo"), content: <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={onSelect} /> },
-    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa", stageTotal), content: <StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stage} onSelect={onSelect} /> },
+    stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa", stageTotal), content: <StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stageReport} onSelect={onSelect} /> },
     advisor: { title: "Asesor", summary: chartSummary(charts.advisor, "asesor"), content: <BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={onSelect} /> },
     vehicle: { title: "Vehiculo", summary: chartSummary(charts.vehicle, "vehiculo"), content: <Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={onSelect} /> },
     service: { title: "Tipo de Servicio", summary: chartSummary(charts.service, "servicio"), content: <Donut data={charts.service} field="service" active={chartFilters.service} onSelect={onSelect} /> },
@@ -819,7 +822,7 @@ function BarList({ data, field, active, onSelect }) {
   );
 }
 
-function StageFunnel({ data, totalCount, active, onSelect, field = "stage" }) {
+function StageFunnel({ data, totalCount, active, onSelect, field = "stageReport" }) {
   const total = Number(totalCount ?? data.reduce((sum, item) => sum + Number(item.value || 0), 0));
   const percentData = data.map((item, index) => ({
     ...item,
