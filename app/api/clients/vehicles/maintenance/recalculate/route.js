@@ -9,8 +9,8 @@ function canRecalculate(permissions) {
   return (
     hasPerm(permissions, ["clientes", "vehicles"]) ||
     hasPerm(permissions, ["clientes", "maintenance_import"]) ||
-    hasPerm(permissions, ["oportunidadespv", "view"]) ||
-    hasPerm(permissions, ["oportunidadespv", "viewall"])
+    hasPerm(permissions, ["proximosmantenimientos", "view"]) ||
+    hasPerm(permissions, ["proximosmantenimientos", "viewall"])
   );
 }
 
@@ -26,8 +26,7 @@ export async function POST() {
 
     const canViewAll = Boolean(
       hasPerm(user.permissions || {}, ["clientes", "viewall"]) ||
-      hasPerm(user.permissions || {}, ["oportunidadespv", "view"]) ||
-      hasPerm(user.permissions || {}, ["oportunidadespv", "viewall"])
+      hasPerm(user.permissions || {}, ["proximosmantenimientos", "viewall"])
     );
     const ownershipWhere = canViewAll ? "" : "AND c.created_by = ?";
     const ownershipParams = canViewAll ? [] : [user.id];

@@ -139,7 +139,9 @@ function hasPowerBiToken(request) {
 function canReadPowerBiPosventaVehicles(user) {
   const permissions = user?.permissions || {};
   return Boolean(
-    hasPerm(permissions, ["home", "posventaview"]) ||
+    hasPerm(permissions, ["proximosmantenimientos", "view"]) ||
+      hasPerm(permissions, ["proximosmantenimientos", "viewall"]) ||
+      hasPerm(permissions, ["home", "posventaview"]) ||
       hasPerm(permissions, ["home", "posventaviewall"]) ||
       hasPerm(permissions, ["home", "posventa"]) ||
       hasPerm(permissions, ["home", "viewall"])
@@ -148,7 +150,12 @@ function canReadPowerBiPosventaVehicles(user) {
 
 function canViewAllDashboard(user) {
   const permissions = user?.permissions || {};
-  return Boolean(hasPerm(permissions, ["home", "posventaviewall"]) || hasPerm(permissions, ["home", "viewall"]));
+  return Boolean(
+    hasPerm(permissions, ["proximosmantenimientos", "view"]) ||
+      hasPerm(permissions, ["proximosmantenimientos", "viewall"]) ||
+      hasPerm(permissions, ["home", "posventaviewall"]) ||
+      hasPerm(permissions, ["home", "viewall"])
+  );
 }
 
 export async function GET(request) {

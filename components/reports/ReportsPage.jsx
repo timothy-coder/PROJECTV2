@@ -87,7 +87,7 @@ const REPORTS = [
     category: "Posventa",
     href: "/proximosmantenimientos",
     icon: ShieldCheck,
-    permissions: [["oportunidadespv", "view"]],
+    permissions: [["proximosmantenimientos", "view"], ["proximosmantenimientos", "viewall"]],
     badge: "Modulo",
   },
 ];

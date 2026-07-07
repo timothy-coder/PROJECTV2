@@ -180,11 +180,10 @@ export async function GET(request) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "No autorizado." }, { status: 401 });
 
-    if (
-      !hasPerm(user.permissions, ["oportunidadespv", "view"]) &&
-      !hasPerm(user.permissions, ["leadspv", "view"]) &&
-      !hasPerm(user.permissions, ["oportunidadespv", "viewall"])
-    ) {
+    const canViewAllMaintenance = hasPerm(user.permissions, ["proximosmantenimientos", "viewall"]);
+    const canViewMaintenance = canViewAllMaintenance || hasPerm(user.permissions, ["proximosmantenimientos", "view"]);
+
+    if (!canViewMaintenance) {
       return NextResponse.json({ message: "No tienes permiso para ver proximos mantenimientos." }, { status: 403 });
     }
 
@@ -207,6 +206,23 @@ export async function GET(request) {
 
     const where = ["v.deleted_at IS NULL"];
     const whereParams = [];
+
+    if (!canViewAllMaintenance) {
+      where.push(
+        `(NOT EXISTS (
+            SELECT 1
+            FROM posventa_oportunidades scope_opp
+            WHERE scope_opp.vehiculo_id = v.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM posventa_oportunidades scope_user_opp
+            WHERE scope_user_opp.vehiculo_id = v.id
+              AND scope_user_opp.created_by = ?
+          ))`
+      );
+      whereParams.push(user.id);
+    }
 
     if (query) {
       const like = `%${query}%`;
@@ -607,9 +623,7 @@ export async function GET(request) {
       currentUser: {
         id: user.id,
         fullname: user.fullname,
-        canViewAll: Boolean(
-          hasPerm(user.permissions, ["oportunidadespv", "viewall"]) || hasPerm(user.permissions, ["leadspv", "viewall"])
-        ),
+        canViewAll: canViewAllMaintenance,
       },
       vehicles: Array.from(unique.values()),
       meta: {

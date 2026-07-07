@@ -34,10 +34,8 @@ export default function VehiclesWithoutOpportunityPage({ userPermissions }) {
   const supportData = useMaintenanceDue({ page: 1, limit: 1 });
 
   const canView = Boolean(
-    hasPerm(userPermissions, ["oportunidadespv", "view"]) ||
-      hasPerm(userPermissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(userPermissions, ["leadspv", "view"]) ||
-      hasPerm(userPermissions, ["leadspv", "viewall"]) ||
+    hasPerm(userPermissions, ["proximosmantenimientos", "view"]) ||
+      hasPerm(userPermissions, ["proximosmantenimientos", "viewall"]) ||
       hasPerm(userPermissions, ["clientes", "view"]) ||
       hasPerm(userPermissions, ["clientes", "viewall"])
   );

@@ -80,7 +80,7 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   const canCreate = hasPerm(userPermissions, [perm, "create"]);
   const canEdit = hasPerm(userPermissions, [perm, "edit"]) || canViewAll;
   const canAssign = hasPerm(userPermissions, [perm, "asignar"]) || canViewAll;
-  const canOpenMaintenance = Boolean(hasPerm(userPermissions, ["oportunidadespv", "view"]) || hasPerm(userPermissions, ["oportunidadespv", "viewall"]));
+  const canOpenMaintenance = Boolean(hasPerm(userPermissions, ["proximosmantenimientos", "view"]) || hasPerm(userPermissions, ["proximosmantenimientos", "viewall"]));
   const copy = kind === "lead"
     ? { title: "Leads PosVenta", subtitle: "Gestiona los leads de PosVenta" }
     : { title: "Oportunidades PosVenta", subtitle: "Gestiona oportunidades de mantenimiento y citas" };

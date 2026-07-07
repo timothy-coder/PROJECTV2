@@ -104,20 +104,17 @@ export default function MaintenanceDuePage({ userPermissions }) {
   const data = useMaintenanceDue(apiFilters);
 
   const canViewAll = Boolean(
-    hasPerm(userPermissions, ["oportunidadespv", "viewall"]) ||
-      hasPerm(userPermissions, ["leadspv", "viewall"]) ||
+    hasPerm(userPermissions, ["proximosmantenimientos", "viewall"]) ||
       data.currentUser?.canViewAll
   );
 
   const canView = Boolean(
-    hasPerm(userPermissions, ["oportunidadespv", "view"]) || hasPerm(userPermissions, ["oportunidadespv", "viewall"])
+    hasPerm(userPermissions, ["proximosmantenimientos", "view"]) || hasPerm(userPermissions, ["proximosmantenimientos", "viewall"])
   );
 
   const canCreate = hasPerm(userPermissions, ["oportunidadespv", "create"]);
 
-  const canOpenOpportunity = Boolean(
-    hasPerm(userPermissions, ["oportunidadespv", "view"]) || hasPerm(userPermissions, ["oportunidadespv", "viewall"])
-  );
+  const canOpenOpportunity = canView;
 
   const rows = data.vehicles || [];
   const meta = data.meta || { total: rows.length, page, limit, pages: 1 };
