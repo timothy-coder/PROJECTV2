@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
-import { datePart, daysBetween } from "@/lib/maintenanceNextVisit";
+import { datePart, daysBetween, preventiveMaintenanceHistoryExists } from "@/lib/maintenanceNextVisit";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function addMonths(date, months) {
@@ -261,15 +261,15 @@ export async function GET(request) {
     if (status === "Cerrado") {
       where.push("(cierre.detalle IS NOT NULL OR cierre_config.detalle IS NOT NULL)");
     } else if (status === "Sin historial") {
-      where.push("NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)");
+      where.push(`NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id AND ${preventiveMaintenanceHistoryExists("h")})`);
     } else if (status === "Ventas sin mantenimiento") {
       where.push(
         `sales_vehicle.reserva_id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)`
+         AND NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id AND ${preventiveMaintenanceHistoryExists("h")})`
       );
     } else if (status === "Sin algoritmo") {
       where.push(
-        `EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id)
+        `EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id AND ${preventiveMaintenanceHistoryExists("h")})
          AND (av.id IS NULL OR (COALESCE(av.meses,0) <= 0 AND COALESCE(av.kilometraje,0) <= 0))`
       );
     } else if (status === "Vencido") {
@@ -378,6 +378,7 @@ export async function GET(request) {
             ROW_NUMBER() OVER (PARTITION BY h.vehiculo_id ORDER BY h.fecha_visita_taller DESC, h.id DESC) AS rn
           FROM administracion_vehiculos_historial_mantenimientos h
           WHERE h.vehiculo_id IN (${placeholders})
+            AND ${preventiveMaintenanceHistoryExists("h")}
         ) x
         WHERE x.rn <= 30
         ORDER BY x.vehiculo_id ASC, x.fecha_visita_taller DESC, x.id DESC

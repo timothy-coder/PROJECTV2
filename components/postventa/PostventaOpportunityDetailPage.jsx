@@ -20,7 +20,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const { data, loading, save, createAppointment, updateAppointment, updateClientData, updateVehicleData } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
-  const [maintenance, setMaintenance] = useState({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
+  const [maintenance, setMaintenance] = useState({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "", submantenimientoId: "" });
   const [editingActivity, setEditingActivity] = useState(null);
   const [quoteType, setQuoteType] = useState("taller");
   const [quoteOpen, setQuoteOpen] = useState(false);
@@ -53,12 +53,12 @@ export default function PostventaOpportunityDetailPage({ id }) {
   }
 
   async function addMaintenance() {
-    if (!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === "") {
-      toast.error("Completa la fecha y el kilometraje del mantenimiento.");
+    if (!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === "" || !maintenance.submantenimientoId) {
+      toast.error("Completa la fecha, el kilometraje y el submantenimiento.");
       return;
     }
     await save({ action: "maintenance", ...maintenance });
-    setMaintenance({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "" });
+    setMaintenance({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "", submantenimientoId: "" });
     toast.success("Mantenimiento registrado, etapa actualizada a Cita efectiva y proximo mantenimiento recalculado");
   }
 
@@ -115,7 +115,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
           <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={addActivity} onEdit={setEditingActivity} />
           <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={addAgenda} />
         </div>
-        <MaintenanceSection maintenance={maintenance} setMaintenance={setMaintenance} onSubmit={addMaintenance} />
+          <MaintenanceSection maintenance={maintenance} setMaintenance={setMaintenance} options={appointmentOptions.maintenanceSubitems || []} onSubmit={addMaintenance} />
         <QuoteSection
           canCreate={currentUser.canCreateQuote}
           createdQuote={createdQuote}
@@ -553,7 +553,8 @@ function AgendaSection({ details, agenda, setAgenda, onSubmit }) {
   );
 }
 
-function MaintenanceSection({ maintenance, setMaintenance, onSubmit }) {
+function MaintenanceSection({ maintenance, setMaintenance, options, onSubmit }) {
+  const submaintenanceOptions = maintenanceSubitemOptions(options);
   return (
     <section className="mb-4 rounded-lg border border-amber-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex flex-col gap-1">
@@ -564,7 +565,7 @@ function MaintenanceSection({ maintenance, setMaintenance, onSubmit }) {
           Al guardar se marca como cita efectiva y se recalcula el proximo mantenimiento del vehiculo.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
         <Field label="Fecha de mantenimiento *">
           <Input
             type="date"
@@ -584,7 +585,16 @@ function MaintenanceSection({ maintenance, setMaintenance, onSubmit }) {
             placeholder="Ingrese kilometraje"
           />
         </Field>
-        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === ""} onClick={onSubmit}>
+        <Field label="Submantenimiento *">
+          <SearchableSelect
+            value={maintenance.submantenimientoId}
+            options={submaintenanceOptions}
+            placeholder="Seleccionar mantenimiento"
+            searchPlaceholder="Buscar mantenimiento..."
+            onChange={(submantenimientoId) => setMaintenance((current) => ({ ...current, submantenimientoId }))}
+          />
+        </Field>
+        <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" disabled={!maintenance.fechaVisitaTaller || maintenance.kilometrajeTaller === "" || !maintenance.submantenimientoId} onClick={onSubmit}>
           <Wrench className="size-4" />Guardar
         </Button>
       </div>
@@ -635,6 +645,7 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
     estado: initial?.estado || "pendiente",
     tipoServicio: initial?.tipoServicio || "TALLER",
     kilometrajeTaller: initial?.kilometrajeTaller || "",
+    submantenimientoId: initial?.submantenimientoId ? String(initial.submantenimientoId) : "",
     notaCliente: initial?.notaCliente || "",
     notaInterna: initial?.notaInterna || "",
   });
@@ -642,6 +653,7 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
   const workshopOptions = (options.workshops || []).filter((item) => !form.centroId || Number(item.centroId) === Number(form.centroId)).map((item) => ({ value: item.id, label: item.nombre }));
   const userOptions = [{ value: "", label: "Sin asesor" }, ...(options.users || []).map((item) => ({ value: item.id, label: item.fullname }))];
   const originOptions = [{ value: "", label: "Sin origen" }, ...(options.origins || []).map((item) => ({ value: item.id, label: item.name }))];
+  const submaintenanceOptions = maintenanceSubitemOptions(options.maintenanceSubitems || []);
   const isFinalized = isFinalizedStatus(form.estado);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -662,6 +674,7 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
             <Field label="Tipo servicio *"><NativeSelect value={form.tipoServicio} onChange={(event) => setForm((current) => ({ ...current, tipoServicio: event.target.value }))} options={[["TALLER", "Taller"], ["PLANCHADO_PINTURA", "Planchado y pintura"]]} /></Field>
             <Field label="Estado"><NativeSelect value={form.estado} onChange={(event) => setForm((current) => ({ ...current, estado: event.target.value }))} options={[["pendiente", "Pendiente"], ["confirmada", "Confirmada"], ["reprogramada", "Reprogramada"], ["cancelada", "Cancelada"], ["finalizada", "Finalizada"], ["orden creada", "Orden creada"], ["clientenollego", "Cliente no llego"]]} /></Field>
             {isFinalized ? <Field label="KM taller *"><Input required type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} /></Field> : null}
+            {isFinalized ? <Field label="Submantenimiento *"><SearchableSelect value={form.submantenimientoId} options={submaintenanceOptions} placeholder="Seleccionar mantenimiento" searchPlaceholder="Buscar mantenimiento..." onChange={(submantenimientoId) => setForm((current) => ({ ...current, submantenimientoId }))} /></Field> : null}
           </div>
           <Field label="Nota cliente"><Textarea value={form.notaCliente} onChange={(event) => setForm((current) => ({ ...current, notaCliente: event.target.value }))} /></Field>
           <Field label="Nota interna"><Textarea value={form.notaInterna} onChange={(event) => setForm((current) => ({ ...current, notaInterna: event.target.value }))} /></Field>
@@ -722,6 +735,14 @@ function formatDateTimeEs(value) {
 function todayInputDate() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function maintenanceSubitemOptions(items = []) {
+  return items
+    .map((item) => ({
+      value: item.id,
+      label: [item.name, item.mantenimientoName].filter(Boolean).join(" - "),
+    }));
 }
 
 function ActivityDialog({ item, onClose, onSubmit }) {

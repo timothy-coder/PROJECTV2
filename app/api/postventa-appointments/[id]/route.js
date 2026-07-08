@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
-import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
+import { isActiveMaintenanceSubitem, updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -155,12 +155,21 @@ export async function PUT(request, { params }) {
     const endAt = dateTimeValue(body.endDate || body.startDate, body.endTime || body.startTime);
     const shouldRegisterMaintenance = isFinalizedStatus(body.estado);
     const maintenanceKm = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+    const submantenimientoId = body.submantenimientoId ? Number(body.submantenimientoId) : null;
 
     if (shouldRegisterMaintenance && !appointment.vehiculo_id) {
       return NextResponse.json({ message: "La cita no tiene vehiculo para registrar mantenimiento." }, { status: 400 });
     }
     if (shouldRegisterMaintenance && maintenanceKm === null) {
       return NextResponse.json({ message: "Ingresa el kilometraje para finalizar la cita." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance && !submantenimientoId) {
+      return NextResponse.json({ message: "Selecciona el submantenimiento realizado." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance) {
+      if (!(await isActiveMaintenanceSubitem(connection, submantenimientoId))) {
+        return NextResponse.json({ message: "El submantenimiento seleccionado no es valido." }, { status: 400 });
+      }
     }
 
     await connection.beginTransaction();
@@ -186,9 +195,9 @@ export async function PUT(request, { params }) {
     if (shouldRegisterMaintenance) {
       await connection.query(
         `INSERT INTO administracion_vehiculos_historial_mantenimientos
-         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
-         VALUES (?, ?, ?, ?)`,
-        [appointment.vehiculo_id, startAt, maintenanceKm, user.id]
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, submantenimiento_id, created_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [appointment.vehiculo_id, startAt, maintenanceKm, submantenimientoId, user.id]
       );
       await updateVehicleNextMaintenanceDate(connection, appointment.vehiculo_id);
     }

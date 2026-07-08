@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
-import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
+import { isActiveMaintenanceSubitem, loadMaintenanceSubitems, updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -114,7 +114,8 @@ export async function GET() {
        ORDER BY pc.start_at DESC, pc.id DESC`,
       canAll ? [] : [user.id, user.id]
     );
-    return NextResponse.json({ currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll }, appointments: rows.map(mapAppointment) });
+    const maintenanceSubitems = await loadMaintenanceSubitems(pool);
+    return NextResponse.json({ currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll }, appointments: rows.map(mapAppointment), maintenanceSubitems });
   } catch (error) {
     console.error("Error loading postventa appointments:", error);
     return NextResponse.json({ message: "No se pudieron cargar las citas de PostVenta." }, { status: 500 });
@@ -142,11 +143,20 @@ export async function POST(request) {
     const endAt = dateTimeValue(body.endDate || body.startDate, body.endTime || body.startTime);
     const shouldRegisterMaintenance = isFinalizedStatus(body.estado);
     const maintenanceKm = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+    const submantenimientoId = body.submantenimientoId ? Number(body.submantenimientoId) : null;
     if (shouldRegisterMaintenance && !opportunity.vehiculo_id) {
       return NextResponse.json({ message: "La oportunidad no tiene vehiculo para registrar mantenimiento." }, { status: 400 });
     }
     if (shouldRegisterMaintenance && maintenanceKm === null) {
       return NextResponse.json({ message: "Ingresa el kilometraje para finalizar la cita." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance && !submantenimientoId) {
+      return NextResponse.json({ message: "Selecciona el submantenimiento realizado." }, { status: 400 });
+    }
+    if (shouldRegisterMaintenance) {
+      if (!(await isActiveMaintenanceSubitem(connection, submantenimientoId))) {
+        return NextResponse.json({ message: "El submantenimiento seleccionado no es valido." }, { status: 400 });
+      }
     }
     await connection.beginTransaction();
     const [result] = await connection.query(
@@ -184,9 +194,9 @@ export async function POST(request) {
     if (shouldRegisterMaintenance) {
       await connection.query(
         `INSERT INTO administracion_vehiculos_historial_mantenimientos
-         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
-         VALUES (?, ?, ?, ?)`,
-        [opportunity.vehiculo_id, startAt, maintenanceKm, user.id]
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, submantenimiento_id, created_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [opportunity.vehiculo_id, startAt, maintenanceKm, submantenimientoId, user.id]
       );
       await updateVehicleNextMaintenanceDate(connection, opportunity.vehiculo_id);
     }

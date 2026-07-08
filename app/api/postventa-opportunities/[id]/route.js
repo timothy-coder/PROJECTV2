@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
-import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
+import { isActiveMaintenanceSubitem, loadMaintenanceSubitems, updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -153,6 +153,7 @@ export async function GET(_request, { params }) {
     const [workshops] = await connection.query(`SELECT id,centro_id,nombre FROM configuracion_talleres ORDER BY nombre ASC`);
     const [origins] = await connection.query(`SELECT id,name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await connection.query(`SELECT id,fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
+    const maintenanceSubitems = await loadMaintenanceSubitems(connection);
     const [closingOptions] = await connection.query(`SELECT id,detalle FROM configuracion_posventas_cierres_detalle ORDER BY id DESC`);
     const [brandRows] = await connection.query(`SELECT id,name FROM administracion_marcas ORDER BY name ASC`);
     const [modelRows] = await connection.query(`SELECT id,marca_id,clase_id,name FROM administracion_modelos ORDER BY name ASC`);
@@ -245,6 +246,7 @@ export async function GET(_request, { params }) {
         workshops: workshops.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         origins: origins.map((row) => ({ id: row.id, name: row.name })),
         users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+        maintenanceSubitems,
       },
       vehicleOptions: {
         marcas: brandRows.map((row) => ({ id: row.id, name: row.name })),
@@ -434,6 +436,7 @@ export async function POST(request, { params }) {
     if (body.action === "maintenance") {
       const fechaVisita = dateTimeValue(body.fechaVisitaTaller ?? body.fechaVisita ?? body.fecha);
       const kilometraje = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+      const submantenimientoId = body.submantenimientoId ? Number(body.submantenimientoId) : null;
       if (!fechaVisita) {
         await connection.rollback();
         return NextResponse.json({ message: "La fecha de mantenimiento es obligatoria." }, { status: 400 });
@@ -442,6 +445,14 @@ export async function POST(request, { params }) {
         await connection.rollback();
         return NextResponse.json({ message: "El kilometraje de mantenimiento es obligatorio." }, { status: 400 });
       }
+      if (!submantenimientoId) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Selecciona el submantenimiento realizado." }, { status: 400 });
+      }
+      if (!(await isActiveMaintenanceSubitem(connection, submantenimientoId))) {
+        await connection.rollback();
+        return NextResponse.json({ message: "El submantenimiento seleccionado no es valido." }, { status: 400 });
+      }
       const effectiveStageId = await stageIdByNames(connection, ["Cita efectiva"]);
       if (!effectiveStageId) {
         await connection.rollback();
@@ -449,9 +460,9 @@ export async function POST(request, { params }) {
       }
       await connection.query(
         `INSERT INTO administracion_vehiculos_historial_mantenimientos
-         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
-         VALUES (?, ?, ?, ?)`,
-        [opportunity.vehiculo_id, fechaVisita, kilometraje, user.id]
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, submantenimiento_id, created_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [opportunity.vehiculo_id, fechaVisita, kilometraje, submantenimientoId, user.id]
       );
       const nextDate = await updateVehicleNextMaintenanceDate(connection, opportunity.vehiculo_id);
       const maintenanceDate = datePart(fechaVisita);

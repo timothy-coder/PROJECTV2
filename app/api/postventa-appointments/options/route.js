@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { loadMaintenanceSubitems } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -15,11 +16,13 @@ export async function GET() {
     const [workshops] = await pool.query(`SELECT id, centro_id, nombre FROM configuracion_talleres ORDER BY nombre ASC`);
     const [origins] = await pool.query(`SELECT id, name FROM configuracion_origenes_citas WHERE is_active=1 ORDER BY name ASC`);
     const [users] = await pool.query(`SELECT id, fullname FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC`);
+    const maintenanceSubitems = await loadMaintenanceSubitems(pool);
     return NextResponse.json({
       centers: centers.map((row) => ({ id: row.id, nombre: row.nombre })),
       workshops: workshops.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
       origins: origins.map((row) => ({ id: row.id, name: row.name })),
       users: users.map((row) => ({ id: row.id, fullname: row.fullname })),
+      maintenanceSubitems,
     });
   } catch (error) {
     console.error("Error loading postventa appointment options:", error);

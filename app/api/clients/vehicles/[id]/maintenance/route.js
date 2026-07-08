@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
-import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
+import { isActiveMaintenanceSubitem, updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -45,9 +45,20 @@ export async function POST(request, { params }) {
     const body = await request.json();
     const fechaVisita = dateTimeValue(body.fechaVisitaTaller ?? body.fechaVisita ?? body.fecha);
     const kilometraje = numberValue(body.kilometrajeTaller ?? body.kilometraje);
+    const submantenimientoId = body.submantenimientoId ? Number(body.submantenimientoId) : null;
 
     if (!fechaVisita) {
       return NextResponse.json({ message: "La fecha de visita es obligatoria." }, { status: 400 });
+    }
+    if (kilometraje === null) {
+      return NextResponse.json({ message: "El kilometraje es obligatorio." }, { status: 400 });
+    }
+    if (!submantenimientoId) {
+      return NextResponse.json({ message: "Selecciona el submantenimiento realizado." }, { status: 400 });
+    }
+
+    if (!(await isActiveMaintenanceSubitem(connection, submantenimientoId))) {
+      return NextResponse.json({ message: "El submantenimiento seleccionado no es valido." }, { status: 400 });
     }
 
     await connection.beginTransaction();
@@ -64,15 +75,15 @@ export async function POST(request, { params }) {
 
     await connection.query(
       `INSERT INTO administracion_vehiculos_historial_mantenimientos
-       (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
-       VALUES (?, ?, ?, ?)`,
-      [vehicleId, fechaVisita, kilometraje, user.id]
+       (vehiculo_id, fecha_visita_taller, kilometraje_taller, submantenimiento_id, created_by)
+       VALUES (?, ?, ?, ?, ?)`,
+      [vehicleId, fechaVisita, kilometraje, submantenimientoId, user.id]
     );
 
     const nextDate = await updateVehicleNextMaintenanceDate(connection, vehicleId);
     await connection.commit();
 
-    return NextResponse.json({ ok: true, nextDate });
+    return NextResponse.json({ ok: true, nextDate, recalculated: true });
   } catch (error) {
     await connection.rollback();
     console.error("Error creating vehicle maintenance:", error);

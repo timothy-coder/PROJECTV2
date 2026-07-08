@@ -19,6 +19,7 @@ import {
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog";
 import { VehicleDialog } from "@/components/clients/VehicleDialog";
+import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,14 @@ function formatDate(value) {
 
 function todayInputDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function maintenanceSubitemOptions(items = []) {
+  return items
+    .map((item) => ({
+      value: item.id,
+      label: [item.name, item.mantenimientoName].filter(Boolean).join(" - "),
+    }));
 }
 
 export default function ClientsPage({ userPermissions }) {
@@ -191,6 +200,7 @@ export default function ClientsPage({ userPermissions }) {
         placas: "",
         fecha_visita_taller: "",
         kilometraje_taller: "",
+        submantenimiento: "1° Mantenimiento",
         created_by: "",
       },
     ]);
@@ -577,6 +587,7 @@ export default function ClientsPage({ userPermissions }) {
       <MaintenanceDialog
         client={maintenanceDialog.client}
         vehicle={maintenanceDialog.vehicle}
+        options={options.maintenanceSubitems || []}
         open={Boolean(maintenanceDialog.vehicle)}
         onClose={() => setMaintenanceDialog({ client: null, vehicle: null })}
         onSubmit={(vehicleId, payload) => addVehicleMaintenance(vehicleId, payload)}
@@ -754,15 +765,21 @@ function VehiclesPanel({ client, canCreate, canEdit, canDelete, onCreate, onEdit
   );
 }
 
-function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
+function MaintenanceDialog({ client, vehicle, options, open, onClose, onSubmit }) {
   const [fechaVisitaTaller, setFechaVisitaTaller] = useState(todayInputDate());
   const [kilometrajeTaller, setKilometrajeTaller] = useState("");
+  const [submantenimientoId, setSubmantenimientoId] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const submaintenanceOptions = maintenanceSubitemOptions(options);
 
   async function handleSubmit(event) {
     event.preventDefault();
     if (!vehicle?.id) return;
+    if (!fechaVisitaTaller || kilometrajeTaller === "" || !submantenimientoId) {
+      setMessage("Completa fecha, kilometraje y submantenimiento.");
+      return;
+    }
 
     setSaving(true);
     setMessage("");
@@ -770,9 +787,11 @@ function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
       await onSubmit(vehicle.id, {
         fechaVisitaTaller,
         kilometrajeTaller,
+        submantenimientoId,
       });
       setFechaVisitaTaller(todayInputDate());
       setKilometrajeTaller("");
+      setSubmantenimientoId("");
       onClose();
     } catch (error) {
       setMessage(error.message || "No se pudo registrar el mantenimiento.");
@@ -799,7 +818,7 @@ function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
           ) : null}
 
           <div className="space-y-2">
-            <Label>Fecha de visita al taller</Label>
+            <Label>Fecha de visita al taller *</Label>
             <Input
               type="date"
               value={fechaVisitaTaller}
@@ -809,14 +828,26 @@ function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
           </div>
 
           <div className="space-y-2">
-            <Label>Kilometraje</Label>
+            <Label>Kilometraje *</Label>
             <Input
               type="number"
               min="0"
               step="1"
               value={kilometrajeTaller}
               onChange={(event) => setKilometrajeTaller(event.target.value)}
-              placeholder="Opcional"
+              placeholder="Ingrese kilometraje"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Submantenimiento *</Label>
+            <SearchableSelect
+              value={submantenimientoId}
+              options={submaintenanceOptions}
+              placeholder="Seleccionar mantenimiento"
+              searchPlaceholder="Buscar mantenimiento..."
+              onChange={setSubmantenimientoId}
             />
           </div>
 
@@ -824,7 +855,7 @@ function MaintenanceDialog({ client, vehicle, open, onClose, onSubmit }) {
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">
+            <Button type="submit" disabled={saving || !fechaVisitaTaller || kilometrajeTaller === "" || !submantenimientoId} className="bg-violet-700 text-white hover:bg-violet-800">
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Wrench className="size-4" />}
               Guardar
             </Button>

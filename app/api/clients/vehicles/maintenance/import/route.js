@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
-import { updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
+import { loadMaintenanceSubitems, updateVehicleNextMaintenanceDate } from "@/lib/maintenanceNextVisit";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function normalize(value) {
@@ -39,6 +39,21 @@ async function loadUserMap(connection) {
   return map;
 }
 
+function submaintenanceKey(value) {
+  return normalize(String(value || "").replace(/°|º/g, ""));
+}
+
+async function loadSubmaintenanceMap(connection) {
+  const items = await loadMaintenanceSubitems(connection);
+  const map = new Map();
+  items.forEach((item) => {
+    map.set(String(item.id), item.id);
+    map.set(submaintenanceKey(item.name), item.id);
+    map.set(submaintenanceKey(`${item.name} - ${item.mantenimientoName}`), item.id);
+  });
+  return map;
+}
+
 export async function POST(request) {
   const connection = await pool.getConnection();
   try {
@@ -53,6 +68,7 @@ export async function POST(request) {
     if (!rows.length) return NextResponse.json({ message: "No hay filas para importar." }, { status: 400 });
 
     const users = await loadUserMap(connection);
+    const submaintenances = await loadSubmaintenanceMap(connection);
     let imported = 0;
     const errors = [];
     const touchedVehicleIds = new Set();
@@ -63,6 +79,9 @@ export async function POST(request) {
       const vin = text(row.vin ?? row.VIN);
       const placas = text(row.placas ?? row.placa);
       const fechaVisita = dateTimeValue(row.fecha_visita_taller ?? row.fechaVisitaTaller ?? row.fecha);
+      const kilometraje = numberValue(row.kilometraje_taller ?? row.kilometrajeTaller ?? row.kilometraje);
+      const submaintenanceText = text(row.submantenimiento_id ?? row.submantenimientoId ?? row.submantenimiento ?? row.mantenimiento);
+      const submantenimientoId = submaintenanceText ? submaintenances.get(String(submaintenanceText)) || submaintenances.get(submaintenanceKey(submaintenanceText)) : null;
       const createdByText = text(row.created_by ?? row.createdBy ?? row.creado_por ?? row.creadoPor);
       const createdBy = createdByText ? users.get(normalize(createdByText)) : user.id;
 
@@ -72,6 +91,14 @@ export async function POST(request) {
       }
       if (!fechaVisita) {
         errors.push(`Fila ${index + 2}: fecha_visita_taller es obligatorio.`);
+        continue;
+      }
+      if (kilometraje === null) {
+        errors.push(`Fila ${index + 2}: kilometraje_taller es obligatorio.`);
+        continue;
+      }
+      if (!submantenimientoId) {
+        errors.push(`Fila ${index + 2}: submantenimiento es obligatorio y debe ser valido.`);
         continue;
       }
       if (createdByText && !createdBy) {
@@ -90,12 +117,13 @@ export async function POST(request) {
 
       await connection.query(
         `INSERT INTO administracion_vehiculos_historial_mantenimientos
-         (vehiculo_id, fecha_visita_taller, kilometraje_taller, created_by)
-         VALUES (?, ?, ?, ?)`,
+         (vehiculo_id, fecha_visita_taller, kilometraje_taller, submantenimiento_id, created_by)
+         VALUES (?, ?, ?, ?, ?)`,
         [
           vehicle.id,
           fechaVisita,
-          numberValue(row.kilometraje_taller ?? row.kilometrajeTaller ?? row.kilometraje),
+          kilometraje,
+          submantenimientoId,
           createdBy,
         ]
       );

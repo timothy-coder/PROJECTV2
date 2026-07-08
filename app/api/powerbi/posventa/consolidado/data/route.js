@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { POWERBI_POSVENTA_QUERY } from "@/app/api/powerbi/posventa/data/route";
 import { pool } from "@/lib/db";
+import { preventiveMaintenanceHistoryExists } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -102,6 +103,7 @@ function buildVehiclesWithoutOpportunityQuery({ query, brand, model, scopeUserId
       INNER JOIN (
         SELECT vehiculo_id, MAX(id) AS max_id
         FROM administracion_vehiculos_historial_mantenimientos
+        WHERE ${preventiveMaintenanceHistoryExists("administracion_vehiculos_historial_mantenimientos")}
         GROUP BY vehiculo_id
       ) latest_history ON latest_history.max_id = h.id
     ) mh ON mh.vehiculo_id = v.id

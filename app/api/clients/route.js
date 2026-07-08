@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { loadMaintenanceSubitems } from "@/lib/maintenanceNextVisit";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -75,6 +76,7 @@ async function loadOptions() {
      WHERE is_active=1
      ORDER BY fullname ASC, username ASC`
   );
+  const maintenanceSubitems = await loadMaintenanceSubitems(pool);
 
   return {
     departamentos: departamentosRows.map((row) => ({
@@ -115,6 +117,7 @@ async function loadOptions() {
       id: row.id,
       name: row.fullname || row.username || `Usuario ${row.id}`,
     })),
+    maintenanceSubitems,
   };
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
-import { datePart, daysBetween } from "@/lib/maintenanceNextVisit";
+import { datePart, daysBetween, preventiveMaintenanceHistoryExists } from "@/lib/maintenanceNextVisit";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 export const runtime = "nodejs";
@@ -235,6 +235,7 @@ export async function GET(request) {
         INNER JOIN (
           SELECT vehiculo_id, MAX(id) AS max_id
           FROM administracion_vehiculos_historial_mantenimientos
+          WHERE ${preventiveMaintenanceHistoryExists("administracion_vehiculos_historial_mantenimientos")}
           GROUP BY vehiculo_id
         ) latest_history ON latest_history.max_id = h.id
       ) mh ON mh.vehiculo_id = v.id
@@ -294,6 +295,7 @@ export async function GET(request) {
                   ROW_NUMBER() OVER (PARTITION BY h.vehiculo_id ORDER BY h.fecha_visita_taller DESC, h.id DESC) AS rn
            FROM administracion_vehiculos_historial_mantenimientos h
            WHERE h.vehiculo_id IN (${placeholders})
+             AND ${preventiveMaintenanceHistoryExists("h")}
          ) x
          WHERE x.rn <= 30
          ORDER BY x.vehiculo_id ASC, x.fecha_visita_taller DESC, x.id DESC`,
