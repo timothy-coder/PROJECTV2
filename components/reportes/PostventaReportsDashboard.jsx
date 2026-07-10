@@ -502,6 +502,10 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   const records = useMemo(() => buildRecords(rows, timeStates), [rows, timeStates]);
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
   const reportRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.code)), [filteredRecords]);
+  const createdOpportunityRecords = useMemo(
+    () => filterRecords(records, filters, chartFilters).filter((record) => hasRealValue(record.code) && record.createdAt),
+    [records, filters, chartFilters]
+  );
   const selectable = useMemo(() => ({
     months: Array.from(new Set(records.map((item) => item.month).filter(Boolean))).sort().reverse(),
     advisors: groupCount(records, "advisor", 100).map((item) => item.name).sort((a, b) => a.localeCompare(b)),
@@ -523,7 +527,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const opportunityBalance = Math.max(Number(maintenanceDueTotal || 0) - previousManaged, 0);
     return {
       opportunities: opportunityBalance,
-      managed: reportRecords.length,
+      managed: createdOpportunityRecords.length,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
       quoted: reportRecords.reduce((sum, item) => sum + item.quoteTotal, 0),
@@ -543,7 +547,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       withoutOpportunity: vehiclesWithoutOpportunity,
       platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [records, reportRecords, filters, chartFilters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
+  }, [records, reportRecords, createdOpportunityRecords, filters, chartFilters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
