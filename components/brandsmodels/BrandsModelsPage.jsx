@@ -16,6 +16,7 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,35 @@ const operatorOptions = [
   { value: "<=", label: "≤" },
   { value: ">=", label: "≥" },
 ];
+
+const brandsToastStyles = {
+  success: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-emerald-200 !bg-emerald-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-emerald-900 !shadow-md",
+      icon: "!text-emerald-600",
+      title: "!text-emerald-900",
+      description: "!text-emerald-700",
+    },
+  },
+  danger: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-red-200 !bg-red-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-red-900 !shadow-md",
+      icon: "!text-red-600",
+      title: "!text-red-900",
+      description: "!text-red-700",
+    },
+  },
+};
+
+function showBrandsToast(type, message, Icon = Car) {
+  const danger = type === "danger";
+  toast(message, {
+    duration: 2800,
+    position: "top-right",
+    icon: <Icon className={`size-4 shrink-0 ${danger ? "text-red-600" : "text-emerald-600"}`} />,
+    ...(danger ? brandsToastStyles.danger : brandsToastStyles.success),
+  });
+}
 
 function can(userPermissions, module, action) {
   return hasPerm(userPermissions, [module, action]);
@@ -232,7 +262,10 @@ export default function BrandsModelsPage({ userPermissions }) {
                                 onClick={() => askDelete({
                                   title: "Eliminar marca",
                                   description: `Se eliminara la marca ${brand.name} y sus modelos asociados.`,
-                                  onConfirm: () => data.deleteBrand(brand.id),
+                                  onConfirm: async () => {
+                                    await data.deleteBrand(brand.id);
+                                    showBrandsToast("danger", "Marca eliminada correctamente.", Trash2);
+                                  },
                                 })}
                                 close={() => setBrandActionsOpenId(null)}
                                 className="text-red-600 hover:bg-red-50"
@@ -257,7 +290,10 @@ export default function BrandsModelsPage({ userPermissions }) {
                               onClick={() => askDelete({
                                 title: "Eliminar marca",
                                 description: `Se eliminara la marca ${brand.name} y sus modelos asociados.`,
-                                onConfirm: () => data.deleteBrand(brand.id),
+                                onConfirm: async () => {
+                                  await data.deleteBrand(brand.id);
+                                  showBrandsToast("danger", "Marca eliminada correctamente.", Trash2);
+                                },
                               })}
                             >
                               <Trash2 className="size-4" />
@@ -287,7 +323,10 @@ export default function BrandsModelsPage({ userPermissions }) {
                             onDelete={(model) => askDelete({
                               title: "Eliminar modelo",
                               description: `Se eliminara el modelo ${model.name}.`,
-                              onConfirm: () => data.deleteModel(model.id),
+                              onConfirm: async () => {
+                                await data.deleteModel(model.id);
+                                showBrandsToast("danger", "Modelo eliminado correctamente.", Trash2);
+                              },
                             })}
                             canEdit={canEditModel}
                             canDelete={canDeleteModel}
@@ -326,8 +365,13 @@ export default function BrandsModelsPage({ userPermissions }) {
           state={brandDialog}
           onClose={() => setBrandDialog({ open: false, item: null, readonly: false })}
           onSubmit={async (payload) => {
-            if (brandDialog.item) await data.updateBrand(brandDialog.item.id, payload);
-            else await data.createBrand(payload);
+            if (brandDialog.item) {
+              await data.updateBrand(brandDialog.item.id, payload);
+              showBrandsToast("success", "Marca actualizada correctamente.", Car);
+            } else {
+              await data.createBrand(payload);
+              showBrandsToast("success", "Marca creada correctamente.", Car);
+            }
             setBrandDialog({ open: false, item: null, readonly: false });
           }}
         />
@@ -340,8 +384,13 @@ export default function BrandsModelsPage({ userPermissions }) {
           classes={data.classes}
           onClose={() => setModelDialog({ open: false, item: null, brand: null, readonly: false })}
           onSubmit={async (payload) => {
-            if (modelDialog.item) await data.updateModel(modelDialog.item.id, payload);
-            else await data.createModel(payload);
+            if (modelDialog.item) {
+              await data.updateModel(modelDialog.item.id, payload);
+              showBrandsToast("success", "Modelo actualizado correctamente.", Layers);
+            } else {
+              await data.createModel(payload);
+              showBrandsToast("success", "Modelo creado correctamente.", Layers);
+            }
             setModelDialog({ open: false, item: null, brand: null, readonly: false });
           }}
         />
@@ -609,8 +658,13 @@ function ClassesSheet({ open, onOpenChange, data, userPermissions, askDelete }) 
 
   async function save() {
     if (!name.trim()) return;
-    if (editing) await data.updateClass(editing.id, { name: name.trim() });
-    else await data.createClass({ name: name.trim() });
+    if (editing) {
+      await data.updateClass(editing.id, { name: name.trim() });
+      showBrandsToast("success", "Clase actualizada correctamente.", Layers);
+    } else {
+      await data.createClass({ name: name.trim() });
+      showBrandsToast("success", "Clase creada correctamente.", Layers);
+    }
     setEditing(null);
     setName("");
   }
@@ -670,7 +724,10 @@ function ClassesSheet({ open, onOpenChange, data, userPermissions, askDelete }) 
                             onClick={() => askDelete({
                               title: "Eliminar clase",
                               description: `Se eliminara la clase ${item.name}.`,
-                              onConfirm: () => data.deleteClass(item.id),
+                              onConfirm: async () => {
+                                await data.deleteClass(item.id);
+                                showBrandsToast("danger", "Clase eliminada correctamente.", Trash2);
+                              },
                             })}
                           >
                             <Trash2 className="size-4" />
@@ -777,7 +834,10 @@ function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete
                               onClick={() => askDelete({
                                 title: "Eliminar algoritmo",
                                 description: `Se eliminara el algoritmo de ${item.modeloName}.`,
-                                onConfirm: () => data.deleteMaintenance(item.id),
+                                onConfirm: async () => {
+                                  await data.deleteMaintenance(item.id);
+                                  showBrandsToast("danger", "Tiempo de mantenimiento eliminado correctamente.", Trash2);
+                                },
                               })}
                               close={() => setOpenActionId(null)}
                               className="text-red-600 hover:bg-red-50"
@@ -799,7 +859,10 @@ function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete
                             onClick={() => askDelete({
                               title: "Eliminar algoritmo",
                               description: `Se eliminara el algoritmo de ${item.modeloName}.`,
-                              onConfirm: () => data.deleteMaintenance(item.id),
+                              onConfirm: async () => {
+                                await data.deleteMaintenance(item.id);
+                                showBrandsToast("danger", "Tiempo de mantenimiento eliminado correctamente.", Trash2);
+                              },
                             })}
                           >
                             <Trash2 className="size-4" />
@@ -828,8 +891,13 @@ function MaintenanceSheet({ open, onOpenChange, data, userPermissions, askDelete
             data={data}
             onClose={() => setDialog({ open: false, item: null })}
             onSubmit={async (payload) => {
-              if (dialog.item) await data.updateMaintenance(dialog.item.id, payload);
-              else await data.createMaintenance(payload);
+              if (dialog.item) {
+                await data.updateMaintenance(dialog.item.id, payload);
+                showBrandsToast("success", "Tiempo de mantenimiento actualizado correctamente.", Wrench);
+              } else {
+                await data.createMaintenance(payload);
+                showBrandsToast("success", "Tiempo de mantenimiento creado correctamente.", Wrench);
+              }
               setDialog({ open: false, item: null });
             }}
           />

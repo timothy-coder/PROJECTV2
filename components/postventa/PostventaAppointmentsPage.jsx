@@ -147,12 +147,12 @@ function AppointmentDetailDialog({ item, maintenanceSubitems, onRegister, onClos
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[min(94vw,760px)] bg-white text-slate-950">
-        <DialogHeader>
-          <DialogTitle>Cita #{item.id}</DialogTitle>
-          <DialogDescription>{item.startDate} {item.startTime} - {item.endTime}</DialogDescription>
+      <DialogContent className="max-h-[92svh] max-w-[min(96vw,860px)] overflow-y-auto bg-white p-4 text-slate-950 sm:p-5">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-base">Cita #{item.id}</DialogTitle>
+          <DialogDescription className="text-xs">{item.startDate} {item.startTime} - {item.endTime}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           <Info label="Cliente" value={item.clienteNombre} />
           <Info label="Vehiculo" value={item.vehiculoNombre} />
           <Info label="Centro" value={item.centroNombre} />
@@ -166,40 +166,44 @@ function AppointmentDetailDialog({ item, maintenanceSubitems, onRegister, onClos
           <Info label="Nota cliente" value={item.notaCliente} wide />
           <Info label="Nota interna" value={item.notaInterna} wide />
         </div>
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-900"><Wrench className="size-4" />Registrar mantenimiento</h3>
-          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.4fr_auto] sm:items-end">
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+          <h3 className="mb-2 flex min-w-0 items-center gap-1.5 text-[13px] font-bold leading-none text-amber-900">
+            <Wrench className="size-3.5 shrink-0" />
+            <span className="truncate">Registrar mantenimiento</span>
+          </h3>
+          <div className="grid gap-2 min-[520px]:grid-cols-[112px_76px_minmax(170px,1fr)_auto] min-[520px]:items-end">
             <Field label="Fecha *">
-              <Input type="date" value={form.fechaVisitaTaller} onChange={(event) => setForm((current) => ({ ...current, fechaVisitaTaller: event.target.value }))} />
+              <Input className="h-8 px-2 text-xs" type="date" value={form.fechaVisitaTaller} onChange={(event) => setForm((current) => ({ ...current, fechaVisitaTaller: event.target.value }))} />
             </Field>
             <Field label="Km *">
-              <Input type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} />
+              <Input className="h-8 px-2 text-xs" type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} />
             </Field>
             <Field label="Submantenimiento *">
-              <SearchableSelect value={form.submantenimientoId} options={submaintenanceOptions} placeholder="Seleccionar mantenimiento" searchPlaceholder="Buscar mantenimiento..." onChange={(submantenimientoId) => setForm((current) => ({ ...current, submantenimientoId }))} />
+              <SearchableSelect className="h-8 px-2 text-xs" value={form.submantenimientoId} options={submaintenanceOptions} placeholder="Seleccionar submantenimiento" searchPlaceholder="Buscar submantenimiento..." onChange={(submantenimientoId) => setForm((current) => ({ ...current, submantenimientoId }))} />
             </Field>
-            <Button type="button" className="bg-amber-600 text-white hover:bg-amber-700" onClick={submitMaintenance}>Guardar</Button>
+            <Button type="button" className="h-8 px-3 text-xs bg-amber-600 text-white hover:bg-amber-700" onClick={submitMaintenance}>Guardar</Button>
           </div>
         </div>
-        {item.oportunidadId ? <Button className="mt-4" onClick={() => { window.location.href = `/oportunidadespv/${item.oportunidadId}`; }}>Ir a oportunidad</Button> : null}
+        {item.oportunidadId ? <Button className="mt-3 h-9" onClick={() => { window.location.href = `/oportunidadespv/${item.oportunidadId}`; }}>Ir a oportunidad</Button> : null}
       </DialogContent>
     </Dialog>
   );
 }
 
 function Info({ label, value, wide }) {
-  return <div className={`rounded-lg border border-slate-200 bg-slate-50 p-3 ${wide ? "sm:col-span-2" : ""}`}><p className="text-xs font-bold uppercase text-slate-500">{label}</p><p className="mt-1 break-words text-sm font-semibold">{value || "-"}</p></div>;
+  return <div className={`rounded-lg border border-slate-200 bg-slate-50 p-2.5 ${wide ? "sm:col-span-2" : ""}`}><p className="text-[11px] font-bold uppercase leading-none text-slate-500">{label}</p><p className="mt-1 break-words text-[13px] font-semibold leading-snug">{value || "-"}</p></div>;
 }
 
 function Field({ label, children }) {
-  return <label className="grid gap-1 text-xs font-bold text-slate-600"><span>{label}</span>{children}</label>;
+  return <label className="grid gap-1 text-[11px] font-bold leading-none text-slate-600"><span>{label}</span>{children}</label>;
 }
 
 function maintenanceSubitemOptions(items = []) {
   return items
     .map((item) => ({
       value: item.id,
-      label: [item.name, item.mantenimientoName].filter(Boolean).join(" - "),
+      label: item.name || "Sin nombre",
+      keywords: [item.name, item.mantenimientoName].filter(Boolean).join(" "),
     }));
 }
 

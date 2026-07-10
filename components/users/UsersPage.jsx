@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, Edit3, Eye, Loader2, Plus, Search, Shield, Trash2, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { DeleteUserDialog } from "@/components/users/DeleteUserDialog";
 import { UserDialog } from "@/components/users/UserDialog";
@@ -10,6 +11,41 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useUsers } from "@/hooks/users/useUsers";
 import { hasPerm } from "@/lib/permissions";
+
+const userToastStyles = {
+  success: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-emerald-200 !bg-emerald-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-emerald-900 !shadow-md",
+      icon: "!text-emerald-600",
+      title: "!text-emerald-900",
+      description: "!text-emerald-700",
+    },
+  },
+  danger: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-red-200 !bg-red-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-red-900 !shadow-md",
+      icon: "!text-red-600",
+      title: "!text-red-900",
+      description: "!text-red-700",
+    },
+  },
+};
+
+function showUserToast(type, title, description) {
+  const baseOptions = {
+    duration: 2800,
+    position: "top-right",
+    icon:
+      type === "danger" ? (
+        <Trash2 className="size-4 shrink-0 text-red-600" />
+      ) : (
+        <Users className="size-4 shrink-0 text-emerald-600" />
+      ),
+    ...(type === "danger" ? userToastStyles.danger : userToastStyles.success),
+  };
+
+  toast(description ? `${title}. ${description}` : title, baseOptions);
+}
 
 function StatCard({ label, shortLabel, value, tone, icon: Icon }) {
   const tones = {
@@ -85,6 +121,28 @@ export default function UsersPage({ userPermissions }) {
       tallerIds: user.tallerIds,
       mostradorIds: user.mostradorIds,
     });
+    showUserToast("success", "Usuario actualizado", "El estado del usuario se actualizo correctamente.");
+  }
+
+  async function handleSaveUser(payload) {
+    if (dialogMode === "edit") {
+      await updateUser(selectedUser.id, payload);
+      showUserToast("success", "Usuario actualizado", "Los cambios se guardaron correctamente.");
+      return;
+    }
+
+    await createUser(payload);
+    showUserToast("success", "Usuario creado", "El usuario se registro correctamente.");
+  }
+
+  async function handleDeleteUser() {
+    const username = selectedUser?.username;
+    await deleteUser(selectedUser.id);
+    showUserToast(
+      "danger",
+      "Usuario eliminado",
+      username ? `Se elimino el usuario ${username}.` : "El usuario se elimino correctamente."
+    );
   }
 
   return (
@@ -319,14 +377,14 @@ export default function UsersPage({ userPermissions }) {
         user={selectedUser}
         options={options}
         onClose={() => setDialogMode(null)}
-        onSubmit={(payload) => (dialogMode === "edit" ? updateUser(selectedUser.id, payload) : createUser(payload))}
+        onSubmit={handleSaveUser}
       />
 
       <DeleteUserDialog
         open={dialogMode === "delete"}
         user={selectedUser}
         onClose={() => setDialogMode(null)}
-        onConfirm={() => deleteUser(selectedUser.id)}
+        onConfirm={handleDeleteUser}
       />
     </div>
   );

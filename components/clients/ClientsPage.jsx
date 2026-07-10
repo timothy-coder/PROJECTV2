@@ -15,6 +15,7 @@ import {
   UserRound,
   Wrench,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { DeleteClientDialog } from "@/components/clients/DeleteClientDialog";
@@ -54,6 +55,35 @@ function maintenanceSubitemOptions(items = []) {
       value: item.id,
       label: [item.name, item.mantenimientoName].filter(Boolean).join(" - "),
     }));
+}
+
+const clientToastStyles = {
+  success: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-emerald-200 !bg-emerald-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-emerald-900 !shadow-md",
+      icon: "!text-emerald-600",
+      title: "!text-emerald-900",
+      description: "!text-emerald-700",
+    },
+  },
+  danger: {
+    classNames: {
+      toast: "!min-h-0 !w-[min(92vw,320px)] !gap-2 !rounded-md !border-red-200 !bg-red-50 !px-3 !py-2 !text-xs !font-medium !leading-snug !text-red-900 !shadow-md",
+      icon: "!text-red-600",
+      title: "!text-red-900",
+      description: "!text-red-700",
+    },
+  },
+};
+
+function showClientToast(type, message, Icon = UserRound) {
+  const danger = type === "danger";
+  toast(message, {
+    duration: 2800,
+    position: "top-right",
+    icon: <Icon className={`size-4 shrink-0 ${danger ? "text-red-600" : "text-emerald-600"}`} />,
+    ...(danger ? clientToastStyles.danger : clientToastStyles.success),
+  });
 }
 
 export default function ClientsPage({ userPermissions }) {
@@ -220,6 +250,7 @@ export default function ClientsPage({ userPermissions }) {
       const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
       const result = await importClients(rows);
       setImportMessage(`Clientes importados ${result.imported}. Actualizados ${result.updated}.`);
+      showClientToast("success", `Clientes importados ${result.imported}. Actualizados ${result.updated}.`, Upload);
     } catch (error) {
       setImportMessage(error.message || "No se pudo importar clientes.");
     } finally {
@@ -238,6 +269,7 @@ export default function ClientsPage({ userPermissions }) {
       const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
       const result = await importVehicles(rows);
       setImportMessage(`Vehiculos importados ${result.imported}. Actualizados ${result.updated}.`);
+      showClientToast("success", `Vehiculos importados ${result.imported}. Actualizados ${result.updated}.`, Car);
     } catch (error) {
       setImportMessage(error.message || "No se pudo importar vehiculos.");
     } finally {
@@ -256,6 +288,7 @@ export default function ClientsPage({ userPermissions }) {
       const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
       const result = await importMaintenance(rows);
       setImportMessage(`Mantenimientos importados ${result.imported}.`);
+      showClientToast("success", `Mantenimientos importados ${result.imported}.`, Wrench);
     } catch (error) {
       setImportMessage(error.message || "No se pudo importar mantenimientos.");
     } finally {
@@ -269,11 +302,50 @@ export default function ClientsPage({ userPermissions }) {
     try {
       const result = await recalculateVehicleMaintenance();
       setImportMessage(`Proximo mantenimiento recalculado para ${result.updated || 0} vehiculos.`);
+      showClientToast("success", `Proximo mantenimiento recalculado para ${result.updated || 0} vehiculos.`, RefreshCw);
     } catch (error) {
       setImportMessage(error.message || "No se pudo recalcular los mantenimientos.");
     } finally {
       setRecalculatingMaintenance(false);
     }
+  }
+
+  async function handleSaveClient(payload) {
+    if (clientDialog.mode === "edit") {
+      await updateClient(clientDialog.client.id, payload);
+      showClientToast("success", "Cliente actualizado correctamente.", UserRound);
+      return;
+    }
+
+    await createClient(payload);
+    showClientToast("success", "Cliente creado correctamente.", UserRound);
+  }
+
+  async function handleSaveVehicle(payload) {
+    if (vehicleDialog.mode === "edit") {
+      await updateVehicle(vehicleDialog.vehicle.id, payload);
+      showClientToast("success", "Vehiculo actualizado correctamente.", Car);
+      return;
+    }
+
+    await createVehicle(payload);
+    showClientToast("success", "Vehiculo creado correctamente.", Car);
+  }
+
+  async function handleAddMaintenance(vehicleId, payload) {
+    await addVehicleMaintenance(vehicleId, payload);
+    showClientToast("success", "Mantenimiento registrado correctamente.", Wrench);
+  }
+
+  async function handleDeleteRecord() {
+    if (deleteDialog.type === "vehicle") {
+      await deleteVehicle(deleteDialog.vehicle.id);
+      showClientToast("danger", "Vehiculo eliminado correctamente.", Trash2);
+      return;
+    }
+
+    await deleteClient(deleteDialog.client.id);
+    showClientToast("danger", "Cliente eliminado correctamente.", Trash2);
   }
 
   return (
@@ -553,9 +625,7 @@ export default function ClientsPage({ userPermissions }) {
         client={clientDialog.client}
         options={options}
         onClose={() => setClientDialog({ mode: null, client: null })}
-        onSubmit={(payload) =>
-          clientDialog.mode === "edit" ? updateClient(clientDialog.client.id, payload) : createClient(payload)
-        }
+        onSubmit={handleSaveClient}
       />
 
       <VehicleDialog
@@ -565,9 +635,7 @@ export default function ClientsPage({ userPermissions }) {
         vehicle={vehicleDialog.vehicle}
         options={options}
         onClose={() => setVehicleDialog({ mode: null, client: null, vehicle: null })}
-        onSubmit={(payload) =>
-          vehicleDialog.mode === "edit" ? updateVehicle(vehicleDialog.vehicle.id, payload) : createVehicle(payload)
-        }
+        onSubmit={handleSaveVehicle}
         onAddMaintenance={(vehicle) => setMaintenanceDialog({ client: vehicleDialog.client, vehicle })}
       />
 
@@ -590,7 +658,7 @@ export default function ClientsPage({ userPermissions }) {
         options={options.maintenanceSubitems || []}
         open={Boolean(maintenanceDialog.vehicle)}
         onClose={() => setMaintenanceDialog({ client: null, vehicle: null })}
-        onSubmit={(vehicleId, payload) => addVehicleMaintenance(vehicleId, payload)}
+        onSubmit={handleAddMaintenance}
       />
 
       <DeleteClientDialog
@@ -602,7 +670,7 @@ export default function ClientsPage({ userPermissions }) {
             : `Se eliminará el cliente ${deleteDialog.client ? clientName(deleteDialog.client) : ""}.`
         }
         onClose={() => setDeleteDialog({ type: null, client: null, vehicle: null })}
-        onConfirm={() => (deleteDialog.type === "vehicle" ? deleteVehicle(deleteDialog.vehicle.id) : deleteClient(deleteDialog.client.id))}
+        onConfirm={handleDeleteRecord}
       />
     </div>
   );

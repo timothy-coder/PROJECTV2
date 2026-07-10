@@ -25,6 +25,8 @@ export async function GET() {
               h.numerofactura, h.preciocompra, h.precioventa,
               h.created_at, h.created_at_facturacion, h.created_at_llegadaalcentro,
               h.created_at_entrega, h.updated_at,
+              COALESCE(ev.eventos_count, 0) AS eventos_count,
+              ev.ultimo_evento_at,
               rd.reserva_id AS reserva_id,
               r.estado AS reserva_estado,
               o.oportunidad_id AS oportunidad_code,
@@ -37,6 +39,11 @@ export async function GET() {
        LEFT JOIN ventas_reserva_detalles rd ON rd.vin = h.vin
        LEFT JOIN ventas_reservas r ON r.id = rd.reserva_id
        LEFT JOIN ventas_oportunidades o ON o.id = r.oportunidad_id
+       LEFT JOIN (
+         SELECT vin, COUNT(*) AS eventos_count, MAX(created_at) AS ultimo_evento_at
+         FROM ventas_historial_carros_eventos
+         GROUP BY vin
+       ) ev ON ev.vin = h.vin
        ORDER BY h.created_at DESC`
     );
     const [pendingPurchaseRows] = await pool.query(
@@ -103,6 +110,9 @@ export async function GET() {
         reservaEstado: row.reserva_estado || "",
         oportunidadCode: row.oportunidad_code || "",
         enReserva: Boolean(row.reserva_id),
+        vendido: Number(row.eventos_count || 0) > 0,
+        eventosCount: Number(row.eventos_count || 0),
+        ultimoEventoAt: row.ultimo_evento_at,
       })),
       pendingPurchases: pendingPurchaseRows.map((row) => ({
         reservaId: row.reserva_id,

@@ -45,9 +45,28 @@ async function loadRoles() {
   }
 }
 
+async function loadPermissionProfiles() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, nombre, permissions
+       FROM administracion_perfiles_permisos
+       ORDER BY nombre ASC`
+    );
+
+    return rows.map((row) => ({
+      id: Number(row.id),
+      nombre: row.nombre,
+      permissions: safeJson(row.permissions, {}),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function loadOptions() {
-  const [roles, centrosRows, talleresRows, mostradoresRows] = await Promise.all([
+  const [roles, permissionProfiles, centrosRows, talleresRows, mostradoresRows] = await Promise.all([
     loadRoles(),
+    loadPermissionProfiles(),
     pool.query(`SELECT id, nombre FROM configuracion_centros ORDER BY nombre ASC`),
     pool.query(
       `SELECT t.id, t.centro_id, t.nombre, c.nombre AS centro_nombre
@@ -65,6 +84,7 @@ async function loadOptions() {
 
   return {
     roles,
+    permissionProfiles,
     centros: centrosRows[0].map((row) => ({ id: row.id, nombre: row.nombre })),
     talleres: talleresRows[0].map((row) => ({
       id: row.id,

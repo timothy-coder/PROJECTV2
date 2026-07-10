@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Calendar, Copy, Eye, FileText, Gift, Info as InfoIcon, Link, MessageSquare, MoreVertical, Package, Pencil, Plus, RotateCcw, Send, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { apiFetch } from "@/app/api/client";
 import { ClientDialog } from "@/components/clients/ClientDialog";
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -29,6 +30,15 @@ export default function OpportunityDetailPage({ id }) {
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre.toLowerCase() === "nuevo");
   const canEditClient = hasPerm(currentUser.permissions || {}, ["clientes", "edit"]);
+  async function saveWithToast(payload, successMessage) {
+    try {
+      await save(payload);
+      toast.success(successMessage || opportunityActionMessage(payload));
+    } catch (error) {
+      toast.error(error?.message || "No se pudo guardar la accion.");
+      throw error;
+    }
+  }
   return (
     <TooltipProvider>
       <div className="min-h-full bg-slate-50 p-3 text-slate-950 sm:p-4">
@@ -43,7 +53,7 @@ export default function OpportunityDetailPage({ id }) {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {currentUser.canViewAll && newStage ? (
-                <Button variant="outline" size="sm" className="hidden border-orange-300 text-xs text-orange-600 sm:inline-flex" onClick={() => save({ action: "stage", etapaId: newStage.id, skipAutoAttention: true })}>
+                <Button variant="outline" size="sm" className="hidden border-orange-300 text-xs text-orange-600 sm:inline-flex" onClick={() => saveWithToast({ action: "stage", etapaId: newStage.id, skipAutoAttention: true })}>
                   <RotateCcw className="size-3.5" />Inicio
                 </Button>
               ) : null}
@@ -54,7 +64,7 @@ export default function OpportunityDetailPage({ id }) {
             </div>
           </div>
           {currentUser.canViewAll && newStage ? (
-            <Button variant="outline" size="sm" className="mb-3 w-full border-orange-300 text-xs text-orange-600 sm:hidden" onClick={() => save({ action: "stage", etapaId: newStage.id, skipAutoAttention: true })}>
+            <Button variant="outline" size="sm" className="mb-3 w-full border-orange-300 text-xs text-orange-600 sm:hidden" onClick={() => saveWithToast({ action: "stage", etapaId: newStage.id, skipAutoAttention: true })}>
               <RotateCcw className="size-3.5" />Devolver al inicio
             </Button>
           ) : null}
@@ -71,19 +81,19 @@ export default function OpportunityDetailPage({ id }) {
         </header>
         <InfoSection opportunity={opportunity} canEditClient={canEditClient} onEditClient={() => setClientDialogOpen(true)} />
         <div className="mb-4 grid gap-3 lg:grid-cols-2">
-          <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={async () => { if (activity.trim()) { await save({ action: "activity", detalle: activity.trim() }); setActivity(""); } }} />
-          <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={async () => { if (agenda.fechaAgenda && agenda.horaAgenda) { await save({ action: "agenda", ...agenda }); setAgenda({ fechaAgenda: "", horaAgenda: "" }); } }} />
+          <ActivitySection activity={activity} setActivity={setActivity} activities={activities} onSubmit={async () => { if (activity.trim()) { await saveWithToast({ action: "activity", detalle: activity.trim() }); setActivity(""); } }} />
+          <AgendaSection details={details} agenda={agenda} setAgenda={setAgenda} onSubmit={async () => { if (agenda.fechaAgenda && agenda.horaAgenda) { await saveWithToast({ action: "agenda", ...agenda }); setAgenda({ fechaAgenda: "", horaAgenda: "" }); } }} />
         </div>
-        <InterestSection items={interest} onOpen={(item) => setDialog({ type: "interest", item })} onQuote={(item) => setDialog({ type: "quote", item })} onDelete={(item) => setConfirmDelete({ title: "Eliminar vehiculo de interes", description: `${item.marca || ""} ${item.modelo || ""}`.trim() || "Este vehiculo de interes", onConfirm: () => save({ action: "interest", deleteId: item.id }) })} />
-        <QuotesSection items={quotes} options={options} userPermissions={currentUser.permissions || {}} onOpen={() => setDialog({ type: "quote", item: null })} onEdit={(item) => setDialog({ type: "quote", item })} onAction={save} onConfirmDelete={setConfirmDelete} />
-        <ReservationsSection items={reservations || []} onDelete={(item) => setConfirmDelete({ title: "Eliminar reserva", description: `Reserva ID ${item.id}`, onConfirm: () => save({ action: "reservation-delete", reservaId: item.id }) })} />
-        <TestDriveSection items={testDrives} onOpen={(item = null) => setDialog({ type: "testdrive", item })} onAction={(payload) => save({ action: "testdrive", ...payload })} />
+        <InterestSection items={interest} onOpen={(item) => setDialog({ type: "interest", item })} onQuote={(item) => setDialog({ type: "quote", item })} onDelete={(item) => setConfirmDelete({ title: "Eliminar vehiculo de interes", description: `${item.marca || ""} ${item.modelo || ""}`.trim() || "Este vehiculo de interes", onConfirm: () => saveWithToast({ action: "interest", deleteId: item.id }) })} />
+        <QuotesSection items={quotes} options={options} userPermissions={currentUser.permissions || {}} onOpen={() => setDialog({ type: "quote", item: null })} onEdit={(item) => setDialog({ type: "quote", item })} onAction={saveWithToast} onConfirmDelete={setConfirmDelete} />
+        <ReservationsSection items={reservations || []} onDelete={(item) => setConfirmDelete({ title: "Eliminar reserva", description: `Reserva ID ${item.id}`, onConfirm: () => saveWithToast({ action: "reservation-delete", reservaId: item.id }) })} />
+        <TestDriveSection items={testDrives} onOpen={(item = null) => setDialog({ type: "testdrive", item })} onAction={(payload) => saveWithToast({ action: "testdrive", ...payload })} />
         <ClosureSection items={closures} onOpen={() => setDialog({ type: "closure", item: null })} />
         {confirmDelete ? <ConfirmDeleteDialog state={confirmDelete} onClose={() => setConfirmDelete(null)} /> : null}
-        {dialog.type === "interest" ? <InterestDialog state={dialog} clientId={opportunity.clienteId} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "interest", ...payload })} /> : null}
-        {dialog.type === "quote" ? <EditableQuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "quote", ...payload })} /> : null}
-        {dialog.type === "testdrive" ? <TestDriveDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "testdrive", ...payload })} /> : null}
-        {dialog.type === "closure" ? <ClosureDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => save({ action: "closure", ...payload })} /> : null}
+        {dialog.type === "interest" ? <InterestDialog state={dialog} clientId={opportunity.clienteId} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => saveWithToast({ action: "interest", ...payload })} /> : null}
+        {dialog.type === "quote" ? <EditableQuoteDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => saveWithToast({ action: "quote", ...payload })} /> : null}
+        {dialog.type === "testdrive" ? <TestDriveDialog state={dialog} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => saveWithToast({ action: "testdrive", ...payload })} /> : null}
+        {dialog.type === "closure" ? <ClosureDialog options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => saveWithToast({ action: "closure", ...payload })} /> : null}
         <OpportunitySummaryDialog
           open={summaryOpen}
           onClose={() => setSummaryOpen(false)}
@@ -102,13 +112,43 @@ export default function OpportunityDetailPage({ id }) {
           options={options}
           onClose={() => setClientDialogOpen(false)}
           onSubmit={async (payload) => {
-            await apiFetch(`/api/clients/${opportunity.clienteId}`, { method: "PUT", body: JSON.stringify(payload) });
-            await reload({ showLoading: false });
+            const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+            try {
+              await apiFetch(`/api/clients/${opportunity.clienteId}`, { method: "PUT", body: JSON.stringify(payload) });
+              await reload({ showLoading: false });
+              if (typeof window !== "undefined") window.scrollTo({ top: scrollY, left: 0, behavior: "auto" });
+              toast.success("Cliente actualizado correctamente.");
+            } catch (error) {
+              toast.error(error?.message || "No se pudo actualizar el cliente.");
+              throw error;
+            }
           }}
         />
       </div>
     </TooltipProvider>
   );
+}
+
+function opportunityActionMessage(payload = {}) {
+  const action = payload.action;
+  const isEdit = Boolean(payload.id);
+  const messages = {
+    stage: "Etapa actualizada correctamente.",
+    activity: "Actividad registrada correctamente.",
+    agenda: "Agenda registrada correctamente.",
+    interest: payload.deleteId ? "Vehiculo de interes eliminado correctamente." : isEdit ? "Vehiculo de interes actualizado correctamente." : "Vehiculo de interes agregado correctamente.",
+    quote: isEdit ? "Cotizacion actualizada correctamente." : "Cotizacion creada correctamente.",
+    "quote-add-accessory": "Accesorio agregado correctamente.",
+    "quote-add-gift": "Regalo agregado correctamente.",
+    "quote-reserve": "Nota de pedido creada correctamente.",
+    "quote-duplicate": "Cotizacion duplicada correctamente.",
+    "quote-public-link": "Enlace publico generado correctamente.",
+    "quote-cancel": "Cotizacion cancelada correctamente.",
+    "reservation-delete": "Reserva eliminada correctamente.",
+    testdrive: isEdit ? "Test drive actualizado correctamente." : "Test drive registrado correctamente.",
+    closure: "Cierre registrado correctamente.",
+  };
+  return messages[action] || "Accion guardada correctamente.";
 }
 
 function InfoSection({ opportunity, canEditClient, onEditClient }) {
@@ -369,9 +409,12 @@ function ConfirmDeleteDialog({ state, onClose }) {
             disabled={submitting}
             onClick={async () => {
               setSubmitting(true);
-              await state.onConfirm();
-              setSubmitting(false);
-              onClose();
+              try {
+                await state.onConfirm();
+                onClose();
+              } finally {
+                setSubmitting(false);
+              }
             }}
           >
             Eliminar

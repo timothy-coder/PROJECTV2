@@ -39,6 +39,7 @@ export default function CarPricesPage({ userPermissions }) {
   const canImport = hasPerm(userPermissions, ["inventariocarros", "import"]);
   const canExport = hasPerm(userPermissions, ["inventariocarros", "export"]);
   const canHistory = hasPerm(userPermissions, ["inventariocarros", "history"]);
+  const canDeliveredCars = hasPerm(userPermissions, ["inventariocarros", "delivered"]);
   const canCreateHistory = hasPerm(userPermissions, ["inventariocarros", "history_create"]);
   const canHistoryEdit = hasPerm(userPermissions, ["inventariocarros", "history_edit"]);
   const canHistoryImport = hasPerm(userPermissions, ["inventariocarros", "history_import"]);
@@ -47,9 +48,12 @@ export default function CarPricesPage({ userPermissions }) {
   const availableViews = useMemo(() => [
     canView ? "prices" : null,
     canHistory ? "history" : null,
+    canDeliveredCars ? "sold" : null,
     canPendingPurchase ? "pending" : null,
-  ].filter(Boolean), [canHistory, canPendingPurchase, canView]);
+  ].filter(Boolean), [canDeliveredCars, canHistory, canPendingPurchase, canView]);
   const activeView = availableViews.includes(view) ? view : availableViews[0] || "prices";
+  const inventoryHistory = useMemo(() => data.history.filter((item) => !item.vendido), [data.history]);
+  const soldHistory = useMemo(() => data.history.filter((item) => item.vendido), [data.history]);
 
   const filteredPrices = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
@@ -87,7 +91,7 @@ export default function CarPricesPage({ userPermissions }) {
 
   async function exportInventory() {
     const XLSX = await import("xlsx");
-    const rows = data.history.map((item) => ({
+    const rows = inventoryHistory.map((item) => ({
       vin: item.vin,
       marca: item.marcaName,
       modelo: item.modeloName,
@@ -214,6 +218,7 @@ export default function CarPricesPage({ userPermissions }) {
         <div className="flex min-w-max gap-1">
           {canView ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "prices" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("prices")}>Precios</button> : null}
           {canHistory ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "history" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("history")}>Inventario</button> : null}
+          {canDeliveredCars ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "sold" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("sold")}>Carros entregados</button> : null}
           {canPendingPurchase ? <button className={`h-8 rounded-md px-6 text-xs font-bold ${activeView === "pending" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("pending")}>Pendientes de compra</button> : null}
         </div>
       </div>
@@ -305,7 +310,8 @@ export default function CarPricesPage({ userPermissions }) {
         </div>
       </section> : null}
 
-      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={data.history} canEdit={canHistoryEdit} canCreate={canCreateHistory} onCreate={() => setHistoryDialog({ open: true })} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
+      {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={inventoryHistory} canEdit={canHistoryEdit} canCreate={canCreateHistory} onCreate={() => setHistoryDialog({ open: true })} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
+      {activeView === "sold" && canDeliveredCars ? <HistorySection loading={data.loading} history={soldHistory} canEdit={canHistoryEdit} canCreate={false} onEdit={(item) => setHistoryDialog({ open: true, item })} title="Carros entregados" description="Unidades con registro de entrega" emptyMessage="No hay carros entregados registrados." /> : null}
       {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
@@ -481,7 +487,17 @@ function DeleteDialog({ state, onClose, onConfirm }) {
   );
 }
 
-function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit }) {
+function HistorySection({
+  loading,
+  history,
+  canEdit,
+  canCreate,
+  onCreate,
+  onEdit,
+  title = "Inventario de Carros",
+  description = "Consulta VIN, factura, precios y fechas del carro",
+  emptyMessage = "No hay historial registrado.",
+}) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ marca: "", modelo: "" });
   const [sort, setSort] = useState({ key: "createdAt", direction: "desc" });
@@ -503,8 +519,8 @@ function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit
       <div className="shrink-0 space-y-2 border-b border-slate-200 px-3 py-2">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold text-violet-700"><History className="size-4" />Inventario de Carros</h2>
-          <p className="text-[11px] font-medium text-slate-500">Consulta VIN, factura, precios y fechas del carro</p>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-violet-700"><History className="size-4" />{title}</h2>
+          <p className="text-[11px] font-medium text-slate-500">{description}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative">
@@ -561,7 +577,7 @@ function HistorySection({ loading, history, canEdit, canCreate, onCreate, onEdit
                 {canEdit ? <td className="px-3 py-3 text-right"><Button variant="outline" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button></td> : null}
               </tr>
             ))}
-            {!loading && sortedHistory.length === 0 ? <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500">No hay historial registrado.</td></tr> : null}
+            {!loading && sortedHistory.length === 0 ? <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500">{emptyMessage}</td></tr> : null}
           </tbody>
         </table>
       </div>

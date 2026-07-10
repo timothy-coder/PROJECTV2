@@ -307,8 +307,18 @@ export async function GET(request) {
          WHERE activo = 1
          ORDER BY minutos_desde ASC`
       );
+      const [[inventoryRow]] = await pool.query(
+        `SELECT COUNT(*) AS total
+         FROM ventas_historial_carros h
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM ventas_historial_carros_eventos e
+           WHERE e.vin = h.vin
+         )`
+      );
       return NextResponse.json({
         rows,
+        inventoryVehicles: Number(inventoryRow?.total || 0),
         timeStates: timeRows.map((row) => ({
           id: row.id,
           nombre: row.nombre,

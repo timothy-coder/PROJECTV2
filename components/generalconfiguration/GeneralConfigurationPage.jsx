@@ -11,6 +11,7 @@ import { CurrencyTab } from "@/components/generalconfiguration/tabs/currency/Cur
 import { LinksTab } from "@/components/generalconfiguration/tabs/links/LinksTab";
 import { MotivesTab } from "@/components/generalconfiguration/tabs/motives/MotivesTab";
 import { OriginsTab } from "@/components/generalconfiguration/tabs/origins/OriginsTab";
+import { PermissionProfilesTab } from "@/components/generalconfiguration/tabs/permission-profiles/PermissionProfilesTab";
 import { PlaceholderTab } from "@/components/generalconfiguration/tabs/PlaceholderTab";
 import { RatesTab } from "@/components/generalconfiguration/tabs/rates/RatesTab";
 import { RolesTab } from "@/components/generalconfiguration/tabs/roles/RolesTab";
@@ -89,6 +90,11 @@ export default function GeneralConfigurationPage({ userPermissions }) {
             />
           ) : activeConfig.id === "roles" ? (
             <RolesTab
+              tab={activeConfig}
+              userPermissions={userPermissions}
+            />
+          ) : activeConfig.id === "perfiles-permisos" ? (
+            <PermissionProfilesTab
               tab={activeConfig}
               userPermissions={userPermissions}
             />

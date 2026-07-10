@@ -109,6 +109,95 @@ function normalizeDateTime(value) {
   return value ? String(value).replace("T", " ").slice(0, 19) : null;
 }
 
+function reservationStatusLabel(status) {
+  const labels = {
+    enviado_firma: "Enviado para firmar",
+    firmado: "Firmado",
+    observado: "Observado",
+    subsanado: "Subsanado",
+    borrador: "Borrador",
+  };
+  return labels[String(status || "").toLowerCase()] || String(status || "").replaceAll("_", " ");
+}
+
+async function createReservationNotification(connection, { title, message, type = "info", icon = "FileText", url, createdBy }) {
+  const [result] = await connection.query(
+    `INSERT INTO notificaciones (titulo, mensaje, tipo, icono, url, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+    [title, message, type, icon, url, createdBy || null]
+  );
+  return result.insertId;
+}
+
+async function notifyReservationRole(connection, { roleName, notificationId }) {
+  const [roles] = await connection.query(
+    `SELECT id
+     FROM configuracion_roles
+     WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))`,
+    [roleName]
+  );
+  if (!roles.length) return;
+
+  await connection.query(
+    `INSERT IGNORE INTO notificacion_roles (notificacion_id, role_id) VALUES ?`,
+    [roles.map((role) => [notificationId, role.id])]
+  );
+}
+
+async function notifyReservationUser(connection, { userId, notificationId }) {
+  if (!userId) return;
+  await connection.query(
+    `INSERT IGNORE INTO notificacion_usuarios (notificacion_id, usuario_id) VALUES (?, ?)`,
+    [notificationId, userId]
+  );
+}
+
+async function loadReservationNotificationInfo(connection, reservationId) {
+  const [[row]] = await connection.query(
+    `SELECT
+        r.id,
+        r.created_by,
+        r.oportunidad_id,
+        o.oportunidad_id AS oportunidad_code,
+        CONCAT_WS(' ', c.nombre, c.apellido) AS cliente_nombre
+     FROM ventas_reservas r
+     LEFT JOIN ventas_oportunidades o ON o.id = r.oportunidad_id
+     LEFT JOIN administracion_clientes c ON c.id = o.cliente_id
+     WHERE r.id = ?
+     LIMIT 1`,
+    [reservationId]
+  );
+  return row || null;
+}
+
+async function notifyReservationStatusChange(connection, { reservationId, nextStatus, changedBy }) {
+  const status = String(nextStatus || "").toLowerCase();
+  if (!["enviado_firma", "firmado", "observado"].includes(status)) return;
+
+  const info = await loadReservationNotificationInfo(connection, reservationId);
+  if (!info) return;
+
+  const url = `/reservas/${reservationId}`;
+  const code = info.oportunidad_code || `Reserva ${reservationId}`;
+  const client = String(info.cliente_nombre || "").trim() || "cliente sin nombre";
+  const label = reservationStatusLabel(status);
+  const notificationId = await createReservationNotification(connection, {
+    title: `Nota de pedido ${label}`,
+    message: `La nota de pedido N° ${reservationId} de ${client} (${code}) cambio a estado ${label}.`,
+    type: status === "observado" ? "warning" : "info",
+    icon: status === "firmado" ? "CheckCircle2" : "FileText",
+    url,
+    createdBy: changedBy,
+  });
+
+  if (status === "enviado_firma") {
+    await notifyReservationRole(connection, { roleName: "Jefe de ventas", notificationId });
+    return;
+  }
+
+  await notifyReservationUser(connection, { userId: info.created_by, notificationId });
+}
+
 async function quoteItemsTotal(connection, cotizacionId) {
   if (!cotizacionId) return 0;
   const [[row]] = await connection.query(
@@ -714,6 +803,11 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ message: "No tienes permiso para ese cambio de estado o la transicion no es valida." }, { status: 403 });
       }
       await connection.query(`UPDATE ventas_reservas SET estado=?, observaciones=COALESCE(?, observaciones) WHERE id=?`, [body.status, body.observaciones ?? null, id]);
+      await notifyReservationStatusChange(connection, {
+        reservationId: id,
+        nextStatus,
+        changedBy: user.id,
+      });
     }
     if (body.detail) {
       const d = body.detail;

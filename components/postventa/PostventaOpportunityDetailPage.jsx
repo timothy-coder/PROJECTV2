@@ -40,15 +40,26 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const newStage = stages.find((stage) => stage.nombre?.toLowerCase() === "nuevo");
   const isClosed = String(opportunity.etapaNombre || "").toLowerCase().includes("cerrad");
 
+  async function runAction(action, successMessage) {
+    try {
+      const result = await action();
+      toast.success(successMessage);
+      return result;
+    } catch (error) {
+      toast.error(error?.message || "No se pudo completar la accion.");
+      throw error;
+    }
+  }
+
   async function addActivity() {
     if (!activity.trim()) return;
-    await save({ action: "activity", detalle: activity });
+    await runAction(() => save({ action: "activity", detalle: activity }), "Actividad registrada correctamente.");
     setActivity("");
   }
 
   async function addAgenda() {
     if (!agenda.fechaAgenda || !agenda.horaAgenda) return;
-    await save({ action: "agenda", ...agenda });
+    await runAction(() => save({ action: "agenda", ...agenda }), "Agenda registrada correctamente.");
     setAgenda({ fechaAgenda: "", horaAgenda: "" });
   }
 
@@ -57,9 +68,11 @@ export default function PostventaOpportunityDetailPage({ id }) {
       toast.error("Completa la fecha, el kilometraje y el submantenimiento.");
       return;
     }
-    await save({ action: "maintenance", ...maintenance });
+    await runAction(
+      () => save({ action: "maintenance", ...maintenance }),
+      "Mantenimiento registrado, etapa actualizada y proximo mantenimiento recalculado."
+    );
     setMaintenance({ fechaVisitaTaller: todayInputDate(), kilometrajeTaller: "", submantenimientoId: "" });
-    toast.success("Mantenimiento registrado, etapa actualizada a Cita efectiva y proximo mantenimiento recalculado");
   }
 
   return (
@@ -76,7 +89,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {currentUser.canViewAll && newStage ? (
-                <Button variant="outline" size="sm" className="hidden border-orange-300 text-xs text-orange-600 sm:inline-flex" onClick={() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" })}>
+                <Button variant="outline" size="sm" className="hidden border-orange-300 text-xs text-orange-600 sm:inline-flex" onClick={() => runAction(() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" }), "Etapa actualizada correctamente.")}>
                   <RotateCcw className="size-3.5" />Inicio
                 </Button>
               ) : null}
@@ -84,7 +97,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
             </div>
           </div>
           {currentUser.canViewAll && newStage ? (
-            <Button variant="outline" size="sm" className="mb-3 w-full border-orange-300 text-xs text-orange-600 sm:hidden" onClick={() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" })}>
+            <Button variant="outline" size="sm" className="mb-3 w-full border-orange-300 text-xs text-orange-600 sm:hidden" onClick={() => runAction(() => save({ action: "stage", etapaId: newStage.id, detalle: "Devolver al inicio" }), "Etapa actualizada correctamente.")}>
               <RotateCcw className="size-3.5" />Devolver al inicio
             </Button>
           ) : null}
@@ -94,7 +107,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
                 key={stage.id}
                 type="button"
                 className="flex shrink-0 items-center sm:flex-1 sm:shrink"
-                onClick={() => save({ action: "stage", etapaId: stage.id, detalle: `Cambio de etapa a ${stage.nombre}` })}
+                onClick={() => runAction(() => save({ action: "stage", etapaId: stage.id, detalle: `Cambio de etapa a ${stage.nombre}` }), "Etapa actualizada correctamente.")}
               >
                 <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${index <= currentIndex ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
                   {stage.nombre}
@@ -141,7 +154,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
             item={editingActivity}
             onClose={() => setEditingActivity(null)}
             onSubmit={async (payload) => {
-              await save({ action: "activity-update", ...payload });
+              await runAction(() => save({ action: "activity-update", ...payload }), "Actividad actualizada correctamente.");
               setEditingActivity(null);
             }}
           />
@@ -159,17 +172,20 @@ export default function PostventaOpportunityDetailPage({ id }) {
               }}
               onCancel={() => setQuoteOpen(false)}
               onSubmit={async (payload) => {
-                const result = await quoteData.createQuote({
-                  ...payload,
-                  clienteId: payload.clienteId || opportunity.clienteId,
-                  oportunidadId: opportunity.id,
-                  descripcion: payload.descripcion || `Cotizacion para ${opportunity.code}`,
-                });
+                const result = await runAction(
+                  () => quoteData.createQuote({
+                    ...payload,
+                    clienteId: payload.clienteId || opportunity.clienteId,
+                    oportunidadId: opportunity.id,
+                    descripcion: payload.descripcion || `Cotizacion para ${opportunity.code}`,
+                  }),
+                  "Cotizacion creada correctamente."
+                );
                 const link = result.token ? `${window.location.origin}/cotizacion-posventa/${result.token}` : "";
                 setCreatedQuote({ id: result.id, token: result.token, link });
                 setQuoteOpen(false);
                 if (link) await navigator.clipboard?.writeText(link);
-                toast.success(link ? "Cotizacion creada y enlace publico copiado" : "Cotizacion creada");
+                if (link) toast.success("Enlace publico copiado correctamente.");
               }}
             />
           </DialogContent>
@@ -180,9 +196,8 @@ export default function PostventaOpportunityDetailPage({ id }) {
             options={appointmentOptions}
             onClose={() => setAppointmentOpen(false)}
             onSubmit={async (payload) => {
-              const result = await createAppointment(payload);
+              const result = await runAction(() => createAppointment(payload), "Cita de PostVenta creada correctamente.");
               setAppointmentOpen(false);
-              toast.success("Cita de PostVenta creada");
               if (result?.id) window.location.href = `/citaspv?id=${result.id}`;
             }}
           />
@@ -194,9 +209,8 @@ export default function PostventaOpportunityDetailPage({ id }) {
             initial={editingAppointment}
             onClose={() => setEditingAppointment(null)}
             onSubmit={async (payload) => {
-              await updateAppointment(editingAppointment.id, payload);
+              await runAction(() => updateAppointment(editingAppointment.id, payload), "Cita de PostVenta actualizada correctamente.");
               setEditingAppointment(null);
-              toast.success("Cita de PostVenta actualizada");
             }}
           />
         ) : null}
@@ -205,9 +219,8 @@ export default function PostventaOpportunityDetailPage({ id }) {
             options={closings}
             onClose={() => setCloseOpen(false)}
             onSubmit={async (payload) => {
-              await save({ action: "close", ...payload });
+              await runAction(() => save({ action: "close", ...payload }), "Oportunidad cerrada correctamente.");
               setCloseOpen(false);
-              toast.success("Oportunidad cerrada");
             }}
           />
         ) : null}
@@ -216,9 +229,8 @@ export default function PostventaOpportunityDetailPage({ id }) {
             opportunity={opportunity}
             onClose={() => setClientEditOpen(false)}
             onSubmit={async (payload) => {
-              await updateClientData(payload);
+              await runAction(() => updateClientData(payload), "Datos del cliente actualizados correctamente.");
               setClientEditOpen(false);
-              toast.success("Datos del cliente actualizados");
             }}
           />
         ) : null}
@@ -245,8 +257,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
           options={vehicleOptions}
           onClose={() => setVehicleEditOpen(false)}
           onSubmit={async (payload) => {
-            await updateVehicleData(payload);
-            toast.success("Datos del vehiculo actualizados");
+            await runAction(() => updateVehicleData(payload), "Datos del vehiculo actualizados correctamente.");
           }}
         />
       </div>
@@ -255,8 +266,10 @@ export default function PostventaOpportunityDetailPage({ id }) {
 
   async function copyCreatedQuoteLink() {
     if (!createdQuote?.link) return;
-    await navigator.clipboard?.writeText(createdQuote.link);
-    toast.success("Enlace publico copiado");
+    await runAction(
+      () => navigator.clipboard?.writeText(createdQuote.link),
+      "Enlace publico copiado correctamente."
+    );
   }
 }
 
@@ -589,8 +602,8 @@ function MaintenanceSection({ maintenance, setMaintenance, options, onSubmit }) 
           <SearchableSelect
             value={maintenance.submantenimientoId}
             options={submaintenanceOptions}
-            placeholder="Seleccionar mantenimiento"
-            searchPlaceholder="Buscar mantenimiento..."
+            placeholder="Seleccionar submantenimiento"
+            searchPlaceholder="Buscar submantenimiento..."
             onChange={(submantenimientoId) => setMaintenance((current) => ({ ...current, submantenimientoId }))}
           />
         </Field>
@@ -674,7 +687,7 @@ function AppointmentDialog({ opportunity, options, initial, onClose, onSubmit })
             <Field label="Tipo servicio *"><NativeSelect value={form.tipoServicio} onChange={(event) => setForm((current) => ({ ...current, tipoServicio: event.target.value }))} options={[["TALLER", "Taller"], ["PLANCHADO_PINTURA", "Planchado y pintura"]]} /></Field>
             <Field label="Estado"><NativeSelect value={form.estado} onChange={(event) => setForm((current) => ({ ...current, estado: event.target.value }))} options={[["pendiente", "Pendiente"], ["confirmada", "Confirmada"], ["reprogramada", "Reprogramada"], ["cancelada", "Cancelada"], ["finalizada", "Finalizada"], ["orden creada", "Orden creada"], ["clientenollego", "Cliente no llego"]]} /></Field>
             {isFinalized ? <Field label="KM taller *"><Input required type="number" min="0" value={form.kilometrajeTaller} onChange={(event) => setForm((current) => ({ ...current, kilometrajeTaller: event.target.value }))} /></Field> : null}
-            {isFinalized ? <Field label="Submantenimiento *"><SearchableSelect value={form.submantenimientoId} options={submaintenanceOptions} placeholder="Seleccionar mantenimiento" searchPlaceholder="Buscar mantenimiento..." onChange={(submantenimientoId) => setForm((current) => ({ ...current, submantenimientoId }))} /></Field> : null}
+            {isFinalized ? <Field label="Submantenimiento *"><SearchableSelect value={form.submantenimientoId} options={submaintenanceOptions} placeholder="Seleccionar submantenimiento" searchPlaceholder="Buscar submantenimiento..." onChange={(submantenimientoId) => setForm((current) => ({ ...current, submantenimientoId }))} /></Field> : null}
           </div>
           <Field label="Nota cliente"><Textarea value={form.notaCliente} onChange={(event) => setForm((current) => ({ ...current, notaCliente: event.target.value }))} /></Field>
           <Field label="Nota interna"><Textarea value={form.notaInterna} onChange={(event) => setForm((current) => ({ ...current, notaInterna: event.target.value }))} /></Field>
@@ -741,7 +754,8 @@ function maintenanceSubitemOptions(items = []) {
   return items
     .map((item) => ({
       value: item.id,
-      label: [item.name, item.mantenimientoName].filter(Boolean).join(" - "),
+      label: item.name || "Sin nombre",
+      keywords: [item.name, item.mantenimientoName].filter(Boolean).join(" "),
     }));
 }
 

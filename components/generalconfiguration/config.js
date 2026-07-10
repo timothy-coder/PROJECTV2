@@ -142,10 +142,15 @@ export const configurationTabs = [
     },
   },
   {
-    id: "frecuencia",
-    label: "Frecuencia",
-    icon: CalendarClock,
-    perm: ["configuracion_frecuencia", "view"],
+    id: "perfiles-permisos",
+    label: "Perfiles permisos",
+    icon: ShieldCheck,
+    perm: ["configuracion_perfiles_permisos", "view"],
+    actions: {
+      create: ["configuracion_perfiles_permisos", "create"],
+      edit: ["configuracion_perfiles_permisos", "edit"],
+      delete: ["configuracion_perfiles_permisos", "delete"],
+    },
   },
 ];
 

@@ -22,13 +22,17 @@ export function useCarPrices() {
     return () => clearTimeout(timer);
   }, [reload]);
 
-  const stats = useMemo(() => ({
-    total: data.prices.length,
-    stock: data.history.filter((item) => !item.enReserva).length,
-    pedido: data.pendingPurchases.length,
-    history: data.history.length,
-    pendingPurchases: data.pendingPurchases.length,
-  }), [data.history, data.pendingPurchases.length, data.prices.length]);
+  const stats = useMemo(() => {
+    const inventoryHistory = data.history.filter((item) => !item.vendido);
+    return {
+      total: inventoryHistory.length,
+      stock: inventoryHistory.filter((item) => !item.enReserva).length,
+      pedido: data.pendingPurchases.length,
+      history: inventoryHistory.length,
+      sold: data.history.filter((item) => item.vendido).length,
+      pendingPurchases: data.pendingPurchases.length,
+    };
+  }, [data.history, data.pendingPurchases.length]);
 
   const actions = useMemo(() => ({
     create: async (payload) => { await carPricesApi.create(payload); await reload(); },

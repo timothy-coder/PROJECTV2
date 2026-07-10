@@ -500,6 +500,7 @@ function eventSummary(records, eventKey, filters, label) {
 export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
   const [timeStates, setTimeStates] = useState([]);
+  const [inventoryVehicles, setInventoryVehicles] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
@@ -521,6 +522,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         if (!cancelled) {
           setRows(Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []);
           setTimeStates(Array.isArray(payload?.timeStates) ? payload.timeStates : []);
+          setInventoryVehicles(Number(payload?.inventoryVehicles || 0));
         }
       })
       .catch((error) => {
@@ -574,12 +576,13 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       daysReserve: avg(countedRecords.map((item) => item.daysToReservation)),
       daysClose: avg(countedRecords.map((item) => item.daysToClose)),
       daysFact: avg(countedRecords.map((item) => item.daysToInvoice)),
+      inventoryVehicles,
       virtualQuotes,
       totalViews: countedRecords.reduce((sum, item) => sum + item.totalViews, 0),
       followUp: countedRecords.filter((item) => item.agendaGreen && !isClosedStage(item.stage)).length,
       platformUse: platformBase ? (filteredRecords.reduce((sum, item) => sum + item.platformUseScore, 0) / platformBase) * 100 : 0,
     };
-  }, [countedMetricRecords, countedRecords, filteredRecords, filters]);
+  }, [countedMetricRecords, countedRecords, filteredRecords, filters, inventoryVehicles]);
   const kpiRangeLabel = dateTreeDisplay(filters.dateLevel, filters.dateValue);
   const quoteKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "quoteEvents", filters, "Cotizaciones"), [countedMetricRecords, filters]);
   const reservationKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "reservationEvents", filters, "Reservas"), [countedMetricRecords, filters]);
@@ -660,6 +663,11 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       general: ["Suma de tokens de visita asociados a cotizaciones."],
       details: [`Total contado: ${formatNumber(kpis.virtualQuotes)}.`],
     },
+    inventoryVehicles: {
+      title: "Vehiculos Inventario",
+      general: [`Total general: ${formatNumber(kpis.inventoryVehicles)} vehiculos.`],
+      details: ["Cuenta las unidades en inventario que aun no tienen registro de entrega."],
+    },
     totalViews: {
       title: "Total Vistas",
       general: ["Suma de vistas totales registradas en cotizaciones."],
@@ -715,6 +723,15 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         details: [
           "Resultado por oportunidad:",
           ...opportunityCountLines(countedRecords, "virtualQuoteCount", "Cant Coti Virtuales"),
+        ],
+      },
+      inventoryVehicles: {
+        title: "Vehiculos Inventario",
+        general: [
+          `Total general: ${formatNumber(kpis.inventoryVehicles)} vehiculos.`,
+        ],
+        details: [
+          "Unidades disponibles en inventario sin registro de entrega.",
         ],
       },
       totalViews: {
@@ -827,7 +844,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
             <ReportsLoadingState />
           ) : (
             <>
-              <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-11">
+              <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-12">
                 <Kpi title="Prospectos" value={formatNumber(kpis.prospects)} info={kpiInfoMap.prospects} onInfo={setKpiInfo} />
                 <Kpi title="Pros/Día" value={formatNumber(kpis.prospectsPerDay, 1)} info={kpiInfoMap.prospectsPerDay} onInfo={setKpiInfo} />
                 <Kpi title="Proyectado" value={formatNumber(kpis.projected)} info={kpiInfoMap.projected} onInfo={setKpiInfo} />
@@ -836,6 +853,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 <Kpi title="Días Reserva" value={formatNumber(kpis.daysReserve, 1)} info={kpiInfoMap.daysReserve} onInfo={setKpiInfo} />
                 <Kpi title="Días Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
                 <Kpi title="Días Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
+                <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
                 <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} info={kpiInfoMap.virtualQuotes} onInfo={setKpiInfo} />
                 <Kpi title="Total Vistas" value={formatNumber(kpis.totalViews)} info={kpiInfoMap.totalViews} onInfo={setKpiInfo} />
                 <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />

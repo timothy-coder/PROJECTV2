@@ -4,14 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { usersApi } from "@/app/api/users.api";
 
+const emptyOptions = {
+  roles: [],
+  centros: [],
+  talleres: [],
+  mostradores: [],
+  permissionProfiles: [],
+};
+
 export function useUsers() {
   const [users, setUsers] = useState([]);
-  const [options, setOptions] = useState({
-    roles: [],
-    centros: [],
-    talleres: [],
-    mostradores: [],
-  });
+  const [options, setOptions] = useState(emptyOptions);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -22,7 +25,7 @@ export function useUsers() {
     try {
       const data = await usersApi.list();
       setUsers(data.users || []);
-      setOptions(data.options || { roles: [], centros: [], talleres: [], mostradores: [] });
+      setOptions({ ...emptyOptions, ...(data.options || {}) });
     } catch (err) {
       setError(err.message || "No se pudieron cargar los usuarios.");
       setUsers([]);
@@ -39,7 +42,7 @@ export function useUsers() {
       .then((data) => {
         if (!mounted) return;
         setUsers(data.users || []);
-        setOptions(data.options || { roles: [], centros: [], talleres: [], mostradores: [] });
+        setOptions({ ...emptyOptions, ...(data.options || {}) });
       })
       .catch((err) => {
         if (!mounted) return;

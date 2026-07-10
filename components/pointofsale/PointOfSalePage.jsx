@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Banknote, Barcode, CreditCard, Loader2, MapPin, Minus, PackageSearch, Plus, ReceiptText, Search, ShoppingBag, Trash2, UserRound } from "lucide-react";
 
-import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -31,6 +30,7 @@ export default function PointOfSalePage() {
   const [category, setCategory] = useState("Todos");
   const [brand, setBrand] = useState("Todos");
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [clientText, setClientText] = useState("");
   const [locationProduct, setLocationProduct] = useState(null);
   const [cart, setCart] = useState([]);
 
@@ -43,6 +43,19 @@ export default function PointOfSalePage() {
     () => clientsData.clients.find((client) => Number(client.id) === Number(selectedClientId)) || null,
     [clientsData.clients, selectedClientId]
   );
+
+  function handleClientTextChange(value) {
+    setClientText(value);
+    const clean = value.trim().toLowerCase();
+    const matchedClient = clientsData.clients.find((client) => {
+      const fullName = clientName(client);
+      const optionLabel = [fullName, client.celular, client.identificacionFiscal || client.numeroDocumento].filter(Boolean).join(" - ");
+      return [optionLabel, fullName, client.celular, client.identificacionFiscal, client.numeroDocumento]
+        .filter(Boolean)
+        .some((item) => String(item).trim().toLowerCase() === clean);
+    });
+    setSelectedClientId(matchedClient ? String(matchedClient.id) : "");
+  }
 
   const categories = useMemo(() => {
     const names = new Set(inventory.products.map((product) => product.tipoNombre).filter(Boolean));
@@ -201,12 +214,18 @@ export default function PointOfSalePage() {
           </div>
           <div className="border-b bg-white p-3">
             <p className="mb-1 text-xs font-bold text-violet-700">Cliente</p>
-            <SearchableSelect
-              value={selectedClientId}
-              options={clientOptions}
-              placeholder={clientsData.loading ? "Cargando clientes..." : "Selecciona cliente..."}
-              onChange={setSelectedClientId}
+            <Input
+              value={clientText}
+              list="point-of-sale-client-options"
+              placeholder={clientsData.loading ? "Cargando clientes..." : "Selecciona o escribe cliente..."}
+              onChange={(event) => handleClientTextChange(event.target.value)}
+              className="h-10 bg-white"
             />
+            <datalist id="point-of-sale-client-options">
+              {clientOptions.map((option) => (
+                <option key={option.value} value={option.label} />
+              ))}
+            </datalist>
             {selectedClient ? (
               <div className="mt-2 rounded-md border border-violet-100 bg-violet-50/50 p-2 text-xs">
                 <div className="flex items-center gap-2">
@@ -215,6 +234,16 @@ export default function PointOfSalePage() {
                     <p className="truncate font-bold text-slate-900">{clientName(selectedClient)}</p>
                     <p className="text-slate-500">{selectedClient.celular || "Sin celular"} - {selectedClient.identificacionFiscal || selectedClient.numeroDocumento || "Sin documento"}</p>
                     <p className="truncate text-slate-500">{selectedClient.email || selectedClient.correo || "Sin correo"}</p>
+                  </div>
+                </div>
+              </div>
+            ) : clientText.trim() ? (
+              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <UserRound className="size-4 shrink-0 text-slate-500" />
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-900">{clientText.trim()}</p>
+                    <p className="text-slate-500">Cliente ingresado manualmente</p>
                   </div>
                 </div>
               </div>

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock3, LockKeyhole, Loader2, MapPin, UserRound } from "lucide-react";
+import { Clock3, LockKeyhole, Loader2, MapPin, Plus, Trash2, UserRound } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
-import { USER_PERMISSION_GROUPS, WORK_DAYS, defaultWorkSchedule } from "@/components/users/config";
+import { PERMISSION_ACTION_LABELS, WORK_DAYS, defaultWorkSchedule, getPermissionSections } from "@/components/users/config";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -26,24 +26,14 @@ const tabs = [
   { id: "sites", label: "Sitios", icon: MapPin },
 ];
 
-const permissionActionLabels = {
-  create: "Crear",
-  edit: "Editar",
-  delete: "Eliminar",
-  viewall: "Ver todo",
-  vehicles: "Ver vehiculos",
-  history: "Ver historial",
-  history_create: "Crear carro",
-  pending_purchase: "Pendientes de compra",
-  status: "Cambiar estado",
-  asignar: "Asignar",
-  notify: "Notificar",
-  firm: "Firmar",
-  car_data: "Datos del carro",
-  send_signature: "Enviar a firma",
-  observe: "Observar",
-  subsanate: "Subsanar",
-  sign: "Marcar firmado",
+const SHORT_DAY_KEYS = {
+  monday: "mon",
+  tuesday: "tue",
+  wednesday: "wed",
+  thursday: "thu",
+  friday: "fri",
+  saturday: "sat",
+  sunday: "sun",
 };
 
 function emptyForm() {
@@ -65,6 +55,53 @@ function emptyForm() {
   };
 }
 
+function normalizeDaySchedule(dayKey, schedule = {}) {
+  const shortKey = SHORT_DAY_KEYS[dayKey];
+  const value = schedule[dayKey] || {};
+  const shortValue = shortKey ? schedule[shortKey] || {} : {};
+  const defaultValue = defaultWorkSchedule()[dayKey] || {};
+  const rawSlots = Array.isArray(value.slots) && value.slots.length
+    ? value.slots
+    : Array.isArray(shortValue.slots) && shortValue.slots.length
+      ? shortValue.slots
+      : [{ start: value.start || shortValue.start || defaultValue.start || "08:00", end: value.end || shortValue.end || defaultValue.end || "18:00" }];
+  const slots = rawSlots
+    .map((slot) => ({ start: slot?.start || "08:00", end: slot?.end || "18:00" }))
+    .filter((slot) => slot.start && slot.end);
+  const safeSlots = slots.length ? slots : [{ start: "08:00", end: "18:00" }];
+
+  return {
+    active: value.active ?? defaultValue.active ?? false,
+    start: safeSlots[0].start,
+    end: safeSlots[0].end,
+    slots: safeSlots,
+  };
+}
+
+function normalizeWorkSchedule(schedule = {}) {
+  return Object.fromEntries(WORK_DAYS.map((day) => [day.key, normalizeDaySchedule(day.key, schedule)]));
+}
+
+function serializeWorkSchedule(schedule = {}) {
+  const normalized = normalizeWorkSchedule(schedule);
+  return Object.fromEntries(
+    WORK_DAYS.map((day) => {
+      const value = normalized[day.key];
+      const slots = (value.slots || []).filter((slot) => slot.start && slot.end);
+      const safeSlots = slots.length ? slots : [{ start: value.start || "08:00", end: value.end || "18:00" }];
+      return [
+        day.key,
+        {
+          active: Boolean(value.active),
+          start: safeSlots[0].start,
+          end: safeSlots[0].end,
+          slots: safeSlots,
+        },
+      ];
+    })
+  );
+}
+
 function formFromUser(user) {
   if (!user) return emptyForm();
 
@@ -78,7 +115,7 @@ function formFromUser(user) {
     confirmPassword: "",
     isActive: user.isActive,
     permissions: user.permissions || {},
-    workSchedule: { ...defaultWorkSchedule(), ...(user.workSchedule || {}) },
+    workSchedule: normalizeWorkSchedule(user.workSchedule || {}),
     color: user.color || "#5e17eb",
     centroIds: user.centroIds || [],
     tallerIds: user.tallerIds || [],
@@ -88,6 +125,14 @@ function formFromUser(user) {
 
 function toggleArray(list, value) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+function clonePermissions(permissions) {
+  try {
+    return JSON.parse(JSON.stringify(permissions || {}));
+  } catch {
+    return {};
+  }
 }
 
 export function UserDialog({ open, mode, user, options, onClose, onSubmit }) {
@@ -108,6 +153,7 @@ export function UserDialog({ open, mode, user, options, onClose, onSubmit }) {
 function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
   const [activeTab, setActiveTab] = useState("general");
   const [form, setForm] = useState(formFromUser(user));
+  const [permissionProfileId, setPermissionProfileId] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -115,6 +161,11 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
     () => options.roles.map((role) => ({ value: role.id, label: role.name })),
     [options.roles]
   );
+  const permissionProfileOptions = useMemo(
+    () => (options.permissionProfiles || []).map((profile) => ({ value: profile.id, label: profile.nombre })),
+    [options.permissionProfiles]
+  );
+  const permissionSections = useMemo(() => getPermissionSections(), []);
 
   const readonly = mode === "view";
   const title = mode === "view" ? "Detalle de usuario" : mode === "edit" ? "Editar usuario" : "Nuevo usuario";
@@ -136,6 +187,17 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
     }));
   }
 
+  function applyPermissionProfile(profileId) {
+    setPermissionProfileId(profileId);
+    const profile = (options.permissionProfiles || []).find((item) => String(item.id) === String(profileId));
+    if (!profile) return;
+
+    setForm((current) => ({
+      ...current,
+      permissions: clonePermissions(profile.permissions),
+    }));
+  }
+
   function updateSchedule(day, field, value) {
     setForm((current) => ({
       ...current,
@@ -147,6 +209,64 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
         },
       },
     }));
+  }
+
+  function updateScheduleSlot(day, index, field, value) {
+    setForm((current) => {
+      const dayValue = normalizeDaySchedule(day, current.workSchedule);
+      const slots = [...dayValue.slots];
+      slots[index] = { ...(slots[index] || { start: "08:00", end: "18:00" }), [field]: value };
+      const first = slots[0] || { start: "08:00", end: "18:00" };
+      return {
+        ...current,
+        workSchedule: {
+          ...current.workSchedule,
+          [day]: {
+            ...dayValue,
+            start: first.start,
+            end: first.end,
+            slots,
+          },
+        },
+      };
+    });
+  }
+
+  function addScheduleSlot(day) {
+    setForm((current) => {
+      const dayValue = normalizeDaySchedule(day, current.workSchedule);
+      const slots = [...dayValue.slots, { start: "15:00", end: "18:00" }];
+      return {
+        ...current,
+        workSchedule: {
+          ...current.workSchedule,
+          [day]: {
+            ...dayValue,
+            slots,
+          },
+        },
+      };
+    });
+  }
+
+  function removeScheduleSlot(day, index) {
+    setForm((current) => {
+      const dayValue = normalizeDaySchedule(day, current.workSchedule);
+      const slots = dayValue.slots.filter((_, slotIndex) => slotIndex !== index);
+      const safeSlots = slots.length ? slots : [{ start: "08:00", end: "18:00" }];
+      return {
+        ...current,
+        workSchedule: {
+          ...current.workSchedule,
+          [day]: {
+            ...dayValue,
+            start: safeSlots[0].start,
+            end: safeSlots[0].end,
+            slots: safeSlots,
+          },
+        },
+      };
+    });
   }
 
   async function handleSubmit(event) {
@@ -185,7 +305,7 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
         password: form.password,
         isActive: form.isActive,
         permissions: form.permissions,
-        workSchedule: form.workSchedule,
+        workSchedule: serializeWorkSchedule(form.workSchedule),
         color: form.color,
         centroIds: form.centroIds,
         tallerIds: form.tallerIds,
@@ -203,7 +323,7 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       {/* ✅ SOLO altura fija (para que no cambie por tab). Ancho se queda igual y responsive */}
-      <DialogContent className="h-[85svh] max-w-[min(96vw,760px)] overflow-hidden rounded-lg p-0 text-slate-950 sm:h-[70svh] sm:max-w-[760px]">
+      <DialogContent className="h-[90svh] max-w-[min(98vw,920px)] overflow-hidden rounded-lg p-0 text-slate-950 sm:h-[82svh] sm:max-w-[920px]">
         {/* ✅ el form ocupa toda la altura fija */}
         <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
           <DialogHeader className="border-b border-slate-200 pb-3">
@@ -351,7 +471,7 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
             {activeTab === "schedule" ? (
               <div className="space-y-3">
                 {WORK_DAYS.map((day) => {
-                  const value = form.workSchedule[day.key] || {};
+                  const value = normalizeDaySchedule(day.key, form.workSchedule);
                   return (
                     <div key={day.key} className="rounded-lg border border-slate-200 p-3">
                       <div className="mb-3 flex items-center justify-between">
@@ -372,27 +492,51 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
                           {value.active ? "Activo" : "Inactivo"}
                         </span>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label>Entrada</Label>
-                          <Input
-                            disabled={readonly}
-                            type="time"
-                            value={value.start || "08:00"}
-                            onChange={(event) => updateSchedule(day.key, "start", event.target.value)}
-                            className="h-9 bg-white"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Salida</Label>
-                          <Input
-                            disabled={readonly}
-                            type="time"
-                            value={value.end || "18:00"}
-                            onChange={(event) => updateSchedule(day.key, "end", event.target.value)}
-                            className="h-9 bg-white"
-                          />
-                        </div>
+                      <div className="space-y-2">
+                        {value.slots.map((slot, index) => (
+                          <div key={`${day.key}-${index}`} className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                            <div className="space-y-1">
+                              <Label>Entrada {index + 1}</Label>
+                              <Input
+                                disabled={readonly || !value.active}
+                                type="time"
+                                value={slot.start || "08:00"}
+                                onChange={(event) => updateScheduleSlot(day.key, index, "start", event.target.value)}
+                                className="h-9 bg-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label>Salida {index + 1}</Label>
+                              <Input
+                                disabled={readonly || !value.active}
+                                type="time"
+                                value={slot.end || "18:00"}
+                                onChange={(event) => updateScheduleSlot(day.key, index, "end", event.target.value)}
+                                className="h-9 bg-white"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              disabled={readonly || value.slots.length <= 1}
+                              onClick={() => removeScheduleSlot(day.key, index)}
+                              title="Eliminar turno"
+                            >
+                              <Trash2 className="size-4 text-red-600" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={readonly || !value.active}
+                          onClick={() => addScheduleSlot(day.key)}
+                          className="w-full justify-center border-violet-200 text-violet-700"
+                        >
+                          <Plus className="size-4" />Agregar turno
+                        </Button>
                       </div>
                     </div>
                   );
@@ -402,44 +546,72 @@ function UserDialogContent({ mode, user, options, onClose, onSubmit }) {
 
             {activeTab === "permissions" ? (
               <div className="space-y-3">
-                {USER_PERMISSION_GROUPS.map((group) => (
-                  <div key={group.key} className="rounded-lg border border-slate-200 p-3">
-                    <p className="mb-3 text-sm font-bold text-violet-700">{group.label}</p>
-                    {group.actions.includes("view") ? (
-                      <div className="mb-3 rounded-md border border-violet-100 bg-violet-50 px-3 py-2">
-                        <label className="flex items-center gap-2 text-xs font-bold text-violet-700">
-                          <Checkbox
-                            disabled={readonly}
-                            checked={Boolean(form.permissions[group.key]?.view)}
-                            onCheckedChange={() => togglePermission(group.key, "view")}
-                          />
-                          Ingreso a la pagina
-                        </label>
-                      </div>
-                    ) : null}
-                    <div>
-                      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                        Permisos de botones
-                      </p>
-                      <div className="flex flex-wrap gap-4">
-                        {group.actions
-                          .filter((action) => action !== "view")
-                          .map((action) => (
-                            <label key={action} className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                              <Checkbox
-                                disabled={readonly}
-                                checked={Boolean(form.permissions[group.key]?.[action])}
-                                onCheckedChange={() => togglePermission(group.key, action)}
-                              />
-                              {permissionActionLabels[action] || action}
-                            </label>
-                          ))}
-                        {group.actions.filter((action) => action !== "view").length ? null : (
-                          <span className="text-xs font-medium text-slate-400">Sin botones configurados</span>
-                        )}
-                      </div>
+                <div className="rounded-lg border border-violet-100 bg-violet-50/70 p-3">
+                  <div className="grid gap-2 md:grid-cols-[minmax(240px,360px)_1fr] md:items-end">
+                    <div className="space-y-2">
+                      <Label>Perfil de permisos</Label>
+                      <SearchableSelect
+                        disabled={readonly}
+                        value={permissionProfileId}
+                        options={permissionProfileOptions}
+                        placeholder="Aplicar perfil"
+                        searchPlaceholder="Buscar perfil..."
+                        emptyText="Sin perfiles"
+                        onChange={applyPermissionProfile}
+                      />
                     </div>
+                    <p className="text-xs font-medium leading-relaxed text-slate-600">
+                      Al escoger un perfil se marcan sus permisos definidos. Puedes modificarlos antes de guardar.
+                    </p>
                   </div>
+                </div>
+                {permissionSections.map((section) => (
+                  <section key={section.label} className="space-y-2">
+                    <div className="sticky top-0 z-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-700">{section.label}</p>
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {section.items.map((group) => (
+                        <div key={group.key} className="rounded-lg border border-slate-200 p-3">
+                          <p className="mb-3 text-sm font-bold text-violet-700">{group.label}</p>
+                          {group.actions.includes("view") ? (
+                            <div className="mb-3 rounded-md border border-violet-100 bg-violet-50 px-3 py-2">
+                              <label className="flex items-center gap-2 text-xs font-bold text-violet-700">
+                                <Checkbox
+                                  disabled={readonly}
+                                  checked={Boolean(form.permissions[group.key]?.view)}
+                                  onCheckedChange={() => togglePermission(group.key, "view")}
+                                />
+                                Ingreso a la pagina
+                              </label>
+                            </div>
+                          ) : null}
+                          <div>
+                            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                              Permisos de botones
+                            </p>
+                            <div className="flex flex-wrap gap-4">
+                              {group.actions
+                                .filter((action) => action !== "view")
+                                .map((action) => (
+                                  <label key={action} className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                                    <Checkbox
+                                      disabled={readonly}
+                                      checked={Boolean(form.permissions[group.key]?.[action])}
+                                      onCheckedChange={() => togglePermission(group.key, action)}
+                                    />
+                                    {PERMISSION_ACTION_LABELS[action] || action}
+                                  </label>
+                                ))}
+                              {group.actions.filter((action) => action !== "view").length ? null : (
+                                <span className="text-xs font-medium text-slate-400">Sin botones configurados</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             ) : null}

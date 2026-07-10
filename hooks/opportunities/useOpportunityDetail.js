@@ -26,7 +26,10 @@ export function useOpportunityDetail(id) {
       await apiFetch(`/api/opportunities/${id}/detail`, { method: "POST", body: JSON.stringify(payload) });
       await reload({ showLoading: false });
       if (typeof window !== "undefined") {
-        requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+        const restoreScroll = () => window.scrollTo({ top: scrollY, left: 0, behavior: "auto" });
+        requestAnimationFrame(restoreScroll);
+        setTimeout(restoreScroll, 50);
+        setTimeout(restoreScroll, 150);
       }
     },
   }), [id, reload]);
