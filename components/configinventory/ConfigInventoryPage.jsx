@@ -222,6 +222,8 @@ function InventorySettingsPanel({ settings, loading, canEdit, onSubmit }) {
     habilitarFechaVencimiento: true,
     habilitarProveedorEnLote: true,
     habilitarTipoMedida: true,
+    habilitarAperturaCaja: false,
+    tcReferencial: 0,
     ...settings,
   });
   const [saving, setSaving] = useState(false);
@@ -251,6 +253,11 @@ function InventorySettingsPanel({ settings, loading, canEdit, onSubmit }) {
       key: "habilitarTipoMedida",
       title: "Tipo de medida",
       description: "Muestra el tipo de medida en productos de inventario.",
+    },
+    {
+      key: "habilitarAperturaCaja",
+      title: "Apertura de caja",
+      description: "Activa el control de apertura de caja para operaciones de inventario.",
     },
   ];
 
@@ -296,6 +303,19 @@ function InventorySettingsPanel({ settings, loading, canEdit, onSubmit }) {
             />
           </label>
         ))}
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <Label className="text-sm font-bold text-slate-950">T.C. referencial</Label>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">Tipo de cambio referencial usado por inventario posventa.</p>
+          <Input
+            type="number"
+            min="0"
+            step="0.0001"
+            className="mt-3 bg-white"
+            value={form.tcReferencial ?? 0}
+            disabled={!canEdit || saving}
+            onChange={(event) => setForm((current) => ({ ...current, tcReferencial: event.target.value }))}
+          />
+        </div>
       </div>
     </div>
   );

@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Banknote, Barcode, CreditCard, Loader2, MapPin, Minus, PackageSearch, Plus, ReceiptText, Search, ShoppingBag, Trash2, UserRound } from "lucide-react";
+import { Banknote, Barcode, CreditCard, Loader2, MapPin, Minus, PackageSearch, Plus, ReceiptText, Search, ShoppingBag, Store, Trash2, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useClients } from "@/hooks/clients/useClients";
+import { usePointOfSaleConfig } from "@/hooks/usePointOfSaleConfig";
 import { usePostInventory } from "@/hooks/postinventory/usePostInventory";
 
 function money(value, symbol = "S/") {
@@ -26,6 +28,7 @@ function clientName(client) {
 export default function PointOfSalePage() {
   const inventory = usePostInventory();
   const clientsData = useClients();
+  const pointOfSale = usePointOfSaleConfig();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Todos");
   const [brand, setBrand] = useState("Todos");
@@ -33,6 +36,8 @@ export default function PointOfSalePage() {
   const [clientText, setClientText] = useState("");
   const [locationProduct, setLocationProduct] = useState(null);
   const [cart, setCart] = useState([]);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState("");
 
   const clientOptions = useMemo(() => clientsData.clients.map((client) => ({
     value: client.id,
@@ -106,6 +111,35 @@ export default function PointOfSalePage() {
     setCart((current) => current.filter((item) => item.id !== productId));
   }
 
+  async function closePointOfSale() {
+    if (!pointOfSale.activePoint) return;
+    setClosing(true);
+    setCloseError("");
+    try {
+      await pointOfSale.close({
+        id: pointOfSale.activePoint.id,
+        montoRecaudado: total,
+      });
+      setCart([]);
+    } catch (error) {
+      setCloseError(error?.message || "No se pudo cerrar el punto de venta.");
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  if (pointOfSale.loading) {
+    return (
+      <main className="grid min-h-[60svh] place-items-center bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+        <span className="inline-flex items-center gap-2"><Loader2 className="size-4 animate-spin" />Cargando punto de venta...</span>
+      </main>
+    );
+  }
+
+  if (pointOfSale.settings?.habilitarAperturaCaja && !pointOfSale.activePoint) {
+    return <OpenPointOfSaleGate pointOfSale={pointOfSale} />;
+  }
+
   return (
     <main className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
       <header className="mb-3 flex flex-col gap-3 border-b border-violet-200 pb-3 lg:flex-row lg:items-center lg:justify-between">
@@ -116,18 +150,27 @@ export default function PointOfSalePage() {
         <div className="grid grid-cols-3 gap-2 text-xs font-semibold sm:flex">
           <div className="rounded-lg border bg-white px-3 py-2 shadow-sm">
             <p className="text-slate-400">Caja</p>
-            <p className="text-violet-700">Principal</p>
+            <p className="text-violet-700">{pointOfSale.activePoint?.codigo || "Libre"}</p>
           </div>
           <div className="rounded-lg border bg-white px-3 py-2 shadow-sm">
-            <p className="text-slate-400">Ticket</p>
-            <p className="text-violet-700">PV-000128</p>
+            <p className="text-slate-400">Apertura</p>
+            <p className="text-violet-700">{pointOfSale.activePoint?.horaApertura || "-"}</p>
           </div>
           <div className="rounded-lg border bg-white px-3 py-2 shadow-sm">
             <p className="text-slate-400">Estado</p>
-            <p className="text-emerald-600">Abierta</p>
+            <p className={pointOfSale.activePoint ? "text-emerald-600" : "text-slate-500"}>{pointOfSale.activePoint ? "Abierta" : "Sin apertura"}</p>
           </div>
+          {pointOfSale.settings?.habilitarAperturaCaja ? (
+            <Button type="button" variant="outline" className="h-auto min-h-12 bg-white text-red-600 hover:bg-red-50" onClick={closePointOfSale} disabled={closing}>
+              {closing ? <Loader2 className="size-4 animate-spin" /> : <Store className="size-4" />}
+              Cerrar caja
+            </Button>
+          ) : null}
         </div>
       </header>
+      {closeError ? (
+        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{closeError}</div>
+      ) : null}
 
       <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_460px] 2xl:grid-cols-[minmax(0,1fr)_520px]">
         <div className="min-w-0 space-y-3">
@@ -320,6 +363,115 @@ export default function PointOfSalePage() {
       </section>
 
       <ProductLocationDialog product={locationProduct} onClose={() => setLocationProduct(null)} />
+    </main>
+  );
+}
+
+function OpenPointOfSaleGate({ pointOfSale }) {
+  const [form, setForm] = useState({
+    codigo: "PV-001",
+    tallerId: "",
+    mostradorId: "",
+    montoInicial: "0",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await pointOfSale.create(form);
+    } catch (nextError) {
+      setError(nextError?.message || "No se pudo abrir el punto de venta.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="grid min-h-[calc(100svh-120px)] place-items-center bg-slate-50 p-4 text-slate-950">
+      <form onSubmit={submit} className="w-full max-w-xl rounded-lg border bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-start gap-3 border-b border-violet-100 pb-3">
+          <div className="grid size-10 shrink-0 place-items-center rounded-md bg-violet-100 text-violet-700">
+            <Store className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-base font-black text-violet-700">Abrir punto de venta</h1>
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
+              La apertura de caja esta activa. Abre una caja para ingresar a ventas.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="pos-code">Codigo</Label>
+            <Input
+              id="pos-code"
+              value={form.codigo}
+              onChange={(event) => updateField("codigo", event.target.value)}
+              placeholder="PV-001"
+              className="h-10 bg-white uppercase"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="pos-workshop">Taller</Label>
+            <select
+              id="pos-workshop"
+              value={form.tallerId}
+              onChange={(event) => updateField("tallerId", event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-white px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            >
+              <option value="">Sin taller</option>
+              {pointOfSale.options.workshops.map((item) => (
+                <option key={item.id} value={item.id}>{item.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="pos-counter">Mostrador</Label>
+            <select
+              id="pos-counter"
+              value={form.mostradorId}
+              onChange={(event) => updateField("mostradorId", event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-white px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            >
+              <option value="">Sin mostrador</option>
+              {pointOfSale.options.counters.map((item) => (
+                <option key={item.id} value={item.id}>{item.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="pos-initial">Monto inicial</Label>
+            <Input
+              id="pos-initial"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.montoInicial}
+              onChange={(event) => updateField("montoInicial", event.target.value)}
+              className="h-10 bg-white"
+            />
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</div>
+        ) : null}
+
+        <Button type="submit" className="mt-4 h-11 w-full bg-violet-700 text-white hover:bg-violet-800" disabled={submitting}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : <Store className="size-4" />}
+          Abrir caja
+        </Button>
+      </form>
     </main>
   );
 }
