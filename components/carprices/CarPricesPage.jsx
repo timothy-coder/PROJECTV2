@@ -28,6 +28,7 @@ export default function CarPricesPage({ userPermissions }) {
   const [filters, setFilters] = useState({ query: "", marcaId: "", modeloId: "", estado: "" });
   const [dialog, setDialog] = useState({ open: false, item: null });
   const [historyDialog, setHistoryDialog] = useState({ open: false });
+  const [eventDialog, setEventDialog] = useState({ open: false, item: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   const [importMessage, setImportMessage] = useState("");
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -53,7 +54,7 @@ export default function CarPricesPage({ userPermissions }) {
   ].filter(Boolean), [canDeliveredCars, canHistory, canPendingPurchase, canView]);
   const activeView = availableViews.includes(view) ? view : availableViews[0] || "prices";
   const inventoryHistory = useMemo(() => data.history.filter((item) => !item.vendido), [data.history]);
-  const soldHistory = useMemo(() => data.history.filter((item) => item.vendido), [data.history]);
+  const soldHistory = data.soldHistory || [];
 
   const filteredPrices = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
@@ -311,7 +312,7 @@ export default function CarPricesPage({ userPermissions }) {
       </section> : null}
 
       {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={inventoryHistory} canEdit={canHistoryEdit} canCreate={canCreateHistory} onCreate={() => setHistoryDialog({ open: true })} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
-      {activeView === "sold" && canDeliveredCars ? <HistorySection loading={data.loading} history={soldHistory} canEdit={canHistoryEdit} canCreate={false} onEdit={(item) => setHistoryDialog({ open: true, item })} title="Carros entregados" description="Unidades con registro de entrega" emptyMessage="No hay carros entregados registrados." showDelivery /> : null}
+      {activeView === "sold" && canDeliveredCars ? <HistorySection loading={data.loading} history={soldHistory} canEdit={canHistoryEdit} canCreate={false} onEdit={(item) => setEventDialog({ open: true, item })} title="Carros entregados" description="Unidades con registro de entrega" emptyMessage="No hay carros entregados registrados." showDelivery /> : null}
       {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
@@ -328,11 +329,20 @@ export default function CarPricesPage({ userPermissions }) {
         />
       ) : null}
       <DeleteDialog state={deleteDialog} onClose={() => setDeleteDialog({ open: false, item: null })} onConfirm={async () => { await data.delete(deleteDialog.item.id); setDeleteDialog({ open: false, item: null }); }} />
+      {eventDialog.open && canHistoryEdit ? (
+        <DeliveryEventDialog
+          item={eventDialog.item}
+          onClose={() => setEventDialog({ open: false, item: null })}
+          onSubmit={async (payload) => {
+            await data.updateEvent(eventDialog.item.eventId, payload);
+            setEventDialog({ open: false, item: null });
+          }}
+        />
+      ) : null}
       {historyDialog.open && canHistory && (historyDialog.item ? canHistoryEdit : canCreateHistory) ? (
         <HistoryDialog
           item={historyDialog.item}
           prices={data.prices}
-          showDelivery={activeView === "sold"}
           onClose={() => setHistoryDialog({ open: false, item: null })}
           onSubmit={async (payload) => {
             if (historyDialog.item) await data.updateHistory(historyDialog.item.vin, payload);
@@ -343,6 +353,51 @@ export default function CarPricesPage({ userPermissions }) {
         />
       ) : null}
     </div>
+  );
+}
+
+function DeliveryEventDialog({ item, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    vin: item?.vin || "",
+    numeroFactura: item?.numeroFactura || "",
+    facturacionAt: dateTimeInputValue(item?.facturacionAt),
+    entregaAt: dateTimeInputValue(item?.entregaAt),
+    entregaPlacaAt: dateTimeInputValue(item?.entregaPlacaAt),
+    placa: item?.placa || "",
+    kilometraje: item?.kilometraje ?? "",
+    observacion: item?.observacion || "",
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[94svh] max-w-[min(96vw,720px)] overflow-y-auto bg-white text-slate-950">
+        <form onSubmit={(event) => { event.preventDefault(); onSubmit(form); }} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-violet-700">Editar carro entregado</DialogTitle>
+            <DialogDescription>Actualiza los datos del registro de entrega.</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="ID"><Input value={item?.eventId || ""} disabled /></Field>
+              <Field label="VIN"><Input value={form.vin} disabled /></Field>
+              <Field label="Numero factura"><Input value={form.numeroFactura} onChange={(event) => setForm((current) => ({ ...current, numeroFactura: event.target.value }))} /></Field>
+              <Field label="Fecha facturacion"><Input type="datetime-local" value={form.facturacionAt} onChange={(event) => setForm((current) => ({ ...current, facturacionAt: event.target.value }))} /></Field>
+              <Field label="Fecha entrega cliente"><Input type="datetime-local" value={form.entregaAt} onChange={(event) => setForm((current) => ({ ...current, entregaAt: event.target.value }))} /></Field>
+              <Field label="Fecha entrega placa"><Input type="datetime-local" value={form.entregaPlacaAt} onChange={(event) => setForm((current) => ({ ...current, entregaPlacaAt: event.target.value }))} /></Field>
+              <Field label="Placa"><Input value={form.placa} onChange={(event) => setForm((current) => ({ ...current, placa: event.target.value }))} /></Field>
+              <Field label="Kilometraje"><Input type="number" value={form.kilometraje} onChange={(event) => setForm((current) => ({ ...current, kilometraje: event.target.value }))} /></Field>
+              <Field label="Creado"><Input value={formatDate(item?.createdAt)} disabled /></Field>
+              <Field label="Actualizado"><Input value={formatDate(item?.updatedAt)} disabled /></Field>
+              <Field label="Observacion" className="sm:col-span-2"><Input value={form.observacion} onChange={(event) => setForm((current) => ({ ...current, observacion: event.target.value }))} /></Field>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" className="bg-violet-700 text-white hover:bg-violet-800">Guardar</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -508,14 +563,17 @@ function HistorySection({
   const modelOptions = useMemo(() => buildOptionList(history.filter((item) => !filters.marca || item.marcaName === filters.marca), "modeloName", "Todos"), [history, filters.marca]);
   const filteredHistory = useMemo(() => {
     return history.filter((item) => {
-      const matchesQuery = !normalizedQuery || `${item.vin} ${item.marcaName} ${item.modeloName} ${item.version} ${item.numeroFactura} ${item.numeroMotor}`.toLowerCase().includes(normalizedQuery);
+      const searchableText = showDelivery
+        ? `${item.eventId} ${item.vin} ${item.numeroFactura} ${item.facturacionAt} ${item.entregaAt} ${item.entregaPlacaAt} ${item.placa} ${item.kilometraje} ${item.observacion} ${item.createdAt} ${item.updatedAt}`
+        : `${item.vin} ${item.marcaName} ${item.modeloName} ${item.version} ${item.numeroFactura} ${item.numeroMotor}`;
+      const matchesQuery = !normalizedQuery || searchableText.toLowerCase().includes(normalizedQuery);
       const matchesBrand = !filters.marca || item.marcaName === filters.marca;
       const matchesModel = !filters.modelo || item.modeloName === filters.modelo;
-      return matchesQuery && matchesBrand && matchesModel;
+      return showDelivery ? matchesQuery : matchesQuery && matchesBrand && matchesModel;
     });
-  }, [filters, history, normalizedQuery]);
+  }, [filters, history, normalizedQuery, showDelivery]);
   const sortedHistory = useMemo(() => sortRows(filteredHistory, sort), [filteredHistory, sort]);
-  const columnCount = (showDelivery ? 13 : 12) + (canEdit ? 1 : 0);
+  const columnCount = showDelivery ? 11 + (canEdit ? 1 : 0) : 12 + (canEdit ? 1 : 0);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
@@ -528,41 +586,74 @@ function HistorySection({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar vehiculo, VIN, factura o motor" className="h-9 w-full bg-white pl-9 sm:w-72" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={showDelivery ? "Buscar VIN, factura, placa u observacion" : "Buscar vehiculo, VIN, factura o motor"} className="h-9 w-full bg-white pl-9 sm:w-72" />
           </div>
           {canCreate ? <Button variant="outline" onClick={onCreate} className="h-9"><Plus className="size-4" />Crear carro</Button> : null}
         </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[minmax(180px,240px)_minmax(180px,260px)_auto] sm:items-end">
-          <Field label="Marca"><SearchableSelect value={filters.marca} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marca: value, modelo: "" }))} /></Field>
-          <Field label="Modelo"><SearchableSelect value={filters.modelo} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modelo: value }))} /></Field>
-          <Button variant="outline" className="h-9" onClick={() => { setQuery(""); setFilters({ marca: "", modelo: "" }); }}>Limpiar</Button>
-        </div>
+        {!showDelivery ? (
+          <div className="grid gap-2 sm:grid-cols-[minmax(180px,240px)_minmax(180px,260px)_auto] sm:items-end">
+            <Field label="Marca"><SearchableSelect value={filters.marca} options={brandOptions} placeholder="Todas" onChange={(value) => setFilters((current) => ({ ...current, marca: value, modelo: "" }))} /></Field>
+            <Field label="Modelo"><SearchableSelect value={filters.modelo} options={modelOptions} placeholder="Todos" onChange={(value) => setFilters((current) => ({ ...current, modelo: value }))} /></Field>
+            <Button variant="outline" className="h-9" onClick={() => { setQuery(""); setFilters({ marca: "", modelo: "" }); }}>Limpiar</Button>
+          </div>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[1180px] text-left text-sm">
+        <table className={`w-full text-left text-sm ${showDelivery ? "min-w-[1500px]" : "min-w-[1180px]"}`}>
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-950">
-            <tr>
-              <SortableHeader sortKey="vin" sort={sort} onSort={setSort}>VIN</SortableHeader>
-              <SortableHeader sortKey="marcaName" sort={sort} onSort={setSort}>Vehiculo</SortableHeader>
-              <SortableHeader sortKey="colorExterno" sort={sort} onSort={setSort}>Color Ext.</SortableHeader>
-              <SortableHeader sortKey="colorInterno" sort={sort} onSort={setSort}>Color Int.</SortableHeader>
-              <SortableHeader sortKey="numeroMotor" sort={sort} onSort={setSort}>Motor</SortableHeader>
-              <SortableHeader sortKey="numeroFactura" sort={sort} onSort={setSort}>Factura</SortableHeader>
-              <SortableHeader sortKey="precioCompra" sort={sort} onSort={setSort}>Compra</SortableHeader>
-              <SortableHeader sortKey="precioVenta" sort={sort} onSort={setSort}>Venta</SortableHeader>
-              <SortableHeader sortKey="createdAt" sort={sort} onSort={setSort}>Registro</SortableHeader>
-              <SortableHeader sortKey="facturacionAt" sort={sort} onSort={setSort}>Facturacion</SortableHeader>
-              <SortableHeader sortKey="llegadaCentroAt" sort={sort} onSort={setSort}>Llegada</SortableHeader>
-              {showDelivery ? <SortableHeader sortKey="entregaAt" sort={sort} onSort={setSort}>Entrega</SortableHeader> : null}
-              <SortableHeader sortKey="enReserva" sort={sort} onSort={setSort}>Reserva</SortableHeader>
-              {canEdit ? <th className="px-3 py-3 text-right">Acciones</th> : null}
-            </tr>
+            {showDelivery ? (
+              <tr>
+                <SortableHeader sortKey="eventId" sort={sort} onSort={setSort}>ID</SortableHeader>
+                <SortableHeader sortKey="vin" sort={sort} onSort={setSort}>VIN</SortableHeader>
+                <SortableHeader sortKey="numeroFactura" sort={sort} onSort={setSort}>Numero factura</SortableHeader>
+                <SortableHeader sortKey="facturacionAt" sort={sort} onSort={setSort}>Fecha facturacion</SortableHeader>
+                <SortableHeader sortKey="entregaAt" sort={sort} onSort={setSort}>Fecha entrega cliente</SortableHeader>
+                <SortableHeader sortKey="entregaPlacaAt" sort={sort} onSort={setSort}>Fecha entrega placa</SortableHeader>
+                <SortableHeader sortKey="placa" sort={sort} onSort={setSort}>Placa</SortableHeader>
+                <SortableHeader sortKey="kilometraje" sort={sort} onSort={setSort}>Kilometraje</SortableHeader>
+                <SortableHeader sortKey="observacion" sort={sort} onSort={setSort}>Observacion</SortableHeader>
+                <SortableHeader sortKey="createdAt" sort={sort} onSort={setSort}>Creado</SortableHeader>
+                <SortableHeader sortKey="updatedAt" sort={sort} onSort={setSort}>Actualizado</SortableHeader>
+                {canEdit ? <th className="px-3 py-3 text-right">Acciones</th> : null}
+              </tr>
+            ) : (
+              <tr>
+                <SortableHeader sortKey="vin" sort={sort} onSort={setSort}>VIN</SortableHeader>
+                <SortableHeader sortKey="marcaName" sort={sort} onSort={setSort}>Vehiculo</SortableHeader>
+                <SortableHeader sortKey="colorExterno" sort={sort} onSort={setSort}>Color Ext.</SortableHeader>
+                <SortableHeader sortKey="colorInterno" sort={sort} onSort={setSort}>Color Int.</SortableHeader>
+                <SortableHeader sortKey="numeroMotor" sort={sort} onSort={setSort}>Motor</SortableHeader>
+                <SortableHeader sortKey="numeroFactura" sort={sort} onSort={setSort}>Factura</SortableHeader>
+                <SortableHeader sortKey="precioCompra" sort={sort} onSort={setSort}>Compra</SortableHeader>
+                <SortableHeader sortKey="precioVenta" sort={sort} onSort={setSort}>Venta</SortableHeader>
+                <SortableHeader sortKey="createdAt" sort={sort} onSort={setSort}>Registro</SortableHeader>
+                <SortableHeader sortKey="facturacionAt" sort={sort} onSort={setSort}>Facturacion</SortableHeader>
+                <SortableHeader sortKey="llegadaCentroAt" sort={sort} onSort={setSort}>Llegada</SortableHeader>
+                <SortableHeader sortKey="enReserva" sort={sort} onSort={setSort}>Reserva</SortableHeader>
+                {canEdit ? <th className="px-3 py-3 text-right">Acciones</th> : null}
+              </tr>
+            )}
           </thead>
           <tbody className="divide-y divide-slate-200">
             {loading ? (
               <tr><td colSpan={columnCount} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
-            ) : sortedHistory.map((item) => (
+            ) : sortedHistory.map((item) => showDelivery ? (
+              <tr key={item.eventId || item.vin}>
+                <td className="px-3 py-3 font-bold text-slate-900">{item.eventId || "-"}</td>
+                <td className="px-3 py-3"><InventoryVinCell item={item} /></td>
+                <td className="px-3 py-3">{item.numeroFactura || "-"}</td>
+                <td className="px-3 py-3">{formatDate(item.facturacionAt)}</td>
+                <td className="px-3 py-3">{formatDate(item.entregaAt)}</td>
+                <td className="px-3 py-3">{formatDate(item.entregaPlacaAt)}</td>
+                <td className="px-3 py-3">{item.placa || "-"}</td>
+                <td className="px-3 py-3">{item.kilometraje ?? "-"}</td>
+                <td className="max-w-[260px] truncate px-3 py-3" title={item.observacion || ""}>{item.observacion || "-"}</td>
+                <td className="px-3 py-3">{formatDate(item.createdAt)}</td>
+                <td className="px-3 py-3">{formatDate(item.updatedAt)}</td>
+                {canEdit ? <td className="px-3 py-3 text-right"><Button variant="outline" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button></td> : null}
+              </tr>
+            ) : (
               <tr key={item.vin}>
                 <td className="px-3 py-3"><InventoryVinCell item={item} /></td>
                 <td className="px-3 py-3">{item.marcaName} {item.modeloName} <span className="font-semibold">{item.version}</span></td>
@@ -575,7 +666,6 @@ function HistorySection({
                 <td className="px-3 py-3">{formatDate(item.createdAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.facturacionAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.llegadaCentroAt)}</td>
-                {showDelivery ? <td className="px-3 py-3">{formatDate(item.entregaAt)}</td> : null}
                 <td className="px-3 py-3"><ReservationUsageBadge item={item} /></td>
                 {canEdit ? <td className="px-3 py-3 text-right"><Button variant="outline" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button></td> : null}
               </tr>

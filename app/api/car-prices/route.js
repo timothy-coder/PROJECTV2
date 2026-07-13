@@ -46,6 +46,28 @@ export async function GET() {
        ) ev ON ev.vin = h.vin
        ORDER BY h.created_at DESC`
     );
+    const [soldRows] = await pool.query(
+      `SELECT e.id AS evento_id, e.vin, e.numero_factura, e.fecha_facturacion,
+              e.fecha_entrega_cliente, e.fecha_entrega_placa, e.placa, e.kilometraje,
+              e.observacion, e.created_at AS evento_created_at, e.updated_at AS evento_updated_at,
+              h.precio_id, h.color_externo, h.color_interno, h.numero_motor,
+              h.numerofactura AS historial_numero_factura, h.preciocompra, h.precioventa,
+              h.created_at, h.created_at_llegadaalcentro, h.updated_at,
+              rd.reserva_id AS reserva_id,
+              r.estado AS reserva_estado,
+              o.oportunidad_id AS oportunidad_code,
+              p.version, ma.name AS marca_name, mo.name AS modelo_name, mon.simbolo AS moneda_simbolo
+       FROM ventas_historial_carros_eventos e
+       INNER JOIN ventas_historial_carros h ON h.vin = e.vin
+       INNER JOIN ventas_precios p ON p.id = h.precio_id
+       INNER JOIN administracion_marcas ma ON ma.id = p.marca_id
+       INNER JOIN administracion_modelos mo ON mo.id = p.modelo_id
+       INNER JOIN configuracion_monedas mon ON mon.id = p.moneda_id
+       LEFT JOIN ventas_reserva_detalles rd ON rd.vin = h.vin
+       LEFT JOIN ventas_reservas r ON r.id = rd.reserva_id
+       LEFT JOIN ventas_oportunidades o ON o.id = r.oportunidad_id
+       ORDER BY e.created_at DESC, e.id DESC`
+    );
     const [pendingPurchaseRows] = await pool.query(
       `SELECT r.id AS reserva_id, r.estado, r.created_at,
               COALESCE(o.oportunidad_id, '-') AS oportunidad_code,
@@ -113,6 +135,39 @@ export async function GET() {
         vendido: Number(row.eventos_count || 0) > 0,
         eventosCount: Number(row.eventos_count || 0),
         ultimoEventoAt: row.ultimo_evento_at,
+      })),
+      soldHistory: soldRows.map((row) => ({
+        eventId: row.evento_id,
+        vin: row.vin,
+        precioId: row.precio_id,
+        numeroFactura: row.numero_factura || "",
+        historialNumeroFactura: row.historial_numero_factura || "",
+        colorExterno: row.color_externo || "",
+        colorInterno: row.color_interno || "",
+        numeroMotor: row.numero_motor || "",
+        precioCompra: row.preciocompra === null ? null : Number(row.preciocompra),
+        precioVenta: row.precioventa === null ? null : Number(row.precioventa),
+        marcaName: row.marca_name,
+        modeloName: row.modelo_name,
+        version: row.version,
+        monedaSimbolo: row.moneda_simbolo,
+        createdAt: row.evento_created_at,
+        historialCreatedAt: row.created_at,
+        facturacionAt: row.fecha_facturacion,
+        llegadaCentroAt: row.created_at_llegadaalcentro,
+        entregaAt: row.fecha_entrega_cliente,
+        entregaPlacaAt: row.fecha_entrega_placa,
+        placa: row.placa || "",
+        kilometraje: row.kilometraje === null ? null : Number(row.kilometraje),
+        observacion: row.observacion || "",
+        updatedAt: row.evento_updated_at,
+        reservaId: row.reserva_id || null,
+        reservaEstado: row.reserva_estado || "",
+        oportunidadCode: row.oportunidad_code || "",
+        enReserva: Boolean(row.reserva_id),
+        vendido: true,
+        eventosCount: 1,
+        ultimoEventoAt: row.evento_created_at,
       })),
       pendingPurchases: pendingPurchaseRows.map((row) => ({
         reservaId: row.reserva_id,

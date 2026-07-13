@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { carPricesApi } from "@/app/api/car-prices.api";
 
 export function useCarPrices() {
-  const [data, setData] = useState({ prices: [], history: [], pendingPurchases: [], options: { brands: [], models: [], currencies: [] } });
+  const [data, setData] = useState({ prices: [], history: [], soldHistory: [], pendingPurchases: [], options: { brands: [], models: [], currencies: [] } });
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -29,10 +29,10 @@ export function useCarPrices() {
       stock: inventoryHistory.filter((item) => !item.enReserva).length,
       pedido: data.pendingPurchases.length,
       history: inventoryHistory.length,
-      sold: data.history.filter((item) => item.vendido).length,
+      sold: data.soldHistory.length,
       pendingPurchases: data.pendingPurchases.length,
     };
-  }, [data.history, data.pendingPurchases.length]);
+  }, [data.history, data.pendingPurchases.length, data.soldHistory.length]);
 
   const actions = useMemo(() => ({
     create: async (payload) => { await carPricesApi.create(payload); await reload(); },
@@ -41,6 +41,7 @@ export function useCarPrices() {
     importRows: async (rows) => { const result = await carPricesApi.import(rows); await reload(); return result; },
     createHistory: async (payload) => { await carPricesApi.createHistory(payload); await reload(); },
     updateHistory: async (vin, payload) => { await carPricesApi.updateHistory(vin, payload); await reload(); },
+    updateEvent: async (id, payload) => { await carPricesApi.updateEvent(id, payload); await reload(); },
     importHistoryRows: async (rows) => { const result = await carPricesApi.importHistory(rows); await reload(); return result; },
   }), [reload]);
 
