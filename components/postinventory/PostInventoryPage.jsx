@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Boxes, ChevronDown, Download, Edit3, Eye, Layers3, List, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, TriangleAlert, Upload, X } from "lucide-react";
+import { Boxes, ChevronDown, Download, Edit3, Layers3, List, Loader2, MapPin, Package, Plus, RefreshCw, Search, Trash2, TrendingUp, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePostInventory } from "@/hooks/postinventory/usePostInventory";
 import { hasPerm } from "@/lib/permissions";
 
@@ -47,15 +48,78 @@ function monthName(value) {
   return MONTHS.find((item) => Number(item.value) === Number(value))?.label || "";
 }
 
-export default function PostInventoryPage({ userPermissions, fixedView = "", title = "Inventario", subtitle = "Gestion de productos y stock" }) {
+function Hint({ label, children, side = "top" }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side={side}>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function rowValue(row, keys) {
+  for (const key of keys) {
+    if (row?.[key] !== undefined && row?.[key] !== null && String(row[key]).trim() !== "") return row[key];
+  }
+  return "";
+}
+
+function roundMoney(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : "";
+}
+
+function roundPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Number(number.toFixed(4)) : "";
+}
+
+function calculateSaleWithoutTax(priceWithTax, factor) {
+  const price = Number(priceWithTax || 0);
+  if (!Number.isFinite(price) || price <= 0 || !factor) return "";
+  return roundMoney(price / factor);
+}
+
+function calculateMargin(purchase, saleWithoutTax) {
+  const purchaseNumber = Number(purchase || 0);
+  const saleNumber = Number(saleWithoutTax || 0);
+  if (!Number.isFinite(purchaseNumber) || !Number.isFinite(saleNumber) || saleNumber <= 0) return "";
+  return roundPercent((1 - purchaseNumber / saleNumber) * 100);
+}
+
+function calculateFromMargin(purchase, margin, taxFactor) {
+  const purchaseNumber = Number(purchase || 0);
+  const marginNumber = Number(margin || 0);
+  if (!Number.isFinite(purchaseNumber) || !Number.isFinite(marginNumber) || purchaseNumber <= 0 || marginNumber >= 100) {
+    return { precioVentaSinIgv: "", precioVentaConIgv: "" };
+  }
+  const withoutTax = purchaseNumber / (1 - marginNumber / 100);
+  return {
+    precioVentaSinIgv: roundMoney(withoutTax),
+    precioVentaConIgv: roundMoney(withoutTax * taxFactor),
+  };
+}
+
+function getDefaultCurrencyId(options) {
+  return String(
+    options?.defaultPostventaCurrencyId ||
+      (options?.allCurrencies || []).find((item) => item.isDefaultPosventa)?.id ||
+      (options?.currencies || [])[0]?.id ||
+      ""
+  );
+}
+
+export default function PostInventoryPage({ userPermissions, currentUserId = null, fixedView = "", title = "Inventario", subtitle = "Gestion de productos y stock" }) {
   const data = usePostInventory();
   const productImportRef = useRef(null);
   const stockImportRef = useRef(null);
   const soldImportRef = useRef(null);
   const [query, setQuery] = useState("");
-  const [minStock, setMinStock] = useState(5);
+  const [brandFilter, setBrandFilter] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
   const [view, setView] = useState(fixedView || "products");
   const [productDialog, setProductDialog] = useState({ open: false, item: null, readonly: false });
+  const [productImportDialog, setProductImportDialog] = useState({ open: false, rows: [] });
   const [comboDialog, setComboDialog] = useState({ open: false, item: null, readonly: false });
   const [soldDialog, setSoldDialog] = useState({ open: false, item: null, readonly: false });
   const [stockDialog, setStockDialog] = useState({ open: false, product: null });
@@ -73,20 +137,46 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   const canLocationEdit = hasPerm(userPermissions, ["ubicacion_inventario", "edit"]);
   const canLocationDelete = hasPerm(userPermissions, ["ubicacion_inventario", "delete"]);
   const canLocationImport = hasPerm(userPermissions, ["ubicacion_inventario", "import"]);
-  const canLots = canEdit || hasPerm(userPermissions, ["inventario", "lotes"]);
+  const hasLegacyLots = hasPerm(userPermissions, ["inventario", "lotes"]);
+  const canLotsViewOwn = hasPerm(userPermissions, ["inventario", "lotes_view"]) || hasLegacyLots;
+  const canLotsViewAll = hasPerm(userPermissions, ["inventario", "lotes_viewall"]);
+  const canLotsEditOwn = hasPerm(userPermissions, ["inventario", "lotes_edit"]) || hasLegacyLots;
+  const canLotsEditAll = hasPerm(userPermissions, ["inventario", "lotes_editall"]);
+  const canLots = canLotsViewOwn || canLotsViewAll;
+  const canCreateLot = canLotsEditOwn || canLotsEditAll;
   const inventorySettings = data.options?.settings || {};
+  const assignedShelfIds = useMemo(() => new Set((data.options?.shelves || []).map((item) => Number(item.id))), [data.options?.shelves]);
+  const scopedProducts = useMemo(() => data.products.map((product) => ({
+    ...product,
+    lotes: (product.lotes || []).filter((lot) => {
+      if (canLotsViewAll) return true;
+      if (!canLotsViewOwn) return false;
+      return Number(lot.createdBy || 0) === Number(currentUserId || 0);
+    }),
+  })), [canLotsViewAll, canLotsViewOwn, currentUserId, data.products]);
 
   const filteredProducts = useMemo(() => {
     const clean = query.trim().toLowerCase();
-    const filtered = clean
-      ? data.products.filter((product) => `${product.numeroParte} ${product.descripcion} ${product.marca}`.toLowerCase().includes(clean))
-      : data.products;
+    const filtered = scopedProducts.filter((product) => {
+      const matchesQuery = !clean || `${product.numeroParte} ${product.descripcion} ${product.marca} ${product.procedencia}`.toLowerCase().includes(clean);
+      const matchesBrand = !brandFilter || String(product.marca || "").toLowerCase() === String(brandFilter).toLowerCase();
+      const matchesProvider = !providerFilter || (product.lotes || []).some((lot) => String(lot.proveedorId || "") === String(providerFilter));
+      return matchesQuery && matchesBrand && matchesProvider;
+    });
     return filtered.map((product) => ({
       ...product,
       available: Number(product.stockDisponible ?? product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0)),
     }));
-  }, [data.products, query]);
-  const lowStock = filteredProducts.filter((product) => product.available <= Number(minStock)).length;
+  }, [brandFilter, providerFilter, query, scopedProducts]);
+  const brandOptions = useMemo(() => {
+    const names = Array.from(new Set(data.products.map((product) => String(product.marca || "").trim()).filter(Boolean)));
+    return [{ value: "__all", label: "Todas" }, ...names.sort((a, b) => a.localeCompare(b, "es")).map((name) => ({ value: name, label: name }))];
+  }, [data.products]);
+  const providerFilterOptions = useMemo(() => (data.options?.providers || []).map((item) => ({
+    value: item.id,
+    label: `${item.nombre}${item.ruc ? ` - ${item.ruc}` : ""}`,
+  })), [data.options?.providers]);
+  const providerOptionsWithAll = useMemo(() => [{ value: "__all", label: "Todos" }, ...providerFilterOptions], [providerFilterOptions]);
   const filteredCombos = useMemo(() => {
     const clean = query.trim().toLowerCase();
     return clean
@@ -129,8 +219,13 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         descripcion: "Filtro de aceite",
         marca: "FORD",
         tipo_inventario: "Repuestos",
+        unidad_medida: "Unidad",
+        fecha_vencimiento: "2027-06-05",
+        numero_comprobante: "F001-000123",
+        proveedor: "Proveedor SAC",
+        procedencia: "FORD",
         fecha_ingreso: "2026-06-05",
-        stock_total: 10,
+        stock_lote: 10,
         precio_compra: 25,
         precio_venta: 40,
         moneda: "PEN",
@@ -189,6 +284,30 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
     }
   }
 
+  async function readRowsFromFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return [];
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+  }
+
+  async function openProductImportDialog(event) {
+    try {
+      const rows = await readRowsFromFile(event);
+      if (!rows.length) {
+        toast.error("El archivo no tiene filas para importar.");
+        return;
+      }
+      setProductImportDialog({ open: true, rows });
+    } catch (error) {
+      toast.error(error.message || "No se pudo leer el archivo.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
     <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
       <div className="mb-3 flex shrink-0 flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -222,17 +341,16 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
                 {!isLocationPage && canCreate ? <MenuItem icon={Upload} label="Importar vendidos" onClick={() => soldImportRef.current?.click()} close={() => setFormatsMenuOpen(false)} /> : null}
               </div>
             ) : null}
-            <input ref={productImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importProducts, "Productos importados")} />
+            <input ref={productImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={openProductImportDialog} />
             <input ref={stockImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importStock, "Ubicaciones importadas")} />
             <input ref={soldImportRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => importRowsFromFile(event, data.importSoldProducts, "Productos vendidos importados")} />
           </div>
         ) : null}
       </div>
 
-      <div className="mb-3 grid grid-cols-4 shrink-0 gap-2">
+      <div className="mb-3 grid grid-cols-3 shrink-0 gap-2">
         <Stat label="Total Productos" value={data.stats.products} tone="blue" icon={Package} />
         <Stat label="Stock Total" value={data.stats.totalStock} tone="green" icon={TrendingUp} />
-        <Stat label="Stock Bajo" value={lowStock} tone="red" icon={TriangleAlert} />
         <Stat label="Combos / Vendidos" value={`${data.stats.combos} / ${data.stats.soldProducts}`} tone="purple" icon={Layers3} />
       </div>
 
@@ -257,11 +375,33 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
               <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} className="h-10 bg-white pl-9" />
             </div>
           </div>
-          <div className={view === "products" ? "grid grid-cols-[84px_1fr_1fr] items-end gap-2 md:grid-cols-[120px_auto_auto] md:justify-end" : "grid grid-cols-2 gap-2 sm:flex sm:flex-row md:justify-end"}>
-            {view === "products" ? <div className="space-y-1.5">
-              <Label className="text-[11px] sm:text-xs">Min. stock</Label>
-              <Input type="number" value={minStock} onChange={(event) => setMinStock(event.target.value)} className="h-10 bg-white" />
-            </div> : null}
+          <div className={view === "products" ? "grid grid-cols-2 items-end gap-2 md:grid-cols-[180px_220px_auto_auto] md:justify-end" : "grid grid-cols-2 gap-2 sm:flex sm:flex-row md:justify-end"}>
+            {view === "products" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] sm:text-xs">Marca</Label>
+                  <SearchableSelect
+                    value={brandFilter}
+                    options={brandOptions}
+                    placeholder="Todas las marcas"
+                    searchPlaceholder="Buscar marca..."
+                    emptyText="No hay marcas."
+                    onChange={(value) => setBrandFilter(value === "__all" ? "" : value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] sm:text-xs">Proveedor</Label>
+                  <SearchableSelect
+                    value={providerFilter}
+                    options={providerOptionsWithAll}
+                    placeholder="Todos los proveedores"
+                    searchPlaceholder="Buscar proveedor..."
+                    emptyText="No hay proveedores."
+                    onChange={(value) => setProviderFilter(value === "__all" ? "" : value)}
+                  />
+                </div>
+              </>
+            ) : null}
             <Button variant="outline" onClick={data.reload} className="h-10 px-2 text-xs sm:px-4 sm:text-sm"><RefreshCw className="size-4" />Recargar</Button>
             {canCreate && view === "products" ? <Button onClick={() => setProductDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 px-2 text-xs text-white hover:bg-violet-800 sm:px-4 sm:text-sm"><Plus className="size-4" />Nuevo Producto</Button> : null}
             {canCreate && view === "combos" ? <Button onClick={() => setComboDialog({ open: true, item: null, readonly: false })} className="h-10 bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nuevo Combo</Button> : null}
@@ -279,8 +419,11 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         canDelete={canDelete}
         canStock={canLocationView}
         canLots={canLots}
+        canCreateLot={canCreateLot}
+        currentUserId={currentUserId}
+        canEditLotOwn={canLotsEditOwn}
+        canEditLotAll={canLotsEditAll}
         settings={inventorySettings}
-        onView={(product) => setProductDialog({ open: true, item: product, readonly: true })}
         onEdit={(product) => setProductDialog({ open: true, item: product, readonly: false })}
         onStock={(product) => setStockDialog({ open: true, product })}
         onLot={(product) => setLotDialog({ open: true, product, item: null, readonly: false })}
@@ -294,7 +437,6 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         total={data.combos.length}
         canEdit={canEdit}
         canDelete={canDelete}
-        onView={(combo) => setComboDialog({ open: true, item: combo, readonly: true })}
         onEdit={(combo) => setComboDialog({ open: true, item: combo, readonly: false })}
         onDelete={(combo) => setDeleteDialog({ open: true, title: `Eliminar ${combo.nombre}`, onConfirm: () => data.deleteCombo(combo.id) })}
       /> : view === "locations" && canLocationView ? <InventoryLocationsTable
@@ -303,6 +445,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         total={data.stocks.length}
         canEdit={canLocationEdit}
         canDelete={canLocationDelete}
+        assignedShelfIds={assignedShelfIds}
         onEdit={(item) => setLocationDialog({ open: true, item })}
         onDelete={(item) => setDeleteDialog({ open: true, title: `Eliminar ubicacion ${item.numeroParte}`, onConfirm: () => data.deleteStock(item.id) })}
       /> : <SoldProductsTable
@@ -311,7 +454,6 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
         total={data.soldProducts.length}
         canEdit={canEdit}
         canDelete={canDelete}
-        onView={(item) => setSoldDialog({ open: true, item, readonly: true })}
         onEdit={(item) => setSoldDialog({ open: true, item, readonly: false })}
         onDelete={(item) => setDeleteDialog({ open: true, title: `Eliminar venta ${item.numeroParte}`, onConfirm: () => data.deleteSoldProduct(item.id) })}
       />}
@@ -354,10 +496,26 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
           }}
         />
       ) : null}
+      {productImportDialog.open ? (
+        <ProductImportPricingDialog
+          state={productImportDialog}
+          options={data.options}
+          onClose={() => setProductImportDialog({ open: false, rows: [] })}
+          onSubmit={async (rows) => {
+            const result = await data.importProducts(rows);
+            const errorsText = result.errors?.length ? ` Filas con error: ${result.errors.length}.` : "";
+            const lotsText = result.lotsImported || result.lotsUpdated ? ` Lotes: ${result.lotsImported || 0} creados${result.lotsUpdated ? `, ${result.lotsUpdated} actualizados` : ""}.` : "";
+            toast.success(`Productos importados: ${result.imported || 0} importados${result.updated ? `, ${result.updated} actualizados` : ""}.${lotsText}${errorsText}`);
+            setProductImportDialog({ open: false, rows: [] });
+          }}
+        />
+      ) : null}
       {lotListDialog.open ? (
         <LotsListDialog
           product={lotListDialog.product}
-          canEdit={canLots}
+          currentUserId={currentUserId}
+          canEditOwn={canLotsEditOwn}
+          canEditAll={canLotsEditAll}
           canDelete={canDelete}
           onClose={() => setLotListDialog({ open: false, product: null })}
           onEditLot={(product, lot) => {
@@ -411,6 +569,7 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
           canCreate={canLocationCreate}
           canEdit={canLocationEdit}
           canDelete={canLocationDelete}
+          assignedShelfIds={assignedShelfIds}
           onClose={() => setStockDialog({ open: false, product: null })}
         />
       ) : null}
@@ -437,8 +596,13 @@ export default function PostInventoryPage({ userPermissions, fixedView = "", tit
   );
 }
 
-function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, canLots, settings, onView, onEdit, onStock, onLot, onManageLots, onEditLot, onDeleteLot, onDelete }) {
+function ProductsTable({ loading, products, total, canEdit, canDelete, canStock, canLots, canCreateLot, currentUserId, canEditLotOwn, canEditLotAll, settings, onEdit, onStock, onLot, onManageLots, onEditLot, onDeleteLot, onDelete }) {
   const useLots = settings?.habilitarLotes !== false;
+  function canManageLot(lot) {
+    const isOwn = Number(lot.createdBy || 0) === Number(currentUserId || 0);
+    return (canEditLotAll || (canEditLotOwn && isOwn)) && lot.canAccessLocation;
+  }
+  const showProcedencia = Boolean(settings?.habilitarProcedencia);
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -448,6 +612,7 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                 <th className="px-3 py-3">N Parte</th>
                 <th className="px-3 py-3">Descripcion</th>
                 <th className="px-3 py-3">Marca</th>
+                {showProcedencia ? <th className="px-3 py-3">Procedencia</th> : null}
                 <th className="px-3 py-3">Tipo</th>
                 <th className="px-3 py-3">Disponible</th>
                 <th className="px-3 py-3">Precio Venta</th>
@@ -456,12 +621,13 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
             </thead>
             <tbody className="divide-y divide-slate-200">
               {loading ? (
-                <tr><td colSpan={7} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+                <tr><td colSpan={showProcedencia ? 8 : 7} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : products.map((product) => (
                 <tr key={product.id}>
                   <td className="px-3 py-3 font-bold text-slate-950">{product.numeroParte}</td>
                   <td className="px-3 py-3">{product.descripcion}</td>
                   <td className="px-3 py-3">{product.marca || "-"}</td>
+                  {showProcedencia ? <td className="px-3 py-3">{product.procedencia || "-"}</td> : null}
                   <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium">{product.tipoNombre}</span></td>
                   <td className="px-3 py-3">
                     <div className="font-bold text-emerald-700">{product.available}</div>
@@ -473,9 +639,8 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => onView(product)}><Eye className="size-4" /></Button>
                       {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(product)}><Edit3 className="size-4" /></Button> : null}
-                      {useLots && canLots ? <Button variant="ghost" size="icon" onClick={() => onLot(product)} title="Agregar lote"><Layers3 className="size-4" /></Button> : null}
+                      {useLots && canCreateLot ? <Button variant="ghost" size="icon" onClick={() => onLot(product)} title="Agregar lote"><Layers3 className="size-4" /></Button> : null}
                       {useLots ? <Button variant="ghost" size="icon" onClick={() => onManageLots(product)} title="Ver lotes"><List className="size-4" /></Button> : null}
                       {canStock ? <Button variant="ghost" size="icon" onClick={() => onStock(product)}><Boxes className="size-4" /></Button> : null}
                       {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(product)}><Trash2 className="size-4" /></Button> : null}
@@ -487,7 +652,7 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                             <button type="button" onClick={() => onEditLot(product, lot)} className="px-2 py-1">
                               {lot.numeroFactura} ({lot.stockDisponible})
                             </button>
-                            {canDelete ? <button type="button" onClick={() => onDeleteLot(lot)} className="border-l border-violet-100 px-1.5 py-1 text-red-600">x</button> : null}
+                            {canDelete && canManageLot(lot) ? <button type="button" onClick={() => onDeleteLot(lot)} className="border-l border-violet-100 px-1.5 py-1 text-red-600">x</button> : null}
                           </span>
                         ))}
                         {product.lotes.length > 2 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">+{product.lotes.length - 2}</span> : null}
@@ -507,11 +672,16 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
   );
 }
 
-function LotsListDialog({ product, canEdit, canDelete, onClose, onEditLot, onDeleteLot }) {
+function LotsListDialog({ product, currentUserId, canEditOwn, canEditAll, canDelete, onClose, onEditLot, onDeleteLot }) {
   const lots = product?.lotes || [];
+  function canManageLot(lot) {
+    const isOwn = Number(lot.createdBy || 0) === Number(currentUserId || 0);
+    const hasScope = canEditAll || (canEditOwn && isOwn);
+    return hasScope && lot.canAccessLocation;
+  }
   return (
     <Dialog open={Boolean(product)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92svh] max-w-[min(96vw,920px)] overflow-hidden bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] w-[min(98vw,1180px)] max-w-none overflow-hidden bg-white p-0 text-slate-950 sm:max-w-[1180px]">
         <DialogHeader className="border-b border-violet-100 p-4">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
             <Layers3 className="size-5" />Lotes ingresados
@@ -519,39 +689,47 @@ function LotsListDialog({ product, canEdit, canDelete, onClose, onEditLot, onDel
           <DialogDescription>{product?.numeroParte} - {product?.descripcion}</DialogDescription>
         </DialogHeader>
         <div className="max-h-[70svh] overflow-auto p-3">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[1040px] table-fixed text-left text-sm">
             <thead className="sticky top-0 bg-white text-xs font-bold text-slate-500">
               <tr>
-                <th className="border-b px-3 py-2">Factura</th>
-                <th className="border-b px-3 py-2">Proveedor</th>
-                <th className="border-b px-3 py-2">Medida</th>
-                <th className="border-b px-3 py-2">Vencimiento</th>
-                <th className="border-b px-3 py-2">Compra</th>
-                <th className="border-b px-3 py-2">Stock</th>
-                <th className="border-b px-3 py-2 text-right">Acciones</th>
+                <th className="w-[15%] border-b px-3 py-2">Comprobante</th>
+                <th className="w-[19%] border-b px-3 py-2">Proveedor</th>
+                <th className="w-[12%] border-b px-3 py-2">Medida</th>
+                <th className="w-[12%] border-b px-3 py-2">Vencimiento</th>
+                <th className="w-[12%] border-b px-3 py-2">Compra</th>
+                <th className="w-[11%] border-b px-3 py-2">Stock</th>
+                <th className="w-[12%] border-b px-3 py-2">Creado por</th>
+                <th className="w-[7%] border-b px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {lots.length ? lots.map((lot) => (
-                <tr key={lot.id}>
-                  <td className="px-3 py-2 font-bold text-slate-950">{lot.numeroFactura || "-"}</td>
-                  <td className="px-3 py-2 text-slate-600">{lot.proveedorNombre || "-"}</td>
-                  <td className="px-3 py-2 text-slate-600">{lot.tipoMedidaNombre || lot.tipoMedidaAbreviatura || "-"}</td>
-                  <td className="px-3 py-2 text-slate-600">{lot.fechaVencimiento ? new Date(lot.fechaVencimiento).toLocaleDateString("es-PE") : "-"}</td>
-                  <td className="px-3 py-2 font-semibold text-slate-950">{money(lot.precioCompra, product?.monedaSimbolo)}</td>
-                  <td className="px-3 py-2">
-                    <div className="font-bold text-emerald-700">{lot.stockDisponible}</div>
-                    <div className="text-xs text-slate-500">Total {lot.stockLote} / usado {lot.stockUsado}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex justify-end gap-2">
-                      {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEditLot(product, lot)} title="Editar lote"><Edit3 className="size-4" /></Button> : null}
-                      {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDeleteLot(lot)} title="Eliminar lote"><Trash2 className="size-4" /></Button> : null}
-                    </div>
-                  </td>
-                </tr>
-              )) : (
-                <tr><td colSpan={7} className="py-10 text-center text-slate-500">No hay lotes registrados para este producto.</td></tr>
+              {lots.length ? lots.map((lot) => {
+                const canManage = canManageLot(lot);
+                return (
+                  <tr key={lot.id}>
+                    <td className="px-3 py-2">
+                      <div className="truncate font-bold text-slate-950">{lot.numeroFactura || "-"}</div>
+                      <div className="truncate text-xs font-semibold text-violet-600">{lot.tipoComprobanteNombre || lot.tipoComprobanteCodigo || "-"}</div>
+                    </td>
+                    <td className="truncate px-3 py-2 text-slate-600">{lot.proveedorNombre || "-"}</td>
+                    <td className="truncate px-3 py-2 text-slate-600">{lot.tipoMedidaNombre || lot.tipoMedidaAbreviatura || "-"}</td>
+                    <td className="px-3 py-2 text-slate-600">{lot.fechaVencimiento ? new Date(lot.fechaVencimiento).toLocaleDateString("es-PE") : "-"}</td>
+                    <td className="truncate px-3 py-2 font-semibold text-slate-950">{money(lot.precioCompra, lot.monedaSimbolo || product?.monedaSimbolo)}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-bold text-emerald-700">{lot.stockDisponible}</div>
+                      <div className="text-xs text-slate-500">Total {lot.stockLote} / usado {lot.stockUsado}</div>
+                    </td>
+                    <td className="truncate px-3 py-2 text-slate-600">{lot.createdByName || "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-2">
+                        {canManage ? <Button variant="ghost" size="icon" onClick={() => onEditLot(product, lot)} title="Editar lote"><Edit3 className="size-4" /></Button> : null}
+                        {canDelete && canManage ? <Button variant="destructive" size="icon" onClick={() => onDeleteLot(lot)} title="Eliminar lote"><Trash2 className="size-4" /></Button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr><td colSpan={8} className="py-10 text-center text-slate-500">No hay lotes registrados para este producto.</td></tr>
               )}
             </tbody>
           </table>
@@ -564,7 +742,7 @@ function LotsListDialog({ product, canEdit, canDelete, onClose, onEditLot, onDel
   );
 }
 
-function InventoryLocationsTable({ loading, locations, total, canEdit, canDelete, onEdit, onDelete }) {
+function InventoryLocationsTable({ loading, locations, total, canEdit, canDelete, assignedShelfIds, onEdit, onDelete }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -583,25 +761,43 @@ function InventoryLocationsTable({ loading, locations, total, canEdit, canDelete
           <tbody className="divide-y divide-slate-200">
             {loading ? (
               <tr><td colSpan={7} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
-            ) : locations.length ? locations.map((item) => (
+            ) : locations.length ? locations.map((item) => {
+              const locationLabel = compactStockLabel(item);
+              const placeLabel = item.tallerName || item.mostradorName || "-";
+              const fullLocation = stockTooltipLabel(item);
+              const canManageRow = assignedShelfIds.has(Number(item.anaquelId));
+              return (
               <tr key={item.id}>
                 <td className="px-3 py-3 font-bold text-violet-700">{item.numeroParte || item.productoId}</td>
                 <td className="max-w-[360px] truncate px-3 py-3 text-slate-600">{item.descripcion || "-"}</td>
                 <td className="px-3 py-3 font-bold text-slate-950">{item.loteLabel || item.loteId}</td>
                 <td className="px-3 py-3">
-                  <div className="font-bold text-slate-950">{stockLabel(item)}</div>
-                  <div className="text-xs font-medium text-slate-500">{item.tallerName || item.mostradorName || "-"}</div>
+                  <Hint label={fullLocation} side="top">
+                    <div className="w-fit max-w-[260px] cursor-help">
+                      <div className="truncate font-bold text-slate-950">{locationLabel}</div>
+                      <div className="truncate text-xs font-medium text-slate-500">{placeLabel}</div>
+                    </div>
+                  </Hint>
                 </td>
                 <td className="px-3 py-3 font-bold text-emerald-700">{item.stock}</td>
                 <td className="px-3 py-3 text-slate-600">{item.createdAt ? new Date(item.createdAt).toLocaleDateString("es-PE") : "-"}</td>
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
-                    {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button> : null}
-                    {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(item)}><Trash2 className="size-4" /></Button> : null}
+                    {canEdit && canManageRow ? (
+                      <Hint label="Editar ubicacion">
+                        <Button variant="ghost" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button>
+                      </Hint>
+                    ) : null}
+                    {canDelete && canManageRow ? (
+                      <Hint label="Eliminar ubicacion">
+                        <Button variant="destructive" size="icon" onClick={() => onDelete(item)}><Trash2 className="size-4" /></Button>
+                      </Hint>
+                    ) : null}
                   </div>
                 </td>
               </tr>
-            )) : (
+              );
+            }) : (
               <tr><td colSpan={7} className="py-10 text-center text-slate-500">No hay ubicaciones registradas.</td></tr>
             )}
           </tbody>
@@ -615,7 +811,7 @@ function InventoryLocationsTable({ loading, locations, total, canEdit, canDelete
   );
 }
 
-function CombosTable({ loading, combos, total, canEdit, canDelete, onView, onEdit, onDelete }) {
+function CombosTable({ loading, combos, total, canEdit, canDelete, onEdit, onDelete }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -649,7 +845,6 @@ function CombosTable({ loading, combos, total, canEdit, canDelete, onView, onEdi
                 <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${combo.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{combo.isActive ? "Activo" : "Inactivo"}</span></td>
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => onView(combo)}><Eye className="size-4" /></Button>
                     {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(combo)}><Edit3 className="size-4" /></Button> : null}
                     {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(combo)}><Trash2 className="size-4" /></Button> : null}
                   </div>
@@ -669,7 +864,7 @@ function CombosTable({ loading, combos, total, canEdit, canDelete, onView, onEdi
   );
 }
 
-function SoldProductsTable({ loading, items, total, canEdit, canDelete, onView, onEdit, onDelete }) {
+function SoldProductsTable({ loading, items, total, canEdit, canDelete, onEdit, onDelete }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -696,7 +891,6 @@ function SoldProductsTable({ loading, items, total, canEdit, canDelete, onView, 
                 <td className="px-3 py-3 font-bold text-emerald-700">{item.cantidad}</td>
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => onView(item)}><Eye className="size-4" /></Button>
                     {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button> : null}
                     {canDelete ? <Button variant="destructive" size="icon" onClick={() => onDelete(item)}><Trash2 className="size-4" /></Button> : null}
                   </div>
@@ -716,25 +910,139 @@ function SoldProductsTable({ loading, items, total, canEdit, canDelete, onView, 
   );
 }
 
+function ProductImportPricingDialog({ state, options, onClose, onSubmit }) {
+  const firstRow = state.rows?.[0] || {};
+  const taxPercent = Number(options?.activeTax?.porcentaje || 0) || 18;
+  const taxFactor = 1 + taxPercent / 100;
+  const initialCompra = rowValue(firstRow, ["precio_compra", "Precio Compra", "PRECIO DE COMPRA", "precioCompra"]) || 0;
+  const initialVentaConIgv = rowValue(firstRow, ["precio_venta_con_igv", "Precio Venta Con IGV", "precio_venta", "Precio Venta", "precioVenta"]) || 0;
+  const initialVentaSinIgv = rowValue(firstRow, ["precio_venta_sin_igv", "Precio Venta Sin IGV"]) || calculateSaleWithoutTax(initialVentaConIgv, taxFactor);
+  const initialMargen = rowValue(firstRow, ["margen_comercial", "Margen Comercial", "margen"]) || calculateMargin(initialCompra, initialVentaSinIgv);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    precioCompra: initialCompra,
+    margenComercial: initialMargen,
+    precioVentaSinIgv: initialVentaSinIgv,
+    precioVentaConIgv: initialVentaConIgv || (initialMargen !== "" ? calculateFromMargin(initialCompra, initialMargen, taxFactor).precioVentaConIgv : ""),
+  });
+
+  function updatePurchase(value) {
+    setForm((current) => {
+      if (current.margenComercial !== "") {
+        return { ...current, precioCompra: value, ...calculateFromMargin(value, current.margenComercial, taxFactor) };
+      }
+      const withoutTax = calculateSaleWithoutTax(current.precioVentaConIgv, taxFactor);
+      return {
+        ...current,
+        precioCompra: value,
+        precioVentaSinIgv: withoutTax,
+        margenComercial: calculateMargin(value, withoutTax),
+      };
+    });
+  }
+
+  function updateMargin(value) {
+    setForm((current) => ({ ...current, margenComercial: value, ...calculateFromMargin(current.precioCompra, value, taxFactor) }));
+  }
+
+  function updateSaleWithTax(value) {
+    setForm((current) => {
+      const withoutTax = calculateSaleWithoutTax(value, taxFactor);
+      return {
+        ...current,
+        precioVentaConIgv: value,
+        precioVentaSinIgv: withoutTax,
+        margenComercial: calculateMargin(current.precioCompra, withoutTax),
+      };
+    });
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      const rows = state.rows.map((row) => ({
+        ...row,
+        precio_compra: form.precioCompra || 0,
+        margen_comercial: form.margenComercial,
+        precio_venta_sin_igv: form.precioVentaSinIgv,
+        precio_venta_con_igv: form.precioVentaConIgv,
+        precio_venta: form.precioVentaConIgv,
+      }));
+      await onSubmit(rows);
+    } catch (err) {
+      setError(err.message || "No se pudo importar productos.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[94svh] max-w-[min(94vw,620px)] overflow-y-auto bg-white p-0 text-slate-950">
+        <form onSubmit={submit}>
+          <DialogHeader className="border-b border-violet-100 p-4">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
+              <Upload className="size-5" />Confirmar importacion
+            </DialogTitle>
+            <DialogDescription>{state.rows.length} productos cargados desde Excel. Ajusta precios antes de agregarlos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 p-4">
+            <Panel number="1" title="Precios de importacion">
+              <div className="grid gap-3 lg:grid-cols-3">
+                <Field label="PRECIO DE COMPRA (SIN IGV)">
+                  <Input type="number" step="0.01" min="0" value={form.precioCompra} onChange={(event) => updatePurchase(event.target.value)} />
+                </Field>
+                <Field label="Margen comercial (%)">
+                  <Input type="number" step="0.0001" min="0" max="99.9999" value={form.margenComercial} onChange={(event) => updateMargin(event.target.value)} />
+                </Field>
+                <Field label="Precio venta sin IGV">
+                  <Input disabled type="number" step="0.01" value={form.precioVentaSinIgv} />
+                </Field>
+                <Field label={`Precio venta con IGV${taxPercent ? ` (${taxPercent}%)` : ""}`}>
+                  <Input type="number" step="0.01" min="0" value={form.precioVentaConIgv} onChange={(event) => updateSaleWithTax(event.target.value)} />
+                </Field>
+              </div>
+            </Panel>
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+              Se aplicaran estos precios a los lotes del archivo. El precio de compra medio del producto se recalcula automaticamente con sus lotes.
+            </div>
+            {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{error}</p> : null}
+          </div>
+          <DialogFooter className="border-t border-slate-200 p-3">
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving} className="bg-violet-700 text-white hover:bg-violet-800">{saving ? "Agregando..." : "Agregar"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProductDialog({ state, options, settings, onClose, onSubmit }) {
   const readonly = state.readonly;
   const useLots = settings?.habilitarLotes !== false;
   const allowManualBrand = Boolean(settings?.habilitarMarcaManual);
+  const showProcedencia = Boolean(settings?.habilitarProcedencia);
+  const defaultCurrencyId = getDefaultCurrencyId(options);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     numeroParte: state.item?.numeroParte || "",
     descripcion: state.item?.descripcion || "",
     marca: state.item?.marca || "",
+    procedencia: state.item?.procedencia || "",
     tipoId: state.item?.tipoId ? String(state.item.tipoId) : "",
     fechaIngreso: state.item?.fechaIngreso ? String(state.item.fechaIngreso).slice(0, 10) : "",
     stockTotal: state.item?.stockTotal || "",
     precioCompra: state.item?.precioCompra || "",
     precioVenta: state.item?.precioVenta || "",
-    monedaId: state.item?.monedaId ? String(state.item.monedaId) : "",
+    monedaId: state.item?.monedaId ? String(state.item.monedaId) : defaultCurrencyId,
   });
   const typeOptions = (options?.types || []).map((item) => ({ value: item.id, label: item.nombre }));
-  const currencyOptions = (options?.currencies || []).map((item) => ({ value: item.id, label: `${item.codigo} ${item.simbolo} - ${item.nombre}` }));
+  const currencyOptions = (options?.allCurrencies || options?.currencies || []).map((item) => ({ value: item.id, label: `${item.codigo} ${item.simbolo} - ${item.nombre}` }));
 
   async function submit(event) {
     event.preventDefault();
@@ -745,10 +1053,10 @@ function ProductDialog({ state, options, settings, onClose, onSubmit }) {
       await onSubmit({
         ...form,
         marca: form.marca || null,
+        procedencia: form.procedencia || null,
         tipoId: form.tipoId || null,
         fechaIngreso: form.fechaIngreso || null,
         stockTotal: form.stockTotal || 0,
-        precioCompra: form.precioCompra || 0,
         precioVenta: form.precioVenta || 0,
         monedaId: form.monedaId || null,
       });
@@ -761,7 +1069,7 @@ function ProductDialog({ state, options, settings, onClose, onSubmit }) {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,560px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] max-w-[min(98vw,1120px)] overflow-y-auto bg-white p-0 text-slate-950">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700"><Package className="size-5" />{readonly ? "Detalle" : state.item ? "Editar" : "Nuevo"} producto</DialogTitle>
@@ -776,9 +1084,14 @@ function ProductDialog({ state, options, settings, onClose, onSubmit }) {
                   <Input disabled={readonly} value={form.marca} placeholder="Ej: FORD" onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value }))} />
                 </Field>
               ) : null}
+              {showProcedencia ? (
+                <Field label="Procedencia">
+                  <Input disabled={readonly} value={form.procedencia} placeholder="Ej: Importado, Local, Ford" onChange={(e) => setForm((f) => ({ ...f, procedencia: e.target.value }))} />
+                </Field>
+              ) : null}
             </Panel>
             <Panel number="2" title="Clasificacion">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-[1.3fr_1fr]">
                 <Field label="Tipo de inventario">
                   <SearchableSelect
                     disabled={readonly}
@@ -794,23 +1107,25 @@ function ProductDialog({ state, options, settings, onClose, onSubmit }) {
               </div>
             </Panel>
             <Panel number="3" title={useLots ? "Precios" : "Stock y precios"}>
-              <div className={`grid gap-3 ${useLots ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+              <div className={`grid gap-3 ${useLots ? "md:grid-cols-[1fr_1fr_1.45fr]" : "sm:grid-cols-2 lg:grid-cols-[0.8fr_1fr_1fr_1.35fr]"}`}>
                 {!useLots ? <Field label="Stock total"><Input disabled={readonly} type="number" value={form.stockTotal} onChange={(e) => setForm((f) => ({ ...f, stockTotal: e.target.value }))} /></Field> : null}
-                <Field label="Precio compra"><Input disabled={readonly} type="number" step="0.01" value={form.precioCompra} onChange={(e) => setForm((f) => ({ ...f, precioCompra: e.target.value }))} /></Field>
+                <Field label="Precio compra medio">
+                  <Input disabled type="number" step="0.01" value={form.precioCompra} />
+                </Field>
                 <Field label="Precio venta"><Input disabled={readonly} type="number" step="0.01" value={form.precioVenta} onChange={(e) => setForm((f) => ({ ...f, precioVenta: e.target.value }))} /></Field>
+                <Field label="Moneda">
+                  <SearchableSelect
+                    disabled={readonly}
+                    value={form.monedaId}
+                    options={currencyOptions}
+                    placeholder={currencyOptions.length ? "Seleccionar moneda" : "Sin monedas cargadas"}
+                    searchPlaceholder="Buscar moneda..."
+                    emptyText="No hay monedas activas."
+                    onChange={(value) => setForm((f) => ({ ...f, monedaId: value }))}
+                  />
+                </Field>
               </div>
-              {useLots ? <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">El stock total se calcula automaticamente con los lotes registrados.</p> : null}
-              <Field label="Moneda">
-                <SearchableSelect
-                  disabled={readonly}
-                  value={form.monedaId}
-                  options={currencyOptions}
-                  placeholder={currencyOptions.length ? "Seleccionar moneda" : "Sin monedas cargadas"}
-                  searchPlaceholder="Buscar moneda..."
-                  emptyText="No hay monedas activas."
-                  onChange={(value) => setForm((f) => ({ ...f, monedaId: value }))}
-                />
-              </Field>
+              {useLots ? <p className="rounded-md bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">El stock total y el precio de compra medio se calculan automaticamente con los lotes registrados.</p> : null}
             </Panel>
             {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{error}</p> : null}
           </div>
@@ -830,16 +1145,41 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
   const showMeasureType = settings?.habilitarTipoMedida !== false;
   const showProvider = settings?.habilitarProveedorEnLote !== false;
   const showExpiration = settings?.habilitarFechaVencimiento !== false;
+  const defaultCurrencyId = getDefaultCurrencyId(options);
+  const defaultCurrency = (options?.allCurrencies || options?.currencies || []).find((item) => String(item.id) === defaultCurrencyId);
+  const taxPercent = Number(options?.activeTax?.porcentaje || 0) || 18;
+  const taxFactor = 1 + taxPercent / 100;
+  const initialPrecioCompra = state.item ? state.item.precioCompra || "" : "";
+  const initialMonedaId = state.item?.monedaId ? String(state.item.monedaId) : defaultCurrencyId;
+  const initialTipoCambio = state.item?.tipoCambio || "";
+  const initialCompraCalculada = initialMonedaId && defaultCurrencyId && String(initialMonedaId) !== String(defaultCurrencyId)
+    ? Number(initialPrecioCompra || 0) * Number(initialTipoCambio || 0)
+    : initialPrecioCompra;
+  const initialPrecioVentaConIgv = state.item?.precioVentaConIgv || product?.precioVenta || "";
+  const initialPrecioVentaSinIgv = state.item?.precioVentaSinIgv || "";
+  const initialMargen = state.item?.margenComercial || (initialPrecioCompra ? calculateMargin(initialCompraCalculada, initialPrecioVentaSinIgv) : "");
+  const lastProductLot = !state.item && Array.isArray(product?.lotes) && product.lotes.length ? product.lotes[0] : null;
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    tipoMedidaId: state.item?.tipoMedidaId ? String(state.item.tipoMedidaId) : "",
+    tipoMedidaId: state.item?.tipoMedidaId ? String(state.item.tipoMedidaId) : lastProductLot?.tipoMedidaId ? String(lastProductLot.tipoMedidaId) : "",
     proveedorId: state.item?.proveedorId ? String(state.item.proveedorId) : "",
     numeroFactura: state.item?.numeroFactura || "",
+    tipoComprobanteId: state.item?.tipoComprobanteId ? String(state.item.tipoComprobanteId) : "",
     fechaVencimiento: state.item?.fechaVencimiento ? String(state.item.fechaVencimiento).slice(0, 10) : "",
-    precioCompra: state.item?.precioCompra || product?.precioCompra || "",
+    precioCompra: initialPrecioCompra,
+    margenComercial: initialMargen,
+    precioVentaSinIgv: initialPrecioVentaSinIgv,
+    precioVentaConIgv: initialPrecioVentaConIgv,
+    monedaId: initialMonedaId,
+    tipoCambio: initialTipoCambio,
     stockLote: state.item?.stockLote || "",
   });
+  const effectiveMonedaId = form.monedaId || defaultCurrencyId;
+  const selectedCurrencyIsDefault = !defaultCurrencyId || String(effectiveMonedaId) === String(defaultCurrencyId);
+  const convertedPurchase = selectedCurrencyIsDefault
+    ? Number(form.precioCompra || 0)
+    : Number(form.precioCompra || 0) * Number(form.tipoCambio || 0);
   const measureOptions = (options?.measureTypes || []).map((item) => ({
     value: item.id,
     label: `${item.nombre}${item.abreviatura ? ` (${item.abreviatura})` : ""}`,
@@ -848,6 +1188,84 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
     value: item.id,
     label: `${item.nombre}${item.ruc ? ` - ${item.ruc}` : ""}`,
   }));
+  const voucherTypeOptions = (options?.voucherTypes || []).map((item) => ({
+    value: item.id,
+    label: `${item.codigo ? `${item.codigo} - ` : ""}${item.nombre}`,
+  }));
+  const currencyOptions = (options?.allCurrencies || options?.currencies || []).map((item) => ({
+    value: item.id,
+    label: `${item.codigo} - ${item.nombre}${item.simbolo ? ` (${item.simbolo})` : ""}`,
+  }));
+
+  function roundMoney(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Number(number.toFixed(2)) : "";
+  }
+
+  function roundPercent(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Number(number.toFixed(4)) : "";
+  }
+
+  function calculateSaleWithoutTax(priceWithTax, factor) {
+    const price = Number(priceWithTax || 0);
+    if (!Number.isFinite(price) || price <= 0 || !factor) return "";
+    return roundMoney(price / factor);
+  }
+
+  function calculateMargin(purchase, saleWithoutTax) {
+    const purchaseNumber = Number(purchase || 0);
+    const saleNumber = Number(saleWithoutTax || 0);
+    if (!Number.isFinite(purchaseNumber) || !Number.isFinite(saleNumber) || saleNumber <= 0) return "";
+    return roundPercent((1 - purchaseNumber / saleNumber) * 100);
+  }
+
+  function calculateFromMargin(purchase, margin) {
+    const purchaseNumber = Number(purchase || 0);
+    const marginNumber = Number(margin || 0);
+    if (!Number.isFinite(purchaseNumber) || !Number.isFinite(marginNumber) || purchaseNumber <= 0 || marginNumber >= 100) {
+      return { precioVentaSinIgv: "", precioVentaConIgv: "" };
+    }
+    const withoutTax = purchaseNumber / (1 - marginNumber / 100);
+    return {
+      precioVentaSinIgv: roundMoney(withoutTax),
+      precioVentaConIgv: roundMoney(withoutTax * taxFactor),
+    };
+  }
+
+  function purchaseForCalculation(current, overrides = {}) {
+    const currencyId = overrides.monedaId ?? current.monedaId ?? defaultCurrencyId;
+    const purchase = Number(overrides.precioCompra ?? current.precioCompra ?? 0);
+    const exchange = Number(overrides.tipoCambio ?? current.tipoCambio ?? 0);
+    if (defaultCurrencyId && String(currencyId) !== String(defaultCurrencyId)) {
+      return purchase * exchange;
+    }
+    return purchase;
+  }
+
+  function recalculateWithPurchase(current, overrides = {}) {
+    const purchase = purchaseForCalculation(current, overrides);
+    const margin = overrides.margenComercial ?? current.margenComercial;
+    if (margin !== "") {
+      return calculateFromMargin(purchase, margin);
+    }
+    const withoutTax = calculateSaleWithoutTax(overrides.precioVentaConIgv ?? current.precioVentaConIgv, taxFactor);
+    return {
+      precioVentaSinIgv: withoutTax,
+      margenComercial: calculateMargin(purchase, withoutTax),
+    };
+  }
+
+  function updateCurrency(value) {
+    setForm((current) => {
+      const nextTipoCambio = String(value) === String(defaultCurrencyId) ? "" : current.tipoCambio;
+      return { ...current, monedaId: value, tipoCambio: nextTipoCambio };
+    });
+  }
+
+  function calculateNow() {
+    setForm((current) => ({ ...current, ...recalculateWithPurchase(current) }));
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -860,8 +1278,14 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
         tipoMedidaId: form.tipoMedidaId || null,
         proveedorId: form.proveedorId || null,
         numeroFactura: form.numeroFactura,
+        tipoComprobanteId: form.tipoComprobanteId || null,
         fechaVencimiento: form.fechaVencimiento || null,
         precioCompra: form.precioCompra || 0,
+        margenComercial: form.margenComercial,
+        precioVentaSinIgv: form.precioVentaSinIgv,
+        precioVentaConIgv: form.precioVentaConIgv,
+        monedaId: effectiveMonedaId || null,
+        tipoCambio: selectedCurrencyIsDefault ? null : form.tipoCambio || 0,
         stockLote: form.stockLote || 0,
       });
     } catch (err) {
@@ -873,7 +1297,7 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,520px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] w-[min(98vw,1120px)] max-w-none overflow-x-hidden overflow-y-auto bg-white p-0 text-slate-950 sm:max-w-[1120px]">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
@@ -883,12 +1307,25 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
           </DialogHeader>
           <div className="space-y-3 p-4">
             <Panel number="1" title="Datos del lote">
-              <Field label="Numero de factura *">
-                <Input disabled={readonly} value={form.numeroFactura} placeholder="Ej: F001-000123" onChange={(event) => setForm((current) => ({ ...current, numeroFactura: event.target.value }))} required />
-              </Field>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Numero de comprobante">
+                  <Input disabled={readonly} value={form.numeroFactura} placeholder="Ej: F001-000123" onChange={(event) => setForm((current) => ({ ...current, numeroFactura: event.target.value }))} />
+                </Field>
+                <Field label="Tipo de comprobante">
+                  <SearchableSelect
+                    disabled={readonly}
+                    value={form.tipoComprobanteId}
+                    options={voucherTypeOptions}
+                    placeholder={voucherTypeOptions.length ? "Seleccionar comprobante" : "Sin comprobantes activos"}
+                    searchPlaceholder="Buscar comprobante..."
+                    emptyText="No hay comprobantes activos."
+                    onChange={(value) => setForm((current) => ({ ...current, tipoComprobanteId: value }))}
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_1.2fr_0.9fr]">
                 {showProvider ? (
-                  <Field label="Proveedor *">
+                  <Field label="Proveedor">
                     <SearchableSelect
                       disabled={readonly}
                       value={form.proveedorId}
@@ -901,33 +1338,106 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
                   </Field>
                 ) : null}
                 {showMeasureType ? (
-                  <Field label="Tipo de medida *">
+                  <Field label="Unidad de medida *">
                     <SearchableSelect
                       disabled={readonly}
                       value={form.tipoMedidaId}
                       options={measureOptions}
-                      placeholder={measureOptions.length ? "Seleccionar medida" : "Sin medidas"}
-                      searchPlaceholder="Buscar medida..."
-                      emptyText="No hay tipos de medida."
+                      placeholder={measureOptions.length ? "Seleccionar unidad" : "Sin unidades"}
+                      searchPlaceholder="Buscar unidad..."
+                      emptyText="No hay unidades de medida."
                       onChange={(value) => setForm((current) => ({ ...current, tipoMedidaId: value }))}
                     />
                   </Field>
                 ) : null}
+                {showExpiration ? (
+                  <Field label="Fecha de vencimiento">
+                    <Input disabled={readonly} type="date" value={form.fechaVencimiento} onChange={(event) => setForm((current) => ({ ...current, fechaVencimiento: event.target.value }))} />
+                  </Field>
+                ) : null}
               </div>
-              {showExpiration ? (
-                <Field label="Fecha de vencimiento">
-                  <Input disabled={readonly} type="date" value={form.fechaVencimiento} onChange={(event) => setForm((current) => ({ ...current, fechaVencimiento: event.target.value }))} />
-                </Field>
-              ) : null}
             </Panel>
-            <Panel number="2" title="Stock y compra">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Precio compra *">
-                  <Input disabled={readonly} type="number" step="0.01" min="0" value={form.precioCompra} onChange={(event) => setForm((current) => ({ ...current, precioCompra: event.target.value }))} required />
-                </Field>
-                <Field label="Stock lote *">
-                  <Input disabled={readonly} type="number" min="0" value={form.stockLote} onChange={(event) => setForm((current) => ({ ...current, stockLote: event.target.value }))} required />
-                </Field>
+            <Panel
+              number="2"
+              title="Stock y compra"
+              action={!readonly ? (
+                <Button type="button" size="sm" variant="outline" className="h-8 border-violet-200 text-violet-700 hover:bg-violet-50" onClick={calculateNow}>
+                  Calcular
+                </Button>
+              ) : null}
+            >
+              <div className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Field label="PRECIO DE COMPRA (SIN IGV) *">
+                    <Input
+                      disabled={readonly}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.precioCompra}
+                      onChange={(event) => setForm((current) => ({ ...current, precioCompra: event.target.value }))}
+                      required
+                    />
+                  </Field>
+                  <Field label="Margen comercial (%)">
+                    <Input
+                      disabled={readonly}
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      max="99.9999"
+                      value={form.margenComercial}
+                      onChange={(event) => setForm((current) => ({ ...current, margenComercial: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label="Precio venta sin IGV">
+                    <Input disabled type="number" step="0.01" min="0" value={form.precioVentaSinIgv} />
+                  </Field>
+                  <Field label={`Precio venta con IGV${taxPercent ? ` (${taxPercent}%)` : ""}`}>
+                    <Input
+                      disabled={readonly}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.precioVentaConIgv}
+                      onChange={(event) => setForm((current) => ({ ...current, precioVentaConIgv: event.target.value }))}
+                    />
+                  </Field>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Field label="Stock lote *">
+                    <Input disabled={readonly} type="number" min="0" value={form.stockLote} onChange={(event) => setForm((current) => ({ ...current, stockLote: event.target.value }))} required />
+                  </Field>
+                  <Field label="Moneda *">
+                    <SearchableSelect
+                      disabled={readonly}
+                      value={effectiveMonedaId}
+                      options={currencyOptions}
+                      placeholder={currencyOptions.length ? "Seleccionar moneda" : "Sin monedas"}
+                      searchPlaceholder="Buscar moneda..."
+                      emptyText="No hay monedas."
+                      onChange={updateCurrency}
+                    />
+                  </Field>
+                  {!selectedCurrencyIsDefault ? (
+                    <Field label={`Tipo de cambio${defaultCurrency?.codigo ? ` a ${defaultCurrency.codigo}` : ""} *`}>
+                      <Input
+                        disabled={readonly}
+                        type="number"
+                        step="0.0001"
+                        min="0.0001"
+                        value={form.tipoCambio}
+                        onChange={(event) => setForm((current) => ({ ...current, tipoCambio: event.target.value }))}
+                        required
+                      />
+                    </Field>
+                  ) : null}
+                  {!selectedCurrencyIsDefault ? (
+                    <Field label={`Compra convertida${defaultCurrency?.codigo ? ` en ${defaultCurrency.codigo}` : ""}`}>
+                      <Input disabled type="number" step="0.01" value={Number.isFinite(convertedPurchase) ? roundMoney(convertedPurchase) : ""} />
+                    </Field>
+                  ) : null}
+                </div>
               </div>
               {state.item ? <p className="rounded-md bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">Stock usado: {state.item.stockUsado || 0}. Disponible: {state.item.stockDisponible || 0}.</p> : null}
             </Panel>
@@ -1153,7 +1663,7 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
   );
 }
 
-function StockDistributionDialog({ state, options, actions, canCreate, canEdit, canDelete, onClose }) {
+function StockDistributionDialog({ state, options, actions, canCreate, canEdit, canDelete, assignedShelfIds = new Set(), onClose }) {
   const product = state.product;
   const assigned = product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0);
   const available = Math.max(Number(product.stockTotal || 0) - assigned, 0);
@@ -1161,7 +1671,7 @@ function StockDistributionDialog({ state, options, actions, canCreate, canEdit, 
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,430px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] !w-[min(96vw,1120px)] !max-w-[min(96vw,1120px)] overflow-y-auto bg-white p-0 text-slate-950">
         <DialogHeader className="border-b border-violet-100 p-4">
           <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700"><Package className="size-5" />Distribucion de Stock</DialogTitle>
           <DialogDescription>Numero de parte: {product.numeroParte}</DialogDescription>
@@ -1169,22 +1679,33 @@ function StockDistributionDialog({ state, options, actions, canCreate, canEdit, 
         <div className="space-y-3 p-4">
           <div className="grid grid-cols-3 gap-2 text-center">
             <MiniStat label="Total Producto" value={product.stockTotal} />
-            <MiniStat label="Asignado" value={assigned} />
-            <MiniStat label="Disponible" value={available} />
+            <MiniStat label="Productos con ubicacion" value={assigned} />
+            <MiniStat label="Productos sin ubicacion" value={available} />
           </div>
           {canCreate ? <Button onClick={() => setLocationDialog({ open: true, item: null })} className="w-full bg-violet-700 text-white hover:bg-violet-800"><Plus className="size-4" />Nueva ubicacion</Button> : null}
           <div className="space-y-2">
-            {product.stock.map((stock) => (
-              <div key={stock.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-violet-700">{stockLabel(stock)}</p>
-                  <p className="text-xs font-medium text-slate-500">{stock.loteLabel || `Lote ${stock.loteId}`}</p>
+            {product.stock.map((stock) => {
+              const canManageRow = assignedShelfIds.has(Number(stock.anaquelId));
+              return (
+                <div key={stock.id} className="grid gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="truncate text-sm font-bold text-violet-700">{stockLabel(stock)}</p>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{stockOwnerLabel(stock)}</span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-500">{stock.loteLabel || `Lote ${stock.loteId}`}</p>
+                  </div>
+                  <div className="w-full rounded-md bg-violet-100 px-3 py-2 text-center text-violet-700 sm:w-24">
+                    <p className="text-xs">Stock</p>
+                    <p className="font-bold">{stock.stock}</p>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    {canEdit && canManageRow ? <Button variant="outline" size="icon" onClick={() => setLocationDialog({ open: true, item: stock })}><Edit3 className="size-4" /></Button> : null}
+                    {canDelete && canManageRow ? <Button variant="destructive" size="icon" onClick={() => actions.deleteStock(stock.id)}><Trash2 className="size-4" /></Button> : null}
+                  </div>
                 </div>
-                <div className="rounded-md bg-violet-100 px-3 py-2 text-center text-violet-700"><p className="text-xs">Stock</p><p className="font-bold">{stock.stock}</p></div>
-                {canEdit ? <Button variant="outline" size="icon" onClick={() => setLocationDialog({ open: true, item: stock })}><Edit3 className="size-4" /></Button> : null}
-                {canDelete ? <Button variant="destructive" size="icon" onClick={() => actions.deleteStock(stock.id)}><Trash2 className="size-4" /></Button> : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         <DialogFooter className="border-t border-slate-200 p-3"><Button variant="outline" onClick={onClose}>Cerrar</Button></DialogFooter>
@@ -1244,7 +1765,7 @@ function LocationDialog({ state, product, options, assigned, available, onClose,
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[min(94vw,430px)] bg-white p-0 text-slate-950">
+      <DialogContent className="max-w-[min(94vw,640px)] bg-white p-0 text-slate-950">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700"><MapPin className="size-5" />{state.item ? "Editar" : "Nueva"} ubicacion</DialogTitle>
@@ -1390,10 +1911,13 @@ function DeleteDialog({ state, onClose }) {
   );
 }
 
-function Panel({ number, title, children }) {
+function Panel({ number, title, action, children }) {
   return (
     <div className="rounded-lg border border-violet-200 bg-violet-50/30 p-3">
-      <p className="mb-3 flex items-center gap-2 text-sm font-bold text-violet-700">{number ? <span className="flex size-6 items-center justify-center rounded-full bg-violet-700 text-xs text-white">{number}</span> : null}{title}</p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="flex items-center gap-2 text-sm font-bold text-violet-700">{number ? <span className="flex size-6 items-center justify-center rounded-full bg-violet-700 text-xs text-white">{number}</span> : null}{title}</p>
+        {action}
+      </div>
       <div className="space-y-3">{children}</div>
     </div>
   );
@@ -1447,4 +1971,25 @@ function MiniStat({ label, value }) {
 function stockLabel(stock) {
   const parts = [stock.anaquelCodigo, stock.nivelCodigo, stock.posicion ? `Pos. ${stock.posicion}` : ""].filter(Boolean);
   return parts.length ? parts.join(" / ") : "-";
+}
+
+function stockOwnerLabel(stock) {
+  if (stock.tallerName) return `Almacen: ${stock.tallerName}`;
+  if (stock.mostradorName) return `Mostrador: ${stock.mostradorName}`;
+  return "Sin almacen/mostrador";
+}
+
+function compactStockLabel(stock) {
+  const parts = [stock.anaquelCodigo, stock.nivelCodigo, stock.posicion].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "-";
+}
+
+function stockTooltipLabel(stock) {
+  const details = [
+    `Anaquel: ${stock.anaquelCodigo || "-"}`,
+    `Nivel: ${stock.nivelCodigo || "-"}`,
+    `Posicion: ${stock.posicion || "-"}`,
+    `Almacen/Mostrador: ${stock.tallerName || stock.mostradorName || "-"}`,
+  ];
+  return details.join(" | ");
 }

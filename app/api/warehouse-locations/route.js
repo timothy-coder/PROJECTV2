@@ -41,8 +41,28 @@ export async function GET() {
        INNER JOIN almacen_anaqueles a ON a.id = n.anaquel_id
        ORDER BY a.codigo ASC, n.orden_nivel ASC, p.posicion ASC`
     );
-    const [workshops] = await pool.query(`SELECT id, centro_id, nombre FROM configuracion_talleres ORDER BY nombre ASC`);
-    const [counters] = await pool.query(`SELECT id, centro_id, nombre FROM configuracion_mostradores ORDER BY nombre ASC`);
+    const [workshops] = await pool.query(
+      `SELECT t.id, t.centro_id, t.nombre
+       FROM configuracion_talleres t
+       INNER JOIN administracion_usuario_talleres ut ON ut.taller_id = t.id
+       WHERE ut.usuario_id = ?
+       ORDER BY t.nombre ASC`,
+      [allowed.user.id]
+    );
+    const [counters] = await pool.query(
+      `SELECT m.id, m.centro_id, m.nombre
+       FROM configuracion_mostradores m
+       INNER JOIN administracion_usuario_mostradores um ON um.mostrador_id = m.id
+       WHERE um.usuario_id = ?
+       ORDER BY m.nombre ASC`,
+      [allowed.user.id]
+    );
+    const [[settings]] = await pool.query(
+      `SELECT habilitar_taller, habilitar_mostrador
+       FROM configuracion_posventa_inventario
+       ORDER BY id ASC
+       LIMIT 1`
+    );
 
     return NextResponse.json({
       shelves: shelves.map((row) => ({
@@ -78,6 +98,10 @@ export async function GET() {
       options: {
         workshops: workshops.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         counters: counters.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
+        settings: {
+          habilitarTaller: settings ? Boolean(settings.habilitar_taller) : true,
+          habilitarMostrador: settings ? Boolean(settings.habilitar_mostrador) : true,
+        },
       },
     });
   } catch (error) {

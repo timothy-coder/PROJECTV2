@@ -123,14 +123,6 @@ function dateRangeForContext(filters, records) {
   return { start: days[0], end: days[days.length - 1] };
 }
 
-function periodStartForFilters(filters) {
-  if (!filters.dateValue) return "";
-  if (filters.dateLevel === "day") return filters.dateValue;
-  if (filters.dateLevel === "month") return `${filters.dateValue}-01`;
-  if (filters.dateLevel === "year") return `${filters.dateValue}-01-01`;
-  return "";
-}
-
 function todayKey() {
   const today = new Date();
   return dateKeyFromParts(today.getFullYear(), today.getMonth() + 1, today.getDate());
@@ -361,6 +353,14 @@ function filterRecords(records, filters, chartFilters) {
     const chart = Object.entries(chartFilters).every(([field, value]) => !value || record[field] === value);
     return basic && chart;
   });
+}
+
+function periodStartForFilters(filters) {
+  if (!filters.dateValue) return "";
+  if (filters.dateLevel === "day") return filters.dateValue;
+  if (filters.dateLevel === "month") return `${filters.dateValue}-01`;
+  if (filters.dateLevel === "year") return `${filters.dateValue}-01-01`;
+  return "";
 }
 
 function filterRecordsWithoutDate(records, filters, chartFilters) {

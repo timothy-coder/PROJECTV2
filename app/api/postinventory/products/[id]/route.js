@@ -10,10 +10,10 @@ export async function PUT(request, { params }) {
     const numeroParte = String(body.numeroParte || "").trim();
     const descripcion = String(body.descripcion || "").trim();
     const marca = String(body.marca || "").trim() || null;
+    const procedencia = String(body.procedencia || "").trim() || null;
     const tipoId = body.tipoId ? Number(body.tipoId) : null;
     const fechaIngreso = body.fechaIngreso || null;
     const stockTotal = Number(body.stockTotal || 0);
-    const precioCompra = Number(body.precioCompra || 0);
     const precioVenta = Number(body.precioVenta || 0);
     const monedaId = body.monedaId ? Number(body.monedaId) : null;
 
@@ -25,7 +25,12 @@ export async function PUT(request, { params }) {
       `SELECT COUNT(*) AS total_lotes,
               COALESCE(SUM(stock_lote), 0) AS total,
               COALESCE(SUM(stock_usado), 0) AS usado,
-              COALESCE(SUM(stock_disponible), 0) AS disponible
+              COALESCE(SUM(stock_disponible), 0) AS disponible,
+              CASE
+                WHEN COALESCE(SUM(stock_lote), 0) > 0
+                  THEN COALESCE(SUM((precio_compra * COALESCE(NULLIF(tipo_cambio, 0), 1)) * stock_lote), 0) / SUM(stock_lote)
+                ELSE 0
+              END AS precio_compra_medio
        FROM posventa_productos_lotes
        WHERE producto_id = ?`,
       [id]
@@ -34,10 +39,12 @@ export async function PUT(request, { params }) {
     let nextStockTotal = stockTotal;
     let stockUsado = 0;
     let stockDisponible = 0;
+    let precioCompraCalculado = 0;
     if (hasLots) {
       nextStockTotal = Number(lotRows[0]?.total || 0);
       stockUsado = Number(lotRows[0]?.usado || 0);
       stockDisponible = Number(lotRows[0]?.disponible || 0);
+      precioCompraCalculado = Number(lotRows[0]?.precio_compra_medio || 0);
     } else {
       const [stockRows] = await pool.query(
         `SELECT COALESCE(SUM(stock), 0) AS usado FROM posventa_stock WHERE producto_id = ?`,
@@ -49,10 +56,10 @@ export async function PUT(request, { params }) {
 
     await pool.query(
       `UPDATE posventa_productos
-       SET numero_parte = ?, descripcion = ?, marca = ?, tipo_inventario_id = ?, fecha_ingreso = ?,
+       SET numero_parte = ?, descripcion = ?, marca = ?, procedencia = ?, tipo_inventario_id = ?, fecha_ingreso = ?,
            stock_total = ?, stock_usado = ?, stock_disponible = ?, precio_compra = ?, precio_venta = ?, moneda_id = ?
        WHERE id = ?`,
-      [numeroParte, descripcion, marca, tipoId, fechaIngreso, nextStockTotal, stockUsado, stockDisponible, precioCompra, precioVenta, monedaId, id]
+      [numeroParte, descripcion, marca, procedencia, tipoId, fechaIngreso, nextStockTotal, stockUsado, stockDisponible, precioCompraCalculado, precioVenta, monedaId, id]
     );
 
     return NextResponse.json({ ok: true });

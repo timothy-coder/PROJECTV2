@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronDown, Edit3, Eye, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Edit3, Eye, Loader2, MoreVertical, Plus, RefreshCw, Search, Send, Trash2 } from "lucide-react";
 
 import { SearchableSelect } from "@/components/generalconfiguration/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,13 @@ function rowAgendaAt(item) {
 
 function rowCitaAt(item) {
   return item?.citaFecha ? `${item.citaFecha}T${item.citaHora || "00:00"}` : "";
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export default function PostventaOpportunitiesPage({ userPermissions, kind = "opportunity" }) {
@@ -155,8 +162,8 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
   }
 
   return (
-    <div className="min-w-0 bg-slate-50 p-3 text-slate-950 sm:p-4">
-      <div className="sticky top-0 z-30 mb-3 border-b border-violet-100 bg-slate-50/95 pb-3 backdrop-blur">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 min-w-0 flex-col overflow-hidden bg-slate-50 p-3 text-slate-950 md:h-svh sm:p-4">
+      <div className="mb-3 shrink-0 border-b border-violet-100 pb-3">
         <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-base font-bold leading-tight text-violet-700">{copy.title}</h1>
@@ -167,12 +174,12 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
             {canCreate && canOpenMaintenance ? <Button className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => { window.location.href = "/proximosmantenimientos"; }}><Plus className="size-4" />Desde mantenimiento</Button> : null}
           </div>
         </header>
-        <section className="rounded-lg border bg-white p-3 shadow-sm">
-          <button type="button" className="mb-3 flex w-full items-center justify-between rounded-md border border-violet-100 bg-violet-50 px-3 py-2 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
-            Filtros{activeFilterCount ? ` (${activeFilterCount})` : ""}
+        <section className="rounded-lg border border-violet-200 bg-violet-50/30 p-2 sm:p-3">
+          <button type="button" className="flex h-9 w-full items-center justify-between rounded-md border border-violet-200 bg-white px-3 text-left text-xs font-bold text-violet-700 md:hidden" onClick={() => setFiltersOpen((open) => !open)}>
+            <span>Filtros{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
             <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
-          <div className={`${filtersOpen ? "grid" : "hidden"} gap-2 md:grid md:grid-cols-3 xl:grid-cols-8`}>
+          <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 md:mt-0 md:grid md:grid-cols-3 xl:grid-cols-8`}>
             <Field label="Buscar">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -218,12 +225,13 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
           </div>
         </section>
       </div>
-      <section ref={tableContainerRef} className="overflow-hidden rounded-lg border bg-white shadow-sm">
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[1120px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-bold text-slate-700">
+      <section ref={tableContainerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="hidden min-h-0 flex-1 overflow-x-auto md:block">
+          <table className="w-full min-w-[1080px] table-fixed text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold text-slate-700">
               <tr>
-                <SortableHeader sortKey="code" sortConfig={sortConfig} onSort={handleSort} className="px-3 py-3">Codigo</SortableHeader>
+                <SortableHeader sortKey="code" sortConfig={sortConfig} onSort={handleSort}>Codigo</SortableHeader>
+                <SortableHeader sortKey="createdAt" sortConfig={sortConfig} onSort={handleSort}>Fecha creacion</SortableHeader>
                 <SortableHeader sortKey="clienteNombre" sortConfig={sortConfig} onSort={handleSort}>Cliente</SortableHeader>
                 <SortableHeader sortKey="vehiculoNombre" sortConfig={sortConfig} onSort={handleSort}>Vehiculo</SortableHeader>
                 <SortableHeader sortKey="origenNombre" sortConfig={sortConfig} onSort={handleSort}>Origen</SortableHeader>
@@ -231,19 +239,20 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                 <SortableHeader sortKey="asignadoNombre" sortConfig={sortConfig} onSort={handleSort}>Asignado</SortableHeader>
                 <SortableHeader sortKey="agendaAt" sortConfig={sortConfig} onSort={handleSort}>Fecha agenda</SortableHeader>
                 <SortableHeader sortKey="citaAt" sortConfig={sortConfig} onSort={handleSort}>Cita</SortableHeader>
-                <th className="text-right">Acciones</th>
+                <th className="px-2 py-2 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-slate-200">
               {rows.map((item) => (
-                <tr key={item.id} style={rowTimeStyle(item)}>
-                  <td className="px-3 py-3 font-bold text-blue-700">{item.code}</td>
-                  <td>{item.clienteNombre}</td>
-                  <td>{item.vehiculoNombre}</td>
-                  <td>{item.origenNombre}</td>
-                  <td><span className="rounded-full px-2 py-1 text-xs font-bold" style={{ color: item.etapaColor, backgroundColor: `${item.etapaColor}1f` }}>{item.etapaNombre}</span></td>
-                  <td>{item.asignadoNombre}</td>
-                  <td>{item.agendaDate ? `${item.agendaDate} ${item.agendaTime}` : "-"}</td>
+                <tr key={item.id} className="h-[50px]" style={rowTimeStyle(item)}>
+                  <td className="px-2 py-2 font-bold text-blue-700">{item.code}</td>
+                  <td className="px-2 py-2 text-slate-600">{formatDate(item.createdAt)}</td>
+                  <td className="px-2 py-2 font-semibold text-slate-950">{item.clienteNombre}</td>
+                  <td className="px-2 py-2 text-slate-700">{item.vehiculoNombre}</td>
+                  <td className="px-2 py-2 text-slate-600">{item.origenNombre}</td>
+                  <td className="px-2 py-2"><span className="rounded-full px-2 py-1 text-[11px] font-bold" style={{ color: item.etapaColor, backgroundColor: `${item.etapaColor}1f` }}>{item.etapaNombre}</span></td>
+                  <td className="px-2 py-2 text-slate-600">{item.asignadoNombre}</td>
+                  <td className="px-2 py-2 text-slate-600">{item.agendaDate ? `${item.agendaDate} ${item.agendaTime}` : "-"}</td>
                   <td>
                     {item.citaId ? (
                       <Button size="sm" variant="outline" onClick={() => { window.location.href = `/citaspv?id=${item.citaId}`; }}>
@@ -251,7 +260,7 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                       </Button>
                     ) : <span className="text-xs text-slate-400">Sin cita</span>}
                   </td>
-                  <td className="px-3 text-right">
+                  <td className="px-2 py-2 text-right">
                     <div className="flex justify-end gap-2">
                       <Button size="icon" variant="ghost" title="Ver detalle" onClick={() => { window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}><Eye className="size-4" /></Button>
                       {canEdit ? <Button size="icon" variant="ghost" title="Editar" onClick={() => openEdit(item)}><Edit3 className="size-4" /></Button> : null}
@@ -260,30 +269,31 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                   </td>
                 </tr>
               ))}
-              {!rows.length ? <tr><td colSpan={9} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={10} className="py-10 text-center text-slate-500">{data.loading ? <><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</> : "No hay registros"}</td></tr> : null}
             </tbody>
           </table>
         </div>
-        <div className="overflow-visible md:hidden">
-          <table className="w-full table-fixed text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] font-bold uppercase text-slate-600">
+        <div className="min-h-0 flex-1 overflow-visible md:hidden">
+          <table className="w-full table-fixed text-left text-[11px]">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-bold text-slate-600">
               <tr>
-                <th className="w-[23%] px-2 py-2">Codigo</th>
-                <th className="w-[38%] px-2 py-2">Cliente</th>
+                <th className="w-[27%] px-2 py-2">Codigo</th>
+                <th className="w-[34%] px-2 py-2">Cliente</th>
                 <th className="w-[23%] px-2 py-2">Etapa</th>
-                <th className="w-[16%] px-2 py-2 text-right">Acc.</th>
+                <th className="w-[16%] px-2 py-2 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-slate-200">
               {rows.map((item) => (
                 <tr key={item.id} className="align-top" style={rowTimeStyle(item)}>
                   <td className="px-2 py-3">
                     <button type="button" className="break-words text-left text-[11px] font-bold leading-tight text-blue-700" onClick={() => { window.location.href = `/${kind === "lead" ? "leadspv" : "oportunidadespv"}/${item.id}`; }}>
                       {item.code}
                     </button>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">{formatDate(item.createdAt)}</p>
                   </td>
                   <td className="px-2 py-3">
-                    <p className="line-clamp-2 text-[11px] font-bold leading-tight text-slate-950">{item.clienteNombre}</p>
+                    <p className="line-clamp-2 text-[11px] font-semibold leading-tight text-slate-950">{item.clienteNombre}</p>
                     <p className="mt-1 line-clamp-2 text-[10px] font-medium leading-tight text-slate-500">{item.vehiculoNombre}</p>
                   </td>
                   <td className="px-2 py-3">
@@ -304,25 +314,25 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
                   </td>
                 </tr>
               ))}
-              {!rows.length ? <tr><td colSpan={4} className="py-10 text-center text-slate-500">{data.loading ? "Cargando..." : "No hay registros"}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={4} className="py-10 text-center text-slate-500">{data.loading ? <><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</> : "No hay registros"}</td></tr> : null}
             </tbody>
           </table>
         </div>
-      </section>
-      <div ref={paginationRef} className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span className="font-medium text-slate-500">
-          Pagina {meta.page || page} de {meta.pages || 1}
-        </span>
-        <span className="font-semibold text-slate-600">{meta.total || 0} registros</span>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" disabled={data.loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-            Anterior
-          </Button>
-          <Button type="button" variant="outline" disabled={data.loading || page >= Number(meta.pages || 1)} onClick={() => setPage((current) => current + 1)}>
-            Siguiente
-          </Button>
+        <div ref={paginationRef} className="mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-sm">
+          <span className="font-medium text-slate-500">
+            Pagina {meta.page || page} de {meta.pages || 1}
+          </span>
+          <span className="font-semibold text-slate-600">{meta.total || 0} registros</span>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" disabled={data.loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+              Anterior
+            </Button>
+            <Button type="button" variant="outline" disabled={data.loading || page >= Number(meta.pages || 1)} onClick={() => setPage((current) => current + 1)}>
+              Siguiente
+            </Button>
+          </div>
         </div>
-      </div>
+      </section>
       {editDialog.open ? (
         <EditOpportunityDialog
           state={editDialog}
@@ -354,7 +364,7 @@ export default function PostventaOpportunitiesPage({ userPermissions, kind = "op
 function SortableHeader({ children, className = "", onSort, sortConfig, sortKey }) {
   const active = sortConfig.key === sortKey;
   return (
-    <th className={className}>
+    <th className={`px-2 py-2 ${className}`}>
       <button type="button" className={`inline-flex items-center gap-1 font-bold transition hover:text-violet-700 ${active ? "text-violet-700" : ""}`} onClick={() => onSort(sortKey)}>
         <span>{children}</span>
         {active ? <span className="text-[10px]">{sortConfig.direction === "asc" ? "ASC" : "DESC"}</span> : <ArrowUpDown className="size-3 text-slate-400" />}

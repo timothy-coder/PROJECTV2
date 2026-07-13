@@ -30,7 +30,7 @@ function DeleteDialogContent({ centro, onClose, onConfirm }) {
       await onConfirm();
       onClose();
     } catch (err) {
-      setError(err.message || "No se pudo eliminar el centro.");
+      setError(err.message || "No se pudo eliminar el grupo.");
     } finally {
       setDeleting(false);
     }
@@ -44,9 +44,9 @@ function DeleteDialogContent({ centro, onClose, onConfirm }) {
             <AlertTriangle className="size-5" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-slate-950">Eliminar centro</h2>
+            <h2 className="text-lg font-bold text-slate-950">Eliminar grupo</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Esta accion eliminara el centro {centro?.nombre ? `"${centro.nombre}"` : "seleccionado"}.
+              Esta accion eliminara el grupo {centro?.nombre ? `"${centro.nombre}"` : "seleccionado"}.
             </p>
           </div>
         </div>

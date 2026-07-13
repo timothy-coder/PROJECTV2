@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
+import { userCanAccessLevel, userCanAccessShelf } from "@/lib/warehouseLocationAccess";
 
 async function requirePermission(action) {
   const user = await getCurrentUser();
@@ -29,6 +30,9 @@ export async function PUT(request, { params }) {
     if (!id || !anaquelId || !codigoNivel || !Number.isFinite(ordenNivel)) {
       return NextResponse.json({ message: "Nivel invalido." }, { status: 400 });
     }
+    if (!(await userCanAccessShelf(allowed.user.id, anaquelId))) {
+      return NextResponse.json({ message: "No tienes asignado el almacen o mostrador de ese anaquel." }, { status: 403 });
+    }
 
     const [result] = await pool.query(
       `UPDATE almacen_anaquel_niveles
@@ -50,7 +54,11 @@ export async function DELETE(_request, { params }) {
     if (allowed.error) return allowed.error;
 
     const { id: rawId } = await params;
-    const [result] = await pool.query(`DELETE FROM almacen_anaquel_niveles WHERE id=?`, [Number(rawId)]);
+    const id = Number(rawId);
+    if (!(await userCanAccessLevel(allowed.user.id, id))) {
+      return NextResponse.json({ message: "No tienes asignado el almacen o mostrador de ese nivel." }, { status: 403 });
+    }
+    const [result] = await pool.query(`DELETE FROM almacen_anaquel_niveles WHERE id=?`, [id]);
     if (!result.affectedRows) return NextResponse.json({ message: "Nivel no encontrado." }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (error) {

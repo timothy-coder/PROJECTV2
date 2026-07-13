@@ -501,6 +501,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
   const [rows, setRows] = useState([]);
   const [timeStates, setTimeStates] = useState([]);
   const [inventoryVehicles, setInventoryVehicles] = useState(0);
+  const [deliveredVehicles, setDeliveredVehicles] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", modelLevel: "", modelValue: "", stage: "", codeType: "" });
@@ -523,6 +524,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
           setRows(Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []);
           setTimeStates(Array.isArray(payload?.timeStates) ? payload.timeStates : []);
           setInventoryVehicles(Number(payload?.inventoryVehicles || 0));
+          setDeliveredVehicles(Number(payload?.deliveredVehicles || 0));
         }
       })
       .catch((error) => {
@@ -577,12 +579,13 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       daysClose: avg(countedRecords.map((item) => item.daysToClose)),
       daysFact: avg(countedRecords.map((item) => item.daysToInvoice)),
       inventoryVehicles,
+      deliveredVehicles,
       virtualQuotes,
       totalViews: countedRecords.reduce((sum, item) => sum + item.totalViews, 0),
       followUp: countedRecords.filter((item) => item.agendaGreen && !isClosedStage(item.stage)).length,
       platformUse: platformBase ? (filteredRecords.reduce((sum, item) => sum + item.platformUseScore, 0) / platformBase) * 100 : 0,
     };
-  }, [countedMetricRecords, countedRecords, filteredRecords, filters, inventoryVehicles]);
+  }, [countedMetricRecords, countedRecords, filteredRecords, filters, inventoryVehicles, deliveredVehicles]);
   const kpiRangeLabel = dateTreeDisplay(filters.dateLevel, filters.dateValue);
   const quoteKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "quoteEvents", filters, "Cotizaciones"), [countedMetricRecords, filters]);
   const reservationKpiSummary = useMemo(() => eventSummary(countedMetricRecords, "reservationEvents", filters, "Reservas"), [countedMetricRecords, filters]);
@@ -668,6 +671,11 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       general: [`Total general: ${formatNumber(kpis.inventoryVehicles)} vehiculos.`],
       details: ["Cuenta las unidades en inventario que aun no tienen registro de entrega."],
     },
+    deliveredVehicles: {
+      title: "Vehiculos Entregados",
+      general: [`Total general: ${formatNumber(kpis.deliveredVehicles)} vehiculos.`],
+      details: ["Cuenta las unidades que ya tienen registro de entrega."],
+    },
     totalViews: {
       title: "Total Vistas",
       general: ["Suma de vistas totales registradas en cotizaciones."],
@@ -732,6 +740,15 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         ],
         details: [
           "Unidades disponibles en inventario sin registro de entrega.",
+        ],
+      },
+      deliveredVehicles: {
+        title: "Vehiculos Entregados",
+        general: [
+          `Total general: ${formatNumber(kpis.deliveredVehicles)} vehiculos.`,
+        ],
+        details: [
+          "Unidades con registro de entrega.",
         ],
       },
       totalViews: {
@@ -854,6 +871,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 <Kpi title="Días Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
                 <Kpi title="Días Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
                 <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
+                <Kpi title="Veh. Entregados" value={formatNumber(kpis.deliveredVehicles)} info={kpiInfoMap.deliveredVehicles} onInfo={setKpiInfo} />
                 <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} info={kpiInfoMap.virtualQuotes} onInfo={setKpiInfo} />
                 <Kpi title="Total Vistas" value={formatNumber(kpis.totalViews)} info={kpiInfoMap.totalViews} onInfo={setKpiInfo} />
                 <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />

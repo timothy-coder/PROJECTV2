@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { validateLotLocationStock } from "@/lib/postinventoryLotStock";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
+import { userCanAccessShelf } from "@/lib/warehouseLocationAccess";
 
 async function requireLocationPermission(action) {
   const user = await getCurrentUser();
@@ -110,6 +111,10 @@ export async function POST(request) {
 
       if (!loteId || !anaquelId || Number.isNaN(stock)) {
         errors.push(`Fila ${index + 2}: lote, anaquel y cantidad son obligatorios.`);
+        continue;
+      }
+      if (!(await userCanAccessShelf(allowed.user.id, anaquelId))) {
+        errors.push(`Fila ${index + 2}: no tienes asignado el almacen o mostrador de ese anaquel.`);
         continue;
       }
 

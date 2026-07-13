@@ -77,9 +77,9 @@ export function CentersTab({ tab, userPermissions }) {
               <Building2 className="size-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">Centros</h2>
+              <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">Grupos</h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Gestiona los centros de atencion disponibles
+                Gestiona los grupos de atencion disponibles
               </p>
             </div>
           </div>
@@ -88,12 +88,12 @@ export function CentersTab({ tab, userPermissions }) {
             {canCreate ? (
               <Button onClick={openCreate} className="w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto">
                 <Plus className="size-4" />
-                Nuevo Centro
+                Nuevo Grupo
               </Button>
             ) : null}
             <Button variant="outline" className="w-full sm:w-auto" onClick={reload} disabled={loading}>
               <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-              {centros.length} centros
+              {centros.length} grupos
             </Button>
           </div>
         </div>
@@ -102,13 +102,13 @@ export function CentersTab({ tab, userPermissions }) {
 
         <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           <CenterStat
-            label="Total de Centros"
+            label="Total de Grupos"
             value={stats.total}
             tone="green"
             icon={Building2}
           />
           <CenterStat
-            label="Centros Activos"
+            label="Grupos Activos"
             value={stats.activos}
             tone="blue"
             icon={MapPin}
@@ -126,7 +126,7 @@ export function CentersTab({ tab, userPermissions }) {
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div className="flex items-center gap-2">
                 <MapPin className="size-4 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-950">Listado de Centros</h3>
+                <h3 className="text-sm font-bold text-slate-950">Listado de Grupos</h3>
               </div>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-700">
                 {centros.length} registros
@@ -137,7 +137,7 @@ export function CentersTab({ tab, userPermissions }) {
               {loading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
                   <Loader2 className="size-4 animate-spin" />
-                  Cargando centros...
+                  Cargando grupos...
                 </div>
               ) : centros.length ? (
                 centros.map((centro) => (
@@ -163,7 +163,7 @@ export function CentersTab({ tab, userPermissions }) {
                           variant="outline"
                           size="icon"
                           onClick={() => openEdit(centro)}
-                          title="Editar centro"
+                          title="Editar grupo"
                         >
                           <Edit3 className="size-4 text-orange-600" />
                         </Button>
@@ -173,7 +173,7 @@ export function CentersTab({ tab, userPermissions }) {
                           variant="outline"
                           size="icon"
                           onClick={() => openDelete(centro)}
-                          title="Eliminar centro"
+                          title="Eliminar grupo"
                         >
                           <Trash2 className="size-4 text-red-600" />
                         </Button>
@@ -183,7 +183,7 @@ export function CentersTab({ tab, userPermissions }) {
                 ))
               ) : (
                 <div className="py-10 text-center text-sm font-medium text-slate-500">
-                  No hay centros registrados.
+                  No hay grupos registrados.
                 </div>
               )}
             </div>

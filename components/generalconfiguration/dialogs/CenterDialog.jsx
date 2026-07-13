@@ -26,14 +26,14 @@ function CenterDialogContent({ mode, centro, onClose, onSubmit }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const title = mode === "edit" ? "Editar centro" : "Nuevo centro";
+  const title = mode === "edit" ? "Editar grupo" : "Nuevo grupo";
 
   async function handleSubmit(event) {
     event.preventDefault();
     const cleanName = nombre.trim();
 
     if (!cleanName) {
-      setError("Ingresa el nombre del centro.");
+      setError("Ingresa el nombre del grupo.");
       return;
     }
 
@@ -44,7 +44,7 @@ function CenterDialogContent({ mode, centro, onClose, onSubmit }) {
       await onSubmit({ nombre: cleanName });
       onClose();
     } catch (err) {
-      setError(err.message || "No se pudo guardar el centro.");
+      setError(err.message || "No se pudo guardar el grupo.");
     } finally {
       setSaving(false);
     }
@@ -74,7 +74,7 @@ function CenterDialogContent({ mode, centro, onClose, onSubmit }) {
             id="centro-nombre"
             value={nombre}
             onChange={(event) => setNombre(event.target.value)}
-            placeholder="Ej. Centro principal"
+            placeholder="Ej. Grupo principal"
             className="h-10 bg-white text-sm"
             autoFocus
           />

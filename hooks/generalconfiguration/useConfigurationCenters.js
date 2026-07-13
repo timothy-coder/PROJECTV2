@@ -17,7 +17,7 @@ export function useConfigurationCenters() {
       const data = await generalConfigurationApi.centros();
       setCentros(data.centros || []);
     } catch (err) {
-      setError(err.message || "No se pudieron cargar los centros.");
+      setError(err.message || "No se pudieron cargar los grupos.");
       setCentros([]);
     } finally {
       setLoading(false);
@@ -58,7 +58,7 @@ export function useConfigurationCenters() {
       })
       .catch((err) => {
         if (!mounted) return;
-        setError(err.message || "No se pudieron cargar los centros.");
+        setError(err.message || "No se pudieron cargar los grupos.");
         setCentros([]);
       })
       .finally(() => {

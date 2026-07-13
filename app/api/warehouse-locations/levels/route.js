@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
+import { userCanAccessShelf } from "@/lib/warehouseLocationAccess";
 
 async function requirePermission(action) {
   const user = await getCurrentUser();
@@ -26,6 +27,9 @@ export async function POST(request) {
 
     if (!anaquelId || !codigoNivel || !Number.isFinite(ordenNivel)) {
       return NextResponse.json({ message: "Anaquel, codigo y orden son obligatorios." }, { status: 400 });
+    }
+    if (!(await userCanAccessShelf(allowed.user.id, anaquelId))) {
+      return NextResponse.json({ message: "No tienes asignado el almacen o mostrador de ese anaquel." }, { status: 403 });
     }
 
     const [result] = await pool.query(

@@ -15,7 +15,7 @@ import {
 export const configurationTabs = [
   {
     id: "centros",
-    label: "Centros",
+    label: "Grupos",
     icon: Building2,
     perm: ["configuracion_centros", "view"],
     actions: {
@@ -26,7 +26,7 @@ export const configurationTabs = [
   },
   {
     id: "talleres",
-    label: "Talleres / Mostradores",
+    label: "Almacenes / Mostradores",
     icon: Factory,
     perms: [
       ["configuracion_talleres", "view"],

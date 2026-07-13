@@ -9,7 +9,7 @@ export function useWarehouseLocations() {
     shelves: [],
     levels: [],
     positions: [],
-    options: { workshops: [], counters: [] },
+    options: { workshops: [], counters: [], settings: { habilitarTaller: true, habilitarMostrador: true } },
   });
   const [loading, setLoading] = useState(true);
 
@@ -23,6 +23,7 @@ export function useWarehouseLocations() {
       options: {
         workshops: next.options?.workshops || [],
         counters: next.options?.counters || [],
+        settings: next.options?.settings || { habilitarTaller: true, habilitarMostrador: true },
       },
     });
     setLoading(false);

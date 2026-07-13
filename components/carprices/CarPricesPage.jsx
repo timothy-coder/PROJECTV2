@@ -311,7 +311,7 @@ export default function CarPricesPage({ userPermissions }) {
       </section> : null}
 
       {activeView === "history" && canHistory ? <HistorySection loading={data.loading} history={inventoryHistory} canEdit={canHistoryEdit} canCreate={canCreateHistory} onCreate={() => setHistoryDialog({ open: true })} onEdit={(item) => setHistoryDialog({ open: true, item })} /> : null}
-      {activeView === "sold" && canDeliveredCars ? <HistorySection loading={data.loading} history={soldHistory} canEdit={canHistoryEdit} canCreate={false} onEdit={(item) => setHistoryDialog({ open: true, item })} title="Carros entregados" description="Unidades con registro de entrega" emptyMessage="No hay carros entregados registrados." /> : null}
+      {activeView === "sold" && canDeliveredCars ? <HistorySection loading={data.loading} history={soldHistory} canEdit={canHistoryEdit} canCreate={false} onEdit={(item) => setHistoryDialog({ open: true, item })} title="Carros entregados" description="Unidades con registro de entrega" emptyMessage="No hay carros entregados registrados." showDelivery /> : null}
       {activeView === "pending" && canPendingPurchase ? <PendingPurchasesSection loading={data.loading} rows={data.pendingPurchases || []} /> : null}
 
       {dialog.open ? (
@@ -332,6 +332,7 @@ export default function CarPricesPage({ userPermissions }) {
         <HistoryDialog
           item={historyDialog.item}
           prices={data.prices}
+          showDelivery={activeView === "sold"}
           onClose={() => setHistoryDialog({ open: false, item: null })}
           onSubmit={async (payload) => {
             if (historyDialog.item) await data.updateHistory(historyDialog.item.vin, payload);
@@ -345,7 +346,7 @@ export default function CarPricesPage({ userPermissions }) {
   );
 }
 
-function HistoryDialog({ item, prices, onClose, onSubmit }) {
+function HistoryDialog({ item, prices, showDelivery = false, onClose, onSubmit }) {
   const [form, setForm] = useState({
     vin: item?.vin || "",
     precioId: item?.precioId ? String(item.precioId) : "",
@@ -384,7 +385,7 @@ function HistoryDialog({ item, prices, onClose, onSubmit }) {
               <Field label="Precio venta"><Input type="number" step="0.01" value={form.precioVenta} onChange={(event) => setForm((current) => ({ ...current, precioVenta: event.target.value }))} /></Field>
               <Field label="Facturacion"><Input type="datetime-local" value={form.facturacionAt} onChange={(event) => setForm((current) => ({ ...current, facturacionAt: event.target.value }))} /></Field>
               <Field label="Llegada al centro"><Input type="datetime-local" value={form.llegadaCentroAt} onChange={(event) => setForm((current) => ({ ...current, llegadaCentroAt: event.target.value }))} /></Field>
-              <Field label="Entrega"><Input type="datetime-local" value={form.entregaAt} onChange={(event) => setForm((current) => ({ ...current, entregaAt: event.target.value }))} /></Field>
+              {showDelivery ? <Field label="Entrega concesionario"><Input type="datetime-local" value={form.entregaAt} onChange={(event) => setForm((current) => ({ ...current, entregaAt: event.target.value }))} /></Field> : null}
             </div>
           </div>
           <DialogFooter>
@@ -497,6 +498,7 @@ function HistorySection({
   title = "Inventario de Carros",
   description = "Consulta VIN, factura, precios y fechas del carro",
   emptyMessage = "No hay historial registrado.",
+  showDelivery = false,
 }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState({ marca: "", modelo: "" });
@@ -513,6 +515,7 @@ function HistorySection({
     });
   }, [filters, history, normalizedQuery]);
   const sortedHistory = useMemo(() => sortRows(filteredHistory, sort), [filteredHistory, sort]);
+  const columnCount = (showDelivery ? 13 : 12) + (canEdit ? 1 : 0);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-violet-200 bg-white shadow-sm">
@@ -551,14 +554,14 @@ function HistorySection({
               <SortableHeader sortKey="createdAt" sort={sort} onSort={setSort}>Registro</SortableHeader>
               <SortableHeader sortKey="facturacionAt" sort={sort} onSort={setSort}>Facturacion</SortableHeader>
               <SortableHeader sortKey="llegadaCentroAt" sort={sort} onSort={setSort}>Llegada</SortableHeader>
-              <SortableHeader sortKey="entregaAt" sort={sort} onSort={setSort}>Entrega</SortableHeader>
+              {showDelivery ? <SortableHeader sortKey="entregaAt" sort={sort} onSort={setSort}>Entrega</SortableHeader> : null}
               <SortableHeader sortKey="enReserva" sort={sort} onSort={setSort}>Reserva</SortableHeader>
               {canEdit ? <th className="px-3 py-3 text-right">Acciones</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {loading ? (
-              <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
+              <tr><td colSpan={columnCount} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
             ) : sortedHistory.map((item) => (
               <tr key={item.vin}>
                 <td className="px-3 py-3"><InventoryVinCell item={item} /></td>
@@ -572,12 +575,12 @@ function HistorySection({
                 <td className="px-3 py-3">{formatDate(item.createdAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.facturacionAt)}</td>
                 <td className="px-3 py-3">{formatDate(item.llegadaCentroAt)}</td>
-                <td className="px-3 py-3">{formatDate(item.entregaAt)}</td>
+                {showDelivery ? <td className="px-3 py-3">{formatDate(item.entregaAt)}</td> : null}
                 <td className="px-3 py-3"><ReservationUsageBadge item={item} /></td>
                 {canEdit ? <td className="px-3 py-3 text-right"><Button variant="outline" size="icon" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button></td> : null}
               </tr>
             ))}
-            {!loading && sortedHistory.length === 0 ? <tr><td colSpan={canEdit ? 14 : 13} className="py-10 text-center text-slate-500">{emptyMessage}</td></tr> : null}
+            {!loading && sortedHistory.length === 0 ? <tr><td colSpan={columnCount} className="py-10 text-center text-slate-500">{emptyMessage}</td></tr> : null}
           </tbody>
         </table>
       </div>

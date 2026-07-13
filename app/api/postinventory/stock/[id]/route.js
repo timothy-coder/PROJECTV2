@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { hasPerm } from "@/lib/permissions";
 import { validateLotLocationStock } from "@/lib/postinventoryLotStock";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
+import { userCanAccessShelf } from "@/lib/warehouseLocationAccess";
 
 async function requireLocationPermission(action) {
   const user = await getCurrentUser();
@@ -31,11 +32,17 @@ export async function PUT(request, { params }) {
     if (!id || !loteId || !anaquelId || Number.isNaN(stock)) {
       return NextResponse.json({ message: "Ubicacion o stock invalido." }, { status: 400 });
     }
+    if (!(await userCanAccessShelf(allowed.user.id, anaquelId))) {
+      return NextResponse.json({ message: "No tienes asignado el almacen o mostrador de ese anaquel." }, { status: 403 });
+    }
 
-    const [previousRows] = await pool.query(`SELECT lote_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [id]);
+    const [previousRows] = await pool.query(`SELECT lote_id, anaquel_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [id]);
     const previousLoteId = previousRows[0]?.lote_id;
     if (!previousLoteId) {
       return NextResponse.json({ message: "Ubicacion no encontrada." }, { status: 404 });
+    }
+    if (!(await userCanAccessShelf(allowed.user.id, previousRows[0]?.anaquel_id))) {
+      return NextResponse.json({ message: "No tienes asignada la ubicacion actual." }, { status: 403 });
     }
 
     const stockValidation = await validateLotLocationStock(pool, loteId, stock, id);
@@ -65,8 +72,14 @@ export async function DELETE(_request, { params }) {
     if (allowed.error) return allowed.error;
 
     const { id: rawId } = await params;
-    const [rows] = await pool.query(`SELECT lote_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [Number(rawId)]);
+    const [rows] = await pool.query(`SELECT lote_id, anaquel_id FROM posventa_lotes_ubicaciones WHERE id = ?`, [Number(rawId)]);
     const loteId = rows[0]?.lote_id;
+    if (!loteId) {
+      return NextResponse.json({ message: "Ubicacion no encontrada." }, { status: 404 });
+    }
+    if (!(await userCanAccessShelf(allowed.user.id, rows[0]?.anaquel_id))) {
+      return NextResponse.json({ message: "No tienes asignada esa ubicacion." }, { status: 403 });
+    }
     await pool.query(`DELETE FROM posventa_lotes_ubicaciones WHERE id = ?`, [Number(rawId)]);
     if (loteId) await syncProductStockByLot(loteId);
     return NextResponse.json({ ok: true });

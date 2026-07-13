@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { hasPerm } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
 function mapStock(row) {
   return {
@@ -59,13 +61,26 @@ function mapSettings(row) {
     habilitarFechaVencimiento: row ? Boolean(row.habilitar_fecha_vencimiento) : true,
     habilitarProveedorEnLote: row ? Boolean(row.habilitar_proveedor_en_lote) : true,
     habilitarTipoMedida: row ? Boolean(row.habilitar_tipo_medida) : true,
+    habilitarProcedencia: row ? Boolean(row.habilitar_procedencia) : false,
+    habilitarAperturaCaja: row ? Boolean(row.habilitar_apertura_caja) : false,
+    habilitarTaller: row ? Boolean(row.habilitar_taller) : true,
+    habilitarMostrador: row ? Boolean(row.habilitar_mostrador) : true,
+    tcReferencial: Number(row?.tc_referencial || 0),
   };
 }
 
 export async function GET() {
   try {
+    const user = await getCurrentUser();
+    const currentUserId = Number(user?.id || 0);
+    const permissions = user?.permissions || {};
+    const canViewAllLots = hasPerm(permissions, ["inventario", "lotes_viewall"]);
+    const canViewOwnLots = hasPerm(permissions, ["inventario", "lotes_view"]) || hasPerm(permissions, ["inventario", "lotes"]);
+    const lotScopeSql = canViewAllLots ? "" : canViewOwnLots ? "WHERE l.created_by = ?" : "WHERE 1 = 0";
+    const lotScopeParams = canViewAllLots ? [] : canViewOwnLots ? [currentUserId] : [];
+
     const [productRows] = await pool.query(
-      `SELECT p.id, p.numero_parte, p.descripcion, p.marca, p.tipo_inventario_id, p.fecha_ingreso,
+      `SELECT p.id, p.numero_parte, p.descripcion, p.marca, p.procedencia, p.tipo_inventario_id, p.fecha_ingreso,
               p.stock_total, p.stock_usado, p.stock_disponible,
               p.precio_compra, p.precio_venta, p.moneda_id,
               t.nombre AS tipo_nombre,
@@ -96,14 +111,32 @@ export async function GET() {
       `SELECT id, nombre FROM configuracion_inventario_tipo ORDER BY nombre ASC`
     );
     const [currencyRows] = await pool.query(
-      `SELECT id, codigo, nombre, simbolo, is_active
-       FROM configuracion_monedas
+      `SELECT m.id, m.codigo, m.nombre, m.simbolo, m.is_active,
+              CASE WHEN pm.moneda_id IS NOT NULL AND pm.is_active = 1 THEN 1 ELSE 0 END AS is_posventa_default
+       FROM configuracion_monedas m
+       LEFT JOIN configuracion_posventa_monedas pm ON pm.moneda_id = m.id
+       WHERE m.is_active = 1
+       ORDER BY m.codigo ASC`
+    );
+    const [allCurrencyRows] = await pool.query(
+      `SELECT m.id, m.codigo, m.nombre, m.simbolo, m.is_active,
+              CASE WHEN pm.moneda_id IS NOT NULL AND pm.is_active = 1 THEN 1 ELSE 0 END AS is_posventa_default
+       FROM configuracion_monedas m
+       LEFT JOIN configuracion_posventa_monedas pm ON pm.moneda_id = m.id
+       WHERE m.is_active = 1
+       ORDER BY m.codigo ASC`
+    );
+    const [[activeTax]] = await pool.query(
+      `SELECT id, nombre, porcentaje
+       FROM configuracion_impuestos
        WHERE is_active = 1
-       ORDER BY codigo ASC`
+       ORDER BY id ASC
+       LIMIT 1`
     );
     const [settingsRows] = await pool.query(
       `SELECT habilitar_marca_manual, habilitar_lotes, habilitar_fecha_vencimiento,
-              habilitar_proveedor_en_lote, habilitar_tipo_medida
+              habilitar_proveedor_en_lote, habilitar_tipo_medida, habilitar_procedencia,
+              habilitar_apertura_caja, habilitar_taller, habilitar_mostrador, tc_referencial
        FROM configuracion_posventa_inventario
        ORDER BY id ASC
        LIMIT 1`
@@ -119,16 +152,52 @@ export async function GET() {
        WHERE is_active = 1
        ORDER BY razon_social ASC`
     );
+    const [voucherTypeRows] = await pool.query(
+      `SELECT id, codigo, nombre
+       FROM configuracion_tipos_comprobante
+       WHERE active_configuracion = 1
+       ORDER BY nombre ASC`
+    );
     const [productLotRows] = await pool.query(
-      `SELECT l.id, l.producto_id, l.tipo_medida_id, l.proveedor_id, l.numero_factura,
-              l.fecha_vencimiento, l.precio_compra, l.stock_lote, l.stock_usado,
+      `SELECT l.id, l.producto_id, l.tipo_medida_id, l.proveedor_id, l.numero_factura, l.tipo_comprobante_id,
+              l.fecha_vencimiento, l.precio_compra, l.moneda_id, l.tipo_cambio,
+              l.margen_comercial, l.precio_venta_sin_igv, l.precio_venta_con_igv,
+              l.stock_lote, l.stock_usado, l.created_by,
               l.stock_disponible, l.created_at,
+              tc.codigo AS tipo_comprobante_codigo, tc.nombre AS tipo_comprobante_nombre,
+              lm.codigo AS lote_moneda_codigo, lm.nombre AS lote_moneda_nombre, lm.simbolo AS lote_moneda_simbolo,
               tm.nombre AS tipo_medida_nombre, tm.abreviatura AS tipo_medida_abreviatura,
-              pr.razon_social AS proveedor_nombre, pr.nombre_comercial AS proveedor_comercial
+              pr.razon_social AS proveedor_nombre, pr.nombre_comercial AS proveedor_comercial,
+              COALESCE(u.fullname, u.username) AS created_by_name,
+              (
+                SELECT COUNT(*)
+                FROM posventa_lotes_ubicaciones plu
+                WHERE plu.lote_id = l.id
+              ) AS ubicaciones_total,
+              (
+                SELECT COUNT(*)
+                FROM posventa_lotes_ubicaciones plu
+                INNER JOIN almacen_anaqueles aa ON aa.id = plu.anaquel_id
+                LEFT JOIN administracion_usuario_talleres aut
+                  ON aut.taller_id = aa.taller_id AND aut.usuario_id = ?
+                LEFT JOIN administracion_usuario_mostradores aum
+                  ON aum.mostrador_id = aa.mostrador_id AND aum.usuario_id = ?
+                WHERE plu.lote_id = l.id
+                  AND (
+                    (aa.taller_id IS NOT NULL AND aut.usuario_id IS NOT NULL)
+                    OR (aa.mostrador_id IS NOT NULL AND aum.usuario_id IS NOT NULL)
+                    OR (aa.taller_id IS NULL AND aa.mostrador_id IS NULL)
+                  )
+              ) AS ubicaciones_asignadas
        FROM posventa_productos_lotes l
+       LEFT JOIN configuracion_tipos_comprobante tc ON tc.id = l.tipo_comprobante_id
+       LEFT JOIN configuracion_monedas lm ON lm.id = l.moneda_id
        LEFT JOIN configuracion_tipos_medida tm ON tm.id = l.tipo_medida_id
        LEFT JOIN administracion_proveedores pr ON pr.id = l.proveedor_id
-       ORDER BY l.created_at DESC`
+       LEFT JOIN administracion_usuarios u ON u.id = l.created_by
+       ${lotScopeSql}
+       ORDER BY l.created_at DESC`,
+      [currentUserId, currentUserId, ...lotScopeParams]
     );
     const [centerRows] = await pool.query(
       `SELECT id, nombre FROM configuracion_centros ORDER BY nombre ASC`
@@ -151,8 +220,18 @@ export async function GET() {
        FROM almacen_anaqueles a
        LEFT JOIN configuracion_talleres ta ON ta.id = a.taller_id
        LEFT JOIN configuracion_mostradores mo ON mo.id = a.mostrador_id
+       LEFT JOIN administracion_usuario_talleres ut
+         ON ut.taller_id = a.taller_id AND ut.usuario_id = ?
+       LEFT JOIN administracion_usuario_mostradores um
+         ON um.mostrador_id = a.mostrador_id AND um.usuario_id = ?
        WHERE a.activo = 1
-       ORDER BY a.codigo ASC`
+         AND (
+           (a.taller_id IS NOT NULL AND ut.usuario_id IS NOT NULL)
+           OR (a.mostrador_id IS NOT NULL AND um.usuario_id IS NOT NULL)
+           OR (a.taller_id IS NULL AND a.mostrador_id IS NULL)
+         )
+       ORDER BY a.codigo ASC`,
+      [currentUserId, currentUserId]
     );
     const [shelfLevelRows] = await pool.query(
       `SELECT id, anaquel_id, codigo_nivel, orden_nivel
@@ -202,6 +281,7 @@ export async function GET() {
       numeroParte: row.numero_parte,
       descripcion: row.descripcion,
       marca: row.marca || "",
+      procedencia: row.procedencia || "",
       tipoId: row.tipo_inventario_id,
       tipoNombre: row.tipo_nombre || "Sin tipo",
       fechaIngreso: row.fecha_ingreso,
@@ -218,14 +298,30 @@ export async function GET() {
         tipoMedidaId: lot.tipo_medida_id,
         proveedorId: lot.proveedor_id,
         numeroFactura: lot.numero_factura || "",
+        tipoComprobanteId: lot.tipo_comprobante_id,
+        tipoComprobanteCodigo: lot.tipo_comprobante_codigo || "",
+        tipoComprobanteNombre: lot.tipo_comprobante_nombre || "",
         fechaVencimiento: lot.fecha_vencimiento,
         precioCompra: Number(lot.precio_compra || 0),
+        monedaId: lot.moneda_id,
+        monedaCodigo: lot.lote_moneda_codigo || "",
+        monedaNombre: lot.lote_moneda_nombre || "",
+        monedaSimbolo: lot.lote_moneda_simbolo || "",
+        tipoCambio: lot.tipo_cambio === null || lot.tipo_cambio === undefined ? "" : Number(lot.tipo_cambio || 0),
+        margenComercial: lot.margen_comercial === null || lot.margen_comercial === undefined ? "" : Number(lot.margen_comercial || 0),
+        precioVentaSinIgv: lot.precio_venta_sin_igv === null || lot.precio_venta_sin_igv === undefined ? "" : Number(lot.precio_venta_sin_igv || 0),
+        precioVentaConIgv: lot.precio_venta_con_igv === null || lot.precio_venta_con_igv === undefined ? "" : Number(lot.precio_venta_con_igv || 0),
         stockLote: Number(lot.stock_lote || 0),
         stockUsado: Number(lot.stock_usado || 0),
         stockDisponible: Number(lot.stock_disponible || 0),
         tipoMedidaNombre: lot.tipo_medida_nombre || "",
         tipoMedidaAbreviatura: lot.tipo_medida_abreviatura || "",
         proveedorNombre: lot.proveedor_comercial || lot.proveedor_nombre || "",
+        createdBy: lot.created_by,
+        createdByName: lot.created_by_name || "",
+        ubicacionesTotal: Number(lot.ubicaciones_total || 0),
+        ubicacionesAsignadas: Number(lot.ubicaciones_asignadas || 0),
+        canAccessLocation: Number(lot.ubicaciones_total || 0) === 0 || Number(lot.ubicaciones_total || 0) === Number(lot.ubicaciones_asignadas || 0),
         createdAt: lot.created_at,
       })),
     }));
@@ -249,7 +345,11 @@ export async function GET() {
         types: typeRows.map((row) => ({ id: row.id, nombre: row.nombre })),
         measureTypes: measureTypeRows.map((row) => ({ id: row.id, nombre: row.nombre, abreviatura: row.abreviatura || "" })),
         providers: providerRows.map((row) => ({ id: row.id, nombre: row.nombre_comercial || row.razon_social, razonSocial: row.razon_social, ruc: row.ruc || "" })),
+        voucherTypes: voucherTypeRows.map((row) => ({ id: row.id, codigo: row.codigo, nombre: row.nombre })),
         currencies: currencyRows.map((row) => ({ id: row.id, codigo: row.codigo, nombre: row.nombre, simbolo: row.simbolo })),
+        allCurrencies: allCurrencyRows.map((row) => ({ id: row.id, codigo: row.codigo, nombre: row.nombre, simbolo: row.simbolo, isDefaultPosventa: Boolean(row.is_posventa_default) })),
+        defaultPostventaCurrencyId: allCurrencyRows.find((row) => Number(row.is_posventa_default) === 1)?.id || currencyRows[0]?.id || allCurrencyRows[0]?.id || null,
+        activeTax: activeTax ? { id: activeTax.id, nombre: activeTax.nombre, porcentaje: Number(activeTax.porcentaje || 0) } : null,
         centers: centerRows.map((row) => ({ id: row.id, nombre: row.nombre })),
         workshops: workshopRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),
         counters: counterRows.map((row) => ({ id: row.id, centroId: row.centro_id, nombre: row.nombre })),

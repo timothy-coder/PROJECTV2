@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 
 const labels = {
   taller: {
-    create: "Nuevo taller",
-    edit: "Editar taller",
-    name: "Nombre del taller",
-    placeholder: "Ej. Taller principal",
+    create: "Nuevo almacen",
+    edit: "Editar almacen",
+    name: "Nombre del almacen",
+    placeholder: "Ej. Almacen principal",
   },
   mostrador: {
     create: "Nuevo mostrador",
@@ -74,7 +74,7 @@ function WorkshopCounterDialogContent({
     const numericCentroId = Number(centroId);
 
     if (!numericCentroId) {
-      setError("Selecciona un centro.");
+      setError("Selecciona un grupo.");
       return;
     }
 
@@ -106,7 +106,7 @@ function WorkshopCounterDialogContent({
           <div>
             <h2 className="text-lg font-bold text-slate-950">{copy[mode]}</h2>
             <p className="mt-1 text-sm font-medium text-slate-500">
-              Selecciona el centro y define el nombre.
+              Selecciona el grupo y define el nombre.
             </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={onClose}>
@@ -116,13 +116,13 @@ function WorkshopCounterDialogContent({
 
         <div className="mt-5 space-y-4">
           <div className="space-y-2">
-            <Label>Centro</Label>
+            <Label>Grupo</Label>
             <SearchableSelect
               value={centroId}
               options={centroOptions}
-              placeholder="Selecciona un centro"
-              searchPlaceholder="Buscar centro..."
-              emptyText="Sin centros"
+              placeholder="Selecciona un grupo"
+              searchPlaceholder="Buscar grupo..."
+              emptyText="Sin grupos"
               onChange={setCentroId}
             />
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Command } from "cmdk";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
@@ -25,6 +25,39 @@ export function SearchableSelect({
     () => options.find((option) => String(option.value) === String(value)),
     [options, value]
   );
+
+  const updatePosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setPosition(null);
+      return;
+    }
+    const gap = 4;
+    const desiredHeight = Math.min(300, 48 + options.length * 40);
+    const bottomSpace = window.innerHeight - rect.bottom - gap;
+    const topSpace = rect.top - gap;
+    const openUp = bottomSpace < Math.min(160, desiredHeight) && topSpace > bottomSpace;
+    const maxHeight = Math.max(180, Math.min(desiredHeight, openUp ? topSpace : bottomSpace));
+    const width = Math.min(rect.width, window.innerWidth - 16);
+    const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
+    setPosition({
+      top: openUp ? rect.top - maxHeight - gap : rect.bottom + gap,
+      left,
+      width,
+      maxHeight,
+    });
+  }, [options.length]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open, updatePosition]);
 
   const dropdown = open ? (
     <>
@@ -80,25 +113,7 @@ export function SearchableSelect({
         variant="outline"
         disabled={disabled}
         onClick={() => {
-          const rect = triggerRef.current?.getBoundingClientRect();
-          if (rect) {
-            const gap = 4;
-            const desiredHeight = 300;
-            const bottomSpace = window.innerHeight - rect.bottom - gap;
-            const topSpace = rect.top - gap;
-            const openUp = bottomSpace < 220 && topSpace > bottomSpace;
-            const maxHeight = Math.max(180, Math.min(desiredHeight, openUp ? topSpace : bottomSpace));
-            const width = Math.min(rect.width, window.innerWidth - 16);
-            const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
-            setPosition({
-              top: openUp ? rect.top - maxHeight - gap : rect.bottom + gap,
-              left,
-              width,
-              maxHeight,
-            });
-          } else {
-            setPosition(null);
-          }
+          updatePosition();
           setOpen((current) => !current);
         }}
         className={cn("h-9 w-full justify-between bg-white px-3 text-left text-sm font-medium text-slate-950", className)}

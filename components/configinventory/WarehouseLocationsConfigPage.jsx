@@ -24,9 +24,27 @@ export default function WarehouseLocationsConfigPage({ userPermissions }) {
   const canDelete = hasPerm(userPermissions, ["config_anaqueles", "delete"]);
 
   const clean = query.trim().toLowerCase();
+  const assignedWorkshopIds = useMemo(() => new Set((data.options.workshops || []).map((item) => Number(item.id))), [data.options.workshops]);
+  const assignedCounterIds = useMemo(() => new Set((data.options.counters || []).map((item) => Number(item.id))), [data.options.counters]);
+  const allowedShelfIds = useMemo(() => new Set((data.shelves || []).filter((item) => (
+    (item.tallerId && assignedWorkshopIds.has(Number(item.tallerId))) ||
+    (item.mostradorId && assignedCounterIds.has(Number(item.mostradorId))) ||
+    (!item.tallerId && !item.mostradorId && data.options.settings?.habilitarTaller === false && data.options.settings?.habilitarMostrador === false)
+  )).map((item) => Number(item.id))), [assignedCounterIds, assignedWorkshopIds, data.options.settings, data.shelves]);
+  const canCreateShelfLocation = (
+    (data.options.settings?.habilitarTaller !== false && assignedWorkshopIds.size > 0) ||
+    (data.options.settings?.habilitarMostrador !== false && assignedCounterIds.size > 0) ||
+    (data.options.settings?.habilitarTaller === false && data.options.settings?.habilitarMostrador === false)
+  );
   const shelves = useMemo(() => clean ? data.shelves.filter((item) => `${item.codigo} ${item.descripcion} ${item.tallerNombre} ${item.mostradorNombre}`.toLowerCase().includes(clean)) : data.shelves, [clean, data.shelves]);
-  const levels = useMemo(() => clean ? data.levels.filter((item) => `${item.anaquelCodigo} ${item.codigoNivel} ${item.ordenNivel}`.toLowerCase().includes(clean)) : data.levels, [clean, data.levels]);
-  const positions = useMemo(() => clean ? data.positions.filter((item) => `${item.anaquelCodigo} ${item.codigoNivel} ${item.posicion}`.toLowerCase().includes(clean)) : data.positions, [clean, data.positions]);
+  const levels = useMemo(() => {
+    const scoped = data.levels.filter((item) => allowedShelfIds.has(Number(item.anaquelId)));
+    return clean ? scoped.filter((item) => `${item.anaquelCodigo} ${item.codigoNivel} ${item.ordenNivel}`.toLowerCase().includes(clean)) : scoped;
+  }, [allowedShelfIds, clean, data.levels]);
+  const positions = useMemo(() => {
+    const scoped = data.positions.filter((item) => allowedShelfIds.has(Number(item.anaquelId)));
+    return clean ? scoped.filter((item) => `${item.anaquelCodigo} ${item.codigoNivel} ${item.posicion}`.toLowerCase().includes(clean)) : scoped;
+  }, [allowedShelfIds, clean, data.positions]);
 
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ver configuracion de anaqueles.</div>;
 
@@ -94,39 +112,49 @@ export default function WarehouseLocationsConfigPage({ userPermissions }) {
       <div className="grid gap-4 xl:grid-cols-3">
         <ConfigCard
           title="Anaqueles"
-          subtitle="Codigos principales y ubicacion por taller o mostrador"
+          subtitle="Codigos principales y ubicacion por almacen o mostrador"
           icon={MapPinned}
           count={shelves.length}
-          canCreate={canCreate}
+          canCreate={canCreate && canCreateShelfLocation}
           onCreate={() => setDialog({ type: "shelf", item: null })}
         >
-          <ShelfTable items={shelves} loading={data.loading} canEdit={canEdit} canDelete={canDelete} onEdit={(item) => setDialog({ type: "shelf", item })} onDelete={(item) => setDeleteDialog({ type: "shelf", item })} />
+          <ShelfTable
+            items={shelves}
+            loading={data.loading}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            assignedWorkshopIds={assignedWorkshopIds}
+            assignedCounterIds={assignedCounterIds}
+            settings={data.options.settings}
+            onEdit={(item) => setDialog({ type: "shelf", item })}
+            onDelete={(item) => setDeleteDialog({ type: "shelf", item })}
+          />
         </ConfigCard>
         <ConfigCard
           title="Niveles"
           subtitle="Niveles internos de cada anaquel"
           icon={Layers3}
           count={levels.length}
-          canCreate={canCreate}
+          canCreate={canCreate && allowedShelfIds.size > 0}
           onCreate={() => setDialog({ type: "level", item: null })}
         >
-          <LevelTable items={levels} loading={data.loading} canEdit={canEdit} canDelete={canDelete} onEdit={(item) => setDialog({ type: "level", item })} onDelete={(item) => setDeleteDialog({ type: "level", item })} />
+          <LevelTable items={levels} loading={data.loading} canEdit={canEdit} canDelete={canDelete} allowedShelfIds={allowedShelfIds} onEdit={(item) => setDialog({ type: "level", item })} onDelete={(item) => setDeleteDialog({ type: "level", item })} />
         </ConfigCard>
         <ConfigCard
           title="Posiciones"
           subtitle="Posiciones numeradas por nivel"
           icon={MapPinned}
           count={positions.length}
-          canCreate={canCreate}
+          canCreate={canCreate && levels.length > 0}
           onCreate={() => setDialog({ type: "position", item: null })}
         >
-          <PositionTable items={positions} loading={data.loading} canEdit={canEdit} canDelete={canDelete} onEdit={(item) => setDialog({ type: "position", item })} onDelete={(item) => setDeleteDialog({ type: "position", item })} />
+          <PositionTable items={positions} loading={data.loading} canEdit={canEdit} canDelete={canDelete} allowedShelfIds={allowedShelfIds} onEdit={(item) => setDialog({ type: "position", item })} onDelete={(item) => setDeleteDialog({ type: "position", item })} />
         </ConfigCard>
       </div>
 
       {dialog.type === "shelf" ? <ShelfDialog item={dialog.item} options={data.options} onClose={() => setDialog({ type: "", item: null })} onSubmit={handleSubmit} /> : null}
-      {dialog.type === "level" ? <LevelDialog item={dialog.item} shelves={data.shelves} onClose={() => setDialog({ type: "", item: null })} onSubmit={handleSubmit} /> : null}
-      {dialog.type === "position" ? <PositionDialog item={dialog.item} levels={data.levels} onClose={() => setDialog({ type: "", item: null })} onSubmit={handleSubmit} /> : null}
+      {dialog.type === "level" ? <LevelDialog item={dialog.item} shelves={data.shelves.filter((item) => allowedShelfIds.has(Number(item.id)))} onClose={() => setDialog({ type: "", item: null })} onSubmit={handleSubmit} /> : null}
+      {dialog.type === "position" ? <PositionDialog item={dialog.item} levels={levels} onClose={() => setDialog({ type: "", item: null })} onSubmit={handleSubmit} /> : null}
       <DeleteDialog state={deleteDialog} onClose={() => setDeleteDialog({ type: "", item: null })} onConfirm={confirmDelete} />
     </div>
   );
@@ -155,22 +183,35 @@ function ConfigCard({ title, subtitle, icon: Icon, count, canCreate, onCreate, c
   );
 }
 
-function ShelfTable({ items, loading, canEdit, canDelete, onEdit, onDelete }) {
+function ShelfTable({ items, loading, canEdit, canDelete, assignedWorkshopIds, assignedCounterIds, settings, onEdit, onDelete }) {
   if (loading) return <Loading />;
   if (!items.length) return <Empty text="No hay anaqueles." />;
-  return <div className="space-y-2">{items.map((item) => <Row key={item.id} title={item.codigo} subtitle={`${item.descripcion || "-"} · ${item.tallerNombre || item.mostradorNombre || "Sin taller/mostrador"}`} active={item.activo} canEdit={canEdit} canDelete={canDelete} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />)}</div>;
+  return <div className="space-y-2">{items.map((item) => {
+    const rowCanEdit = (
+      (item.tallerId && assignedWorkshopIds.has(Number(item.tallerId))) ||
+      (item.mostradorId && assignedCounterIds.has(Number(item.mostradorId))) ||
+      (!item.tallerId && !item.mostradorId && settings?.habilitarTaller === false && settings?.habilitarMostrador === false)
+    );
+    return <Row key={item.id} title={item.codigo} subtitle={`${item.descripcion || "-"} · ${item.tallerNombre || item.mostradorNombre || "Sin almacen/mostrador"}`} active={item.activo} canEdit={canEdit && rowCanEdit} canDelete={canDelete && rowCanEdit} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />;
+  })}</div>;
 }
 
-function LevelTable({ items, loading, canEdit, canDelete, onEdit, onDelete }) {
+function LevelTable({ items, loading, canEdit, canDelete, allowedShelfIds, onEdit, onDelete }) {
   if (loading) return <Loading />;
   if (!items.length) return <Empty text="No hay niveles." />;
-  return <div className="space-y-2">{items.map((item) => <Row key={item.id} title={`${item.anaquelCodigo} / ${item.codigoNivel}`} subtitle={`Orden ${item.ordenNivel}`} active={item.activo} canEdit={canEdit} canDelete={canDelete} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />)}</div>;
+  return <div className="space-y-2">{items.map((item) => {
+    const rowCanEdit = allowedShelfIds.has(Number(item.anaquelId));
+    return <Row key={item.id} title={`${item.anaquelCodigo} / ${item.codigoNivel}`} subtitle={`Orden ${item.ordenNivel}`} active={item.activo} canEdit={canEdit && rowCanEdit} canDelete={canDelete && rowCanEdit} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />;
+  })}</div>;
 }
 
-function PositionTable({ items, loading, canEdit, canDelete, onEdit, onDelete }) {
+function PositionTable({ items, loading, canEdit, canDelete, allowedShelfIds, onEdit, onDelete }) {
   if (loading) return <Loading />;
   if (!items.length) return <Empty text="No hay posiciones." />;
-  return <div className="space-y-2">{items.map((item) => <Row key={item.id} title={`${item.anaquelCodigo} / ${item.codigoNivel}`} subtitle={`Posicion ${item.posicion}`} active={item.activo} canEdit={canEdit} canDelete={canDelete} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />)}</div>;
+  return <div className="space-y-2">{items.map((item) => {
+    const rowCanEdit = allowedShelfIds.has(Number(item.anaquelId));
+    return <Row key={item.id} title={`${item.anaquelCodigo} / ${item.codigoNivel}`} subtitle={`Posicion ${item.posicion}`} active={item.activo} canEdit={canEdit && rowCanEdit} canDelete={canDelete && rowCanEdit} onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />;
+  })}</div>;
 }
 
 function Row({ title, subtitle, active, canEdit, canDelete, onEdit, onDelete }) {
@@ -190,37 +231,48 @@ function Row({ title, subtitle, active, canEdit, canDelete, onEdit, onDelete }) 
 }
 
 function ShelfDialog({ item, options, onClose, onSubmit }) {
+  const showWorkshop = options?.settings?.habilitarTaller !== false;
+  const showCounter = options?.settings?.habilitarMostrador !== false;
   const [form, setForm] = useState({
     codigo: item?.codigo || "",
     descripcion: item?.descripcion || "",
-    tallerId: item?.tallerId ? String(item.tallerId) : "",
-    mostradorId: item?.mostradorId ? String(item.mostradorId) : "",
+    tallerId: showWorkshop && item?.tallerId ? String(item.tallerId) : "",
+    mostradorId: showCounter && item?.mostradorId ? String(item.mostradorId) : "",
     activo: item?.activo ?? true,
   });
   const workshopOptions = options.workshops.map((row) => ({ value: row.id, label: row.nombre }));
   const counterOptions = options.counters.map((row) => ({ value: row.id, label: row.nombre }));
+  const submitForm = {
+    ...form,
+    tallerId: showWorkshop ? form.tallerId : "",
+    mostradorId: showCounter ? form.mostradorId : "",
+  };
   return (
-    <BaseDialog title={item ? "Editar anaquel" : "Nuevo anaquel"} onClose={onClose} onSubmit={() => onSubmit(form)}>
+    <BaseDialog title={item ? "Editar anaquel" : "Nuevo anaquel"} onClose={onClose} onSubmit={() => onSubmit(submitForm)}>
       <Field label="Codigo *"><Input required value={form.codigo} onChange={(event) => setForm((current) => ({ ...current, codigo: event.target.value.toUpperCase() }))} /></Field>
       <Field label="Descripcion"><Input value={form.descripcion} onChange={(event) => setForm((current) => ({ ...current, descripcion: event.target.value }))} /></Field>
-      <ClearableSelectField
-        label="Taller"
-        value={form.tallerId}
-        disabled={Boolean(form.mostradorId)}
-        options={workshopOptions}
-        placeholder="Seleccionar taller"
-        onChange={(tallerId) => setForm((current) => ({ ...current, tallerId, mostradorId: "" }))}
-        onClear={() => setForm((current) => ({ ...current, tallerId: "" }))}
-      />
-      <ClearableSelectField
-        label="Mostrador"
-        value={form.mostradorId}
-        disabled={Boolean(form.tallerId)}
-        options={counterOptions}
-        placeholder="Seleccionar mostrador"
-        onChange={(mostradorId) => setForm((current) => ({ ...current, mostradorId, tallerId: "" }))}
-        onClear={() => setForm((current) => ({ ...current, mostradorId: "" }))}
-      />
+      {showWorkshop ? (
+        <ClearableSelectField
+          label="Almacen"
+          value={form.tallerId}
+          disabled={showCounter && Boolean(form.mostradorId)}
+          options={workshopOptions}
+          placeholder="Seleccionar almacen"
+          onChange={(tallerId) => setForm((current) => ({ ...current, tallerId, mostradorId: showCounter ? "" : current.mostradorId }))}
+          onClear={() => setForm((current) => ({ ...current, tallerId: "" }))}
+        />
+      ) : null}
+      {showCounter ? (
+        <ClearableSelectField
+          label="Mostrador"
+          value={form.mostradorId}
+          disabled={showWorkshop && Boolean(form.tallerId)}
+          options={counterOptions}
+          placeholder="Seleccionar mostrador"
+          onChange={(mostradorId) => setForm((current) => ({ ...current, mostradorId, tallerId: showWorkshop ? "" : current.tallerId }))}
+          onClear={() => setForm((current) => ({ ...current, mostradorId: "" }))}
+        />
+      ) : null}
       <ActiveSwitch checked={form.activo} onChange={(activo) => setForm((current) => ({ ...current, activo }))} />
     </BaseDialog>
   );

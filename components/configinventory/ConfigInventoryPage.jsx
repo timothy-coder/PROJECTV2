@@ -26,6 +26,8 @@ export default function ConfigInventoryPage({ userPermissions }) {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
   const [measureDialog, setMeasureDialog] = useState({ open: false, item: null });
   const [measureDeleteDialog, setMeasureDeleteDialog] = useState({ open: false, item: null });
+  const [voucherDialog, setVoucherDialog] = useState({ open: false, item: null });
+  const [voucherDeleteDialog, setVoucherDeleteDialog] = useState({ open: false, item: null });
   const canViewTypes = hasPerm(userPermissions, ["configinventario", "view"]);
   const canCreate = hasPerm(userPermissions, ["configinventario", "create"]);
   const canEdit = hasPerm(userPermissions, ["configinventario", "edit"]);
@@ -36,6 +38,12 @@ export default function ConfigInventoryPage({ userPermissions }) {
   const canCreateMeasures = canCreate || hasPerm(userPermissions, ["tiposmedida", "create"]) || hasPerm(userPermissions, ["configinventario_medidas", "create"]);
   const canEditMeasures = canEdit || hasPerm(userPermissions, ["tiposmedida", "edit"]) || hasPerm(userPermissions, ["configinventario_medidas", "edit"]);
   const canDeleteMeasures = canDelete || hasPerm(userPermissions, ["tiposmedida", "delete"]) || hasPerm(userPermissions, ["configinventario_medidas", "delete"]);
+  const canViewCurrencies = canViewTypes || hasPerm(userPermissions, ["config_posventa_monedas", "view"]);
+  const canEditCurrencies = canEdit || hasPerm(userPermissions, ["config_posventa_monedas", "edit"]);
+  const canViewVoucherTypes = hasPerm(userPermissions, ["config_tipos_comprobante", "view"]);
+  const canCreateVoucherTypes = hasPerm(userPermissions, ["config_tipos_comprobante", "create"]);
+  const canEditVoucherTypes = hasPerm(userPermissions, ["config_tipos_comprobante", "edit"]);
+  const canDeleteVoucherTypes = hasPerm(userPermissions, ["config_tipos_comprobante", "delete"]);
 
   const filtered = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -47,6 +55,8 @@ export default function ConfigInventoryPage({ userPermissions }) {
     canViewTypes ? { key: "types", label: "Tipos" } : null,
     canViewSettings ? { key: "settings", label: "Opciones de inventario" } : null,
     canViewMeasures ? { key: "measures", label: "Tipos de medida" } : null,
+    canViewCurrencies ? { key: "currencies", label: "Monedas posventa" } : null,
+    canViewVoucherTypes ? { key: "voucherTypes", label: "Tipos de comprobante" } : null,
   ].filter(Boolean);
   const displayedActiveTab = tabs.some((tab) => tab.key === activeTab) ? activeTab : tabs[0]?.key;
 
@@ -100,6 +110,25 @@ export default function ConfigInventoryPage({ userPermissions }) {
             onCreate={() => setMeasureDialog({ open: true, item: null })}
             onEdit={(item) => setMeasureDialog({ open: true, item })}
             onDelete={(item) => setMeasureDeleteDialog({ open: true, item })}
+          />
+        ) : displayedActiveTab === "currencies" ? (
+          <PostventaCurrenciesPanel
+            key={data.currencies.map((currency) => `${currency.id}-${currency.isActive ? 1 : 0}`).join("|") || "currencies"}
+            items={data.currencies}
+            loading={data.loading}
+            canEdit={canEditCurrencies}
+            onSubmit={data.updateCurrencies}
+          />
+        ) : displayedActiveTab === "voucherTypes" ? (
+          <VoucherTypesPanel
+            items={data.voucherTypes}
+            loading={data.loading}
+            canCreate={canCreateVoucherTypes}
+            canEdit={canEditVoucherTypes}
+            canDelete={canDeleteVoucherTypes}
+            onCreate={() => setVoucherDialog({ open: true, item: null })}
+            onEdit={(item) => setVoucherDialog({ open: true, item })}
+            onDelete={(item) => setVoucherDeleteDialog({ open: true, item })}
           />
         ) : (
           <>
@@ -211,6 +240,25 @@ export default function ConfigInventoryPage({ userPermissions }) {
           setMeasureDeleteDialog({ open: false, item: null });
         }}
       />
+      {voucherDialog.open ? (
+        <VoucherTypeDialog
+          state={voucherDialog}
+          onClose={() => setVoucherDialog({ open: false, item: null })}
+          onSubmit={async (payload) => {
+            if (voucherDialog.item) await data.updateVoucherType(voucherDialog.item.id, payload);
+            else await data.createVoucherType(payload);
+            setVoucherDialog({ open: false, item: null });
+          }}
+        />
+      ) : null}
+      <VoucherDeleteDialog
+        state={voucherDeleteDialog}
+        onClose={() => setVoucherDeleteDialog({ open: false, item: null })}
+        onConfirm={async () => {
+          await data.deleteVoucherType(voucherDeleteDialog.item.id);
+          setVoucherDeleteDialog({ open: false, item: null });
+        }}
+      />
     </div>
   );
 }
@@ -222,7 +270,10 @@ function InventorySettingsPanel({ settings, loading, canEdit, onSubmit }) {
     habilitarFechaVencimiento: true,
     habilitarProveedorEnLote: true,
     habilitarTipoMedida: true,
+    habilitarProcedencia: false,
     habilitarAperturaCaja: false,
+    habilitarTaller: true,
+    habilitarMostrador: true,
     tcReferencial: 0,
     ...settings,
   });
@@ -255,9 +306,24 @@ function InventorySettingsPanel({ settings, loading, canEdit, onSubmit }) {
       description: "Muestra el tipo de medida en productos de inventario.",
     },
     {
+      key: "habilitarProcedencia",
+      title: "Procedencia",
+      description: "Activa el campo de procedencia para productos y lotes de posventa.",
+    },
+    {
       key: "habilitarAperturaCaja",
       title: "Apertura de caja",
       description: "Activa el control de apertura de caja para operaciones de inventario.",
+    },
+    {
+      key: "habilitarTaller",
+      title: "Taller",
+      description: "Muestra y permite usar taller en las operaciones de inventario.",
+    },
+    {
+      key: "habilitarMostrador",
+      title: "Mostrador",
+      description: "Muestra y permite usar mostrador en las operaciones de inventario.",
     },
   ];
 
@@ -390,6 +456,161 @@ function MeasureTypesPanel({ items, loading, canCreate, canEdit, canDelete, onCr
   );
 }
 
+function PostventaCurrenciesPanel({ items, loading, canEdit, onSubmit }) {
+  const [selectedId, setSelectedId] = useState(() => items.find((item) => item.isActive && item.monedaActiva)?.id || null);
+  const [saving, setSaving] = useState(false);
+  const activeCount = selectedId ? 1 : 0;
+
+  function toggleCurrency(id, checked) {
+    if (checked) setSelectedId(id);
+  }
+
+  async function save() {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      await onSubmit({ monedaId: selectedId });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <p className="text-xs font-bold text-blue-700">Moneda activa para posventa</p>
+        <div className="mt-2 flex items-center justify-between">
+          <p className="text-2xl font-bold text-slate-950">{activeCount}</p>
+          <Box className="size-8 text-blue-200" />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-blue-600 shadow-sm">
+        <div className="flex flex-col gap-3 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-md bg-blue-600 text-white"><Box className="size-4" /></div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-950">Monedas de inventario posventa</h3>
+              <p className="text-xs font-medium text-slate-500">Selecciona una sola moneda para registrar productos de posventa</p>
+            </div>
+          </div>
+          {canEdit ? (
+            <Button onClick={save} disabled={saving || loading || !selectedId} className="bg-blue-600 text-white hover:bg-blue-700">
+              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              Guardar moneda
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="space-y-2 px-4 py-4">
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando monedas...</div>
+          ) : items.length ? (
+            items.map((item) => {
+              const disabled = !canEdit || saving || !item.monedaActiva;
+              return (
+                <label key={item.id} className={`flex items-center justify-between gap-4 rounded-lg border px-3 py-3 ${item.monedaActiva ? "border-blue-200 bg-white" : "border-slate-200 bg-slate-50"}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-slate-950">{item.codigo} - {item.nombre}</span>
+                    <span className="mt-0.5 block text-xs font-medium text-slate-500">
+                      {item.simbolo || "Sin simbolo"} {item.monedaActiva ? "Disponible en sistema" : "Moneda desactivada en configuracion general"}
+                    </span>
+                  </span>
+                  <Switch
+                    checked={selectedId === item.id && item.monedaActiva}
+                    disabled={disabled}
+                    onCheckedChange={(checked) => toggleCurrency(item.id, checked)}
+                  />
+                </label>
+              );
+            })
+          ) : (
+            <div className="py-10 text-center text-sm text-slate-500">No hay monedas registradas.</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function VoucherTypesPanel({ items, loading, canCreate, canEdit, canDelete, onCreate, onEdit, onDelete }) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const clean = query.trim().toLowerCase();
+    if (!clean) return items;
+    return items.filter((item) => `${item.codigo} ${item.nombre}`.toLowerCase().includes(clean));
+  }, [items, query]);
+
+  return (
+    <>
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <p className="text-xs font-bold text-blue-700">Total de Tipos de Comprobante</p>
+        <div className="mt-2 flex items-center justify-between">
+          <p className="text-2xl font-bold text-slate-950">{items.length}</p>
+          <Box className="size-8 text-blue-200" />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-blue-600 shadow-sm">
+        <div className="flex flex-col gap-3 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-md bg-blue-600 text-white"><Box className="size-4" /></div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-950">Tipos de comprobante</h3>
+              <p className="text-xs font-medium text-slate-500">Configura comprobantes para inventario y venta de productos</p>
+            </div>
+          </div>
+          {canCreate ? (
+            <Button onClick={onCreate} className="bg-blue-600 text-white hover:bg-blue-700">
+              <Plus className="size-4" />
+              Nuevo Comprobante
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="w-fit rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">{items.length} comprobantes registrados</span>
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar comprobante..." className="h-9 bg-white pl-9" />
+          </div>
+        </div>
+
+        <div className="space-y-2 px-4 pb-4">
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</div>
+          ) : filtered.length ? (
+            filtered.map((item) => (
+              <div key={item.id} className="flex flex-col gap-3 rounded-lg border border-blue-200 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-black text-blue-700">{item.codigo}</span>
+                    <p className="truncate text-sm font-bold text-slate-950">{item.nombre}</p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${item.activeConfiguracion ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                      Configuracion: {item.activeConfiguracion ? "Activo" : "Inactivo"}
+                    </span>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${item.activeVentaProductos ? "bg-violet-50 text-violet-700" : "bg-slate-100 text-slate-500"}`}>
+                      Venta productos: {item.activeVentaProductos ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {canEdit ? <Button variant="outline" size="icon" className="border-orange-300 text-orange-600" onClick={() => onEdit(item)}><Edit3 className="size-4" /></Button> : null}
+                  {canDelete ? <Button variant="outline" size="icon" className="border-red-300 text-red-600" onClick={() => onDelete(item)}><Trash2 className="size-4" /></Button> : null}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="py-10 text-center text-sm text-slate-500">No hay tipos de comprobante.</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function TypeDialog({ state, onClose, onSubmit }) {
   const [nombre, setNombre] = useState(state.item?.nombre || "");
   const [saving, setSaving] = useState(false);
@@ -461,6 +682,64 @@ function MeasureTypeDialog({ state, onClose, onSubmit }) {
   );
 }
 
+function VoucherTypeDialog({ state, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    codigo: state.item?.codigo || "",
+    nombre: state.item?.nombre || "",
+    activeConfiguracion: Boolean(state.item?.activeConfiguracion),
+    activeVentaProductos: Boolean(state.item?.activeVentaProductos),
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    await onSubmit(form);
+    setSaving(false);
+  }
+
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md bg-white text-slate-950">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-blue-700">{state.item ? "Editar comprobante" : "Nuevo comprobante"}</DialogTitle>
+            <DialogDescription>Completa el codigo, nombre y donde se usara el comprobante.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Codigo *</Label>
+              <Input value={form.codigo} onChange={(event) => setForm((current) => ({ ...current, codigo: event.target.value.toUpperCase() }))} placeholder="Ej: FACT" maxLength={20} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Nombre *</Label>
+              <Input value={form.nombre} onChange={(event) => setForm((current) => ({ ...current, nombre: event.target.value }))} placeholder="Ej: Factura" maxLength={80} required />
+            </div>
+          </div>
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <span>
+              <span className="block text-sm font-bold text-slate-950">Mostrar en configuracion</span>
+              <span className="text-xs font-medium text-slate-500">Permite usarlo dentro de configuracion.</span>
+            </span>
+            <Switch checked={form.activeConfiguracion} onCheckedChange={(checked) => setForm((current) => ({ ...current, activeConfiguracion: checked }))} />
+          </label>
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <span>
+              <span className="block text-sm font-bold text-slate-950">Mostrar en venta de productos</span>
+              <span className="text-xs font-medium text-slate-500">Permite usarlo al vender productos.</span>
+            </span>
+            <Switch checked={form.activeVentaProductos} onCheckedChange={(checked) => setForm((current) => ({ ...current, activeVentaProductos: checked }))} />
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+            <Button type="submit" disabled={saving} className="bg-blue-600 text-white hover:bg-blue-700">{saving ? "Guardando..." : "Guardar"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DeleteDialog({ state, onClose, onConfirm }) {
   if (!state.open) return null;
   return (
@@ -469,6 +748,24 @@ function DeleteDialog({ state, onClose, onConfirm }) {
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-red-600">Eliminar tipo</DialogTitle>
           <DialogDescription>Se eliminara {state.item?.nombre}.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="destructive" onClick={onConfirm}>Eliminar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VoucherDeleteDialog({ state, onClose, onConfirm }) {
+  if (!state.open) return null;
+  return (
+    <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm bg-white text-slate-950">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold text-red-600">Eliminar comprobante</DialogTitle>
+          <DialogDescription>Se eliminara {state.item?.codigo} - {state.item?.nombre}.</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>

@@ -316,9 +316,19 @@ export async function GET(request) {
            WHERE e.vin = h.vin
          )`
       );
+      const [[deliveredRow]] = await pool.query(
+        `SELECT COUNT(DISTINCT h.vin) AS total
+         FROM ventas_historial_carros h
+         WHERE EXISTS (
+           SELECT 1
+           FROM ventas_historial_carros_eventos e
+           WHERE e.vin = h.vin
+         )`
+      );
       return NextResponse.json({
         rows,
         inventoryVehicles: Number(inventoryRow?.total || 0),
+        deliveredVehicles: Number(deliveredRow?.total || 0),
         timeStates: timeRows.map((row) => ({
           id: row.id,
           nombre: row.nombre,

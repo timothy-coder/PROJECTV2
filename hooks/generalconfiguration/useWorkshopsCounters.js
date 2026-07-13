@@ -34,7 +34,7 @@ export function useWorkshopsCounters(centroId) {
       setTalleres(talleresData.talleres || []);
       setMostradores(mostradoresData.mostradores || []);
     } catch (err) {
-      setError(err.message || "No se pudieron cargar talleres y mostradores.");
+      setError(err.message || "No se pudieron cargar almacenes y mostradores.");
       setTalleres([]);
       setMostradores([]);
     } finally {
@@ -68,7 +68,7 @@ export function useWorkshopsCounters(centroId) {
       })
       .catch((err) => {
         if (!mounted) return;
-        setError(err.message || "No se pudieron cargar talleres y mostradores.");
+        setError(err.message || "No se pudieron cargar almacenes y mostradores.");
         setTalleres([]);
         setMostradores([]);
       })

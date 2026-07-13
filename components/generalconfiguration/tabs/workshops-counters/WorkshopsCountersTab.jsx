@@ -123,7 +123,7 @@ function ItemPanel({
           ))
         ) : (
           <div className="py-8 text-center text-sm font-medium text-slate-500">
-            No hay registros para este centro.
+            No hay registros para este grupo.
           </div>
         )}
       </div>
@@ -214,10 +214,10 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-bold leading-tight text-slate-950 sm:text-xl">
-                Talleres y Mostradores
+                Almacenes y Mostradores
               </h2>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                Gestiona los talleres y mostradores de cada centro
+                Gestiona los almacenes y mostradores de cada grupo
               </p>
             </div>
           </div>
@@ -228,15 +228,15 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
         <div className="px-3 py-3 sm:px-4 sm:py-4">
           <div className="rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <label className="text-xs font-semibold text-slate-700">
-              Centro
+              Grupo
             </label>
             <div className="mt-2 max-w-none sm:max-w-xs">
               <SearchableSelect
               value={currentCentroId}
               options={centroOptions}
-              placeholder="Selecciona un centro"
-              searchPlaceholder="Buscar centro..."
-              emptyText="Sin centros"
+              placeholder="Selecciona un grupo"
+              searchPlaceholder="Buscar grupo..."
+              emptyText="Sin grupos"
               disabled={loadingCentros || !centros.length}
               onChange={setSelectedCentroId}
             />
@@ -252,7 +252,7 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
 
         <div className="grid grid-cols-2 gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
           {canViewTalleres ? (
-            <SummaryCard label="Total Talleres" value={stats.talleres} tone="blue" icon={Wrench} />
+            <SummaryCard label="Total Almacenes" value={stats.talleres} tone="blue" icon={Wrench} />
           ) : null}
           {canViewMostradores ? (
             <SummaryCard label="Total Mostradores" value={stats.mostradores} tone="purple" icon={BarChart3} />
@@ -262,7 +262,7 @@ export function WorkshopsCountersTab({ tab, userPermissions }) {
         <div className="grid gap-4 px-4 pb-4 xl:grid-cols-2">
           {canViewTalleres ? (
             <ItemPanel
-              title="Talleres"
+              title="Almacenes"
               subtitle={`${talleres.length} registrados${selectedCentro ? ` en ${selectedCentro.nombre}` : ""}`}
               tone="blue"
               icon={Wrench}
