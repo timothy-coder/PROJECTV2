@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { pool } from "@/lib/db";
+import { calculateLogisticsRow, LOGISTICS_MONTH_KEYS } from "@/lib/logisticsClassification";
 import { hasPerm } from "@/lib/permissions";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 
@@ -21,6 +22,9 @@ function mapStock(row) {
     posicion: row.posicion || "",
     tallerName: row.taller_name || "",
     mostradorName: row.mostrador_name || "",
+    tallerId: row.taller_id,
+    mostradorId: row.mostrador_id,
+    canAccessLocation: Boolean(row.can_access_location),
     stock: Number(row.cantidad || 0),
     createdAt: row.created_at,
   };
@@ -52,6 +56,41 @@ function mapSoldProduct(row) {
     numeroParte: row.numero_parte || "",
     descripcion: row.descripcion || "",
   };
+}
+
+function monthRef(offset) {
+  const date = new Date();
+  date.setMonth(date.getMonth() - offset);
+  return {
+    anio: date.getFullYear(),
+    mes: date.getMonth() + 1,
+  };
+}
+
+function diffDays(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  return Math.max(Math.floor((now.getTime() - date.getTime()) / 86400000), 0);
+}
+
+function buildLogisticsResult(productRow, soldRows) {
+  const monthRefs = LOGISTICS_MONTH_KEYS.map((key, index) => ({ key, ...monthRef(index + 1) }));
+  const row = {
+    stockActual: Number(productRow.stock_disponible ?? productRow.stock_total ?? 0),
+    diasAlmacen: diffDays(productRow.fecha_ingreso),
+    ...Object.fromEntries(LOGISTICS_MONTH_KEYS.map((key) => [key, 0])),
+  };
+
+  soldRows
+    .filter((item) => Number(item.producto_id) === Number(productRow.id))
+    .forEach((item) => {
+      const month = monthRefs.find((ref) => Number(ref.anio) === Number(item.anio) && Number(ref.mes) === Number(item.mes));
+      if (month) row[month.key] = Number(item.cantidad || 0);
+    });
+
+  return calculateLogisticsRow(row);
 }
 
 function mapSettings(row) {
@@ -94,9 +133,16 @@ export async function GET() {
       `SELECT u.id, u.lote_id, u.anaquel_id, u.nivel_id, u.posicion_id, u.cantidad, u.created_at,
               l.producto_id,
               p.numero_parte, p.descripcion,
+              a.taller_id, a.mostrador_id,
               a.codigo AS anaquel_codigo, a.descripcion AS anaquel_descripcion,
               n.codigo_nivel, po.posicion,
-              ta.nombre AS taller_name, mo.nombre AS mostrador_name
+              ta.nombre AS taller_name, mo.nombre AS mostrador_name,
+              CASE
+                WHEN (a.taller_id IS NOT NULL AND ut.usuario_id IS NOT NULL)
+                  OR (a.mostrador_id IS NOT NULL AND um.usuario_id IS NOT NULL)
+                  OR (a.taller_id IS NULL AND a.mostrador_id IS NULL)
+                THEN 1 ELSE 0
+              END AS can_access_location
        FROM posventa_lotes_ubicaciones u
        INNER JOIN posventa_productos_lotes l ON l.id = u.lote_id
        INNER JOIN posventa_productos p ON p.id = l.producto_id
@@ -105,7 +151,13 @@ export async function GET() {
        LEFT JOIN almacen_nivel_posiciones po ON po.id = u.posicion_id
        LEFT JOIN configuracion_talleres ta ON ta.id = a.taller_id
        LEFT JOIN configuracion_mostradores mo ON mo.id = a.mostrador_id
+       LEFT JOIN administracion_usuario_talleres ut
+         ON ut.taller_id = a.taller_id AND ut.usuario_id = ?
+       LEFT JOIN administracion_usuario_mostradores um
+         ON um.mostrador_id = a.mostrador_id AND um.usuario_id = ?
        ORDER BY u.created_at DESC`
+      ,
+      [currentUserId, currentUserId]
     );
     const [typeRows] = await pool.query(
       `SELECT id, nombre FROM configuracion_inventario_tipo ORDER BY nombre ASC`
@@ -251,7 +303,7 @@ export async function GET() {
        ORDER BY nombre ASC`
     );
     const [comboItemRows] = await pool.query(
-      `SELECT ci.id, ci.combo_id, ci.producto_id, ci.cantidad, ci.created_at,
+      `SELECT ci.id, ci.combo_id, ci.producto_id, ci.cantidad, ci.precio_venta, ci.descuento_tipo, ci.descuento_valor, ci.created_at,
               p.numero_parte, p.descripcion
        FROM posventa_combo_items ci
        INNER JOIN posventa_productos p ON p.id = ci.producto_id
@@ -271,10 +323,13 @@ export async function GET() {
         const productStocks = stocks.filter((stock) => stock.productoId === row.id);
         const used = productStocks.reduce((sum, stock) => sum + Number(stock.stock || 0), 0);
         const total = Number(row.stock_total || 0);
+        const logistics = buildLogisticsResult(row, soldProductRows);
         return {
           stockUsado: used,
           stockDisponible: Math.max(total - used, 0),
           stock: productStocks,
+          tipoLogistico: logistics.tipo,
+          respuestaFinalLogistica: logistics.respuestaFinal,
         };
       })(),
       id: row.id,
@@ -330,6 +385,9 @@ export async function GET() {
       comboId: row.combo_id,
       productoId: row.producto_id,
       cantidad: Number(row.cantidad || 0),
+      precioVenta: Number(row.precio_venta || 0),
+      descuentoTipo: row.descuento_tipo || "monto",
+      descuentoValor: Number(row.descuento_valor || 0),
       numeroParte: row.numero_parte,
       descripcion: row.descripcion,
       createdAt: row.created_at,

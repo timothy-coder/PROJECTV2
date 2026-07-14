@@ -5,10 +5,16 @@ import { pool } from "@/lib/db";
 function normalizeItems(items) {
   const seen = new Set();
   return (Array.isArray(items) ? items : [])
-    .map((item) => ({
-      productoId: Number(item.productoId || item.producto_id || 0),
-      cantidad: Math.max(1, Number(item.cantidad || 1)),
-    }))
+    .map((item) => {
+      const descuentoTipo = item.descuentoTipo === "porcentaje" || item.descuento_tipo === "porcentaje" ? "porcentaje" : "monto";
+      return {
+        productoId: Number(item.productoId || item.producto_id || 0),
+        cantidad: Math.max(1, Number(item.cantidad || 1)),
+        precioVenta: Math.max(0, Number(item.precioVenta ?? item.precio_venta ?? 0)),
+        descuentoTipo,
+        descuentoValor: Math.max(0, Number(item.descuentoValor ?? item.descuento_valor ?? 0)),
+      };
+    })
     .filter((item) => {
       if (!item.productoId || seen.has(item.productoId)) return false;
       seen.add(item.productoId);
@@ -41,9 +47,9 @@ export async function POST(request) {
     );
     const comboId = result.insertId;
     await connection.query(
-      `INSERT INTO posventa_combo_items (combo_id, producto_id, cantidad)
-       VALUES ${items.map(() => "(?, ?, ?)").join(", ")}`,
-      items.flatMap((item) => [comboId, item.productoId, item.cantidad])
+      `INSERT INTO posventa_combo_items (combo_id, producto_id, cantidad, precio_venta, descuento_tipo, descuento_valor)
+       VALUES ${items.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")}`,
+      items.flatMap((item) => [comboId, item.productoId, item.cantidad, item.precioVenta, item.descuentoTipo, item.descuentoValor])
     );
     await connection.commit();
 

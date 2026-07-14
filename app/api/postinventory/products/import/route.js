@@ -153,30 +153,31 @@ export async function POST(request) {
     await connection.beginTransaction();
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index] || {};
-      const numeroParte = cleanText(value(row, ["numero_parte", "Numero Parte", "N Parte", "numeroParte"]));
+      const numeroParte = cleanText(value(row, ["numero_parte", "Numero Parte", "NUMERO DE PARTE", "N Parte", "numeroParte"]));
+      const descripcionExcel = cleanText(value(row, ["DESCRIPCION"]));
       const descripcion = cleanText(value(row, ["descripcion", "Descripcion", "Descripción"]));
       const marca = cleanText(value(row, ["marca", "Marca"])) || null;
       const procedencia = cleanText(value(row, ["procedencia", "Procedencia", "PROCEDENCIA"])) || null;
-      if (!numeroParte || !descripcion) {
+      if (!numeroParte || !(descripcion || descripcionExcel)) {
         errors.push(`Fila ${index + 2}: numero_parte y descripcion son obligatorios.`);
         continue;
       }
 
-      const tipoRaw = cleanText(value(row, ["tipo_inventario", "Tipo Inventario", "tipoId", "tipo_id"]));
+      const tipoRaw = cleanText(value(row, ["tipo_inventario", "Tipo Inventario", "TIPO INVENTARIO", "tipoId", "tipo_id"]));
       const monedaRaw = cleanText(value(row, ["moneda", "Moneda", "monedaId", "moneda_id"]));
       const tipoId = tipoRaw ? Number(tipoRaw) || typeMap.get(tipoRaw.toLowerCase()) || null : null;
       const monedaId = monedaRaw ? Number(monedaRaw) || currencyMap.get(monedaRaw.toLowerCase()) || defaultCurrencyId : defaultCurrencyId;
-      const fechaIngreso = dateValue(value(row, ["fecha_ingreso", "Fecha Ingreso", "fechaIngreso"]));
+      const fechaIngreso = dateValue(value(row, ["fecha_ingreso", "Fecha Ingreso", "FECHA INGRESO", "fechaIngreso"]));
       const stockTotal = numberValue(value(row, ["stock_total", "Stock Total", "stockTotal", "stock_lote", "Stock Lote", "STOCK LOTE"]));
-      const precioCompra = numberValue(value(row, ["precio_compra", "Precio Compra", "PRECIO DE COMPRA", "precioCompra"]));
-      const precioVentaConIgvInput = nullableNumber(value(row, ["precio_venta_con_igv", "Precio Venta Con IGV", "precio_venta", "Precio Venta", "precioVenta"]));
-      const precioVentaSinIgv = nullableNumber(value(row, ["precio_venta_sin_igv", "Precio Venta Sin IGV"]));
+      const precioCompra = numberValue(value(row, ["precio_compra", "Precio Compra", "PRECIO DE COMPRA", "PRECIO DE COMPRA (SIN IGV)", "precioCompra"]));
+      const precioVentaConIgvInput = nullableNumber(value(row, ["precio_venta_con_igv", "Precio Venta Con IGV", "PRECIO VENTA CON IGV", "precio_venta", "Precio Venta", "precioVenta"]));
+      const precioVentaSinIgv = nullableNumber(value(row, ["precio_venta_sin_igv", "Precio Venta Sin IGV", "PRECIO VENTA SIN IGV"]));
       const precioVentaConIgv = precioVentaSinIgv !== null ? Number((precioVentaSinIgv * taxFactor).toFixed(2)) : precioVentaConIgvInput;
-      const margenComercial = nullableNumber(value(row, ["margen_comercial", "Margen Comercial", "margen"]));
+      const margenComercial = nullableNumber(value(row, ["margen_comercial", "Margen Comercial", "MARGEN COMERCIAL", "MARGEN COMERCIAL (%)", "margen"]));
       const numeroFactura = cleanText(value(row, ["numero_comprobante", "Numero Comprobante", "NUMERO DE COMPROBANTE", "numero_factura", "Numero Factura", "NUMERO DE FACTURA"]));
       const tipoMedidaRaw = cleanText(value(row, ["unidad_medida", "Unidad Medida", "UNIDAD DE MEDIDA", "tipo_medida", "Tipo Medida"]));
       const proveedorRaw = cleanText(value(row, ["proveedor", "Proveedor", "PROVEEDOR"]));
-      const fechaVencimiento = dateValue(value(row, ["fecha_vencimiento", "Fecha Vencimiento", "FECHA DE VENCIMIENTO"]));
+      const fechaVencimiento = dateValue(value(row, ["fecha_vencimiento", "Fecha Vencimiento", "FECHA DE VENCIMIENTO", "FEHCHA DE VENCIMIENTO"]));
       const stockLote = numberValue(value(row, ["stock_lote", "Stock Lote", "STOCK LOTE", "stock_total", "Stock Total", "stockTotal"]));
       const tipoCambio = nullableNumber(value(row, ["tipo_cambio", "Tipo Cambio"]));
       const tipoMedidaId = tipoMedidaRaw ? Number(tipoMedidaRaw) || measureMap.get(tipoMedidaRaw.toLowerCase()) || null : null;
@@ -191,7 +192,7 @@ export async function POST(request) {
            SET descripcion = ?, tipo_inventario_id = ?, fecha_ingreso = ?, marca = ?, procedencia = ?,
                precio_venta = COALESCE(?, precio_venta), moneda_id = COALESCE(?, moneda_id)
            WHERE id = ?`,
-          [descripcion, tipoId, fechaIngreso, marca, procedencia, precioVentaConIgv, monedaId, productoId]
+          [descripcion || descripcionExcel, tipoId, fechaIngreso, marca, procedencia, precioVentaConIgv, monedaId, productoId]
         );
         updated += 1;
       } else {
@@ -199,7 +200,7 @@ export async function POST(request) {
           `INSERT INTO posventa_productos
            (numero_parte, descripcion, marca, procedencia, tipo_inventario_id, fecha_ingreso, stock_total, stock_usado, stock_disponible, precio_compra, precio_venta, moneda_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
-          [numeroParte, descripcion, marca, procedencia, tipoId, fechaIngreso, hasLotData ? 0 : stockTotal, hasLotData ? 0 : stockTotal, precioVentaConIgv || 0, monedaId]
+          [numeroParte, descripcion || descripcionExcel, marca, procedencia, tipoId, fechaIngreso, hasLotData ? 0 : stockTotal, hasLotData ? 0 : stockTotal, precioVentaConIgv || 0, monedaId]
         );
         productoId = insertResult.insertId;
         imported += 1;
@@ -207,8 +208,8 @@ export async function POST(request) {
 
       if (!hasLotData) continue;
 
-      if (!numeroFactura || !tipoMedidaId || !proveedorId) {
-        errors.push(`Fila ${index + 2}: comprobante, unidad de medida y proveedor son obligatorios para crear lote.`);
+      if (!tipoMedidaId) {
+        errors.push(`Fila ${index + 2}: unidad de medida es obligatoria para crear lote.`);
         continue;
       }
       if (monedaId && defaultCurrencyId && Number(monedaId) !== Number(defaultCurrencyId) && (!tipoCambio || tipoCambio <= 0)) {

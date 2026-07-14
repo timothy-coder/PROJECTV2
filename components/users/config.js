@@ -33,7 +33,9 @@ export const USER_PERMISSION_GROUPS = [
   { section: "Posventa", key: "submantenimiento", label: "Submantenimientos", actions: ["view", "create", "edit", "delete"] },
   { section: "Posventa", key: "prospeccion", label: "Auto prospeccion", actions: ["view", "create", "edit", "delete"] },
 
-  { section: "Punto de venta", key: "puntoventa", label: "Punto de venta", actions: ["view"] },
+  { section: "Punto de venta", key: "puntoventa", label: "Punto de venta", actions: ["view", "scan", "sell_any_price"] },
+  { section: "Punto de venta", key: "puntoventa_cotizaciones", label: "Cotizaciones de punto de venta", actions: ["view", "viewteam", "viewall", "edit", "delete", "sell"] },
+  { section: "Punto de venta", key: "puntoventa_anticipos", label: "Anticipos de punto de venta", actions: ["view", "viewteam", "viewall"] },
 
   { section: "Reportes y comunicacion", key: "reportes", label: "Reportes", actions: ["view"] },
   { section: "Reportes y comunicacion", key: "mensajes", label: "Mensajes", actions: ["view", "create", "edit", "delete"] },
@@ -44,6 +46,7 @@ export const USER_PERMISSION_GROUPS = [
   { section: "Configuracion", key: "configuracion", label: "Configuracion general", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_roles", label: "Roles", actions: ["view", "create"] },
   { section: "Configuracion", key: "configuracion_perfiles_permisos", label: "Perfiles de permisos", actions: ["view", "create", "edit", "delete"] },
+  { section: "Configuracion", key: "configuracion_datos_fiscales_punto", label: "Datos fiscales por punto", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_centros", label: "Centros", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_talleres", label: "Talleres", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_mostradores", label: "Mostradores", actions: ["view", "create", "edit", "delete"] },
@@ -89,6 +92,7 @@ export const PERMISSION_ACTION_LABELS = {
   create: "Crear",
   edit: "Editar",
   delete: "Eliminar",
+  viewteam: "Ver mismo taller/mostrador",
   viewall: "Ver todo",
   ventasview: "Ver ventas propias",
   ventasviewall: "Ver todas las ventas",
@@ -125,6 +129,9 @@ export const PERMISSION_ACTION_LABELS = {
   subsanate: "Subsanar",
   sign: "Marcar firmado",
   send: "Enviar",
+  scan: "Escanear",
+  sell_any_price: "Vender a cualquier precio",
+  sell: "Pasar a ventas",
 };
 
 export const WORK_DAYS = [

@@ -29,7 +29,8 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ message: "No tienes permiso para editar proveedores." }, { status: 403 });
     }
 
-    const id = Number(params.id);
+    const routeParams = await params;
+    const id = Number(routeParams.id);
     const payload = normalizeProvider(await request.json());
     if (!id) return NextResponse.json({ message: "Proveedor invalido." }, { status: 400 });
     if (!payload.razonSocial) return NextResponse.json({ message: "La razon social es obligatoria." }, { status: 400 });
@@ -67,7 +68,8 @@ export async function DELETE(_request, { params }) {
       return NextResponse.json({ message: "No tienes permiso para eliminar proveedores." }, { status: 403 });
     }
 
-    const id = Number(params.id);
+    const routeParams = await params;
+    const id = Number(routeParams.id);
     if (!id) return NextResponse.json({ message: "Proveedor invalido." }, { status: 400 });
 
     const [result] = await pool.query(`DELETE FROM administracion_proveedores WHERE id = ?`, [id]);

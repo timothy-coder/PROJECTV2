@@ -1,5 +1,5 @@
-"use client";
-import { useEffect, useMemo, useState } from "react";
+﻿"use client";
+import { Children, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Expand, Info, Loader2, RotateCcw } from "lucide-react";
 import {
   Bar,
@@ -239,7 +239,7 @@ function buildOpportunityRecords(rows, timeStates = []) {
       base.ocupacioncleitne,
       base.nombredepar,
       base.nombreprovi,
-      pickFirstRowValue(group, "añocarro", "aÃ±ocarro"),
+      pickFirstRowValue(group, "añocarro", "añocarro"),
       pickFirstRowValue(group, "fechacreaciocotizacion"),
       pickFirstRowValue(group, "tipopersona"),
       pickFirstRowValue(group, "preciocatalogo"),
@@ -647,17 +647,17 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       ],
     },
     daysReserve: {
-      title: "Días Reserva",
+      title: "Dí­as Reserva",
       general: ["Promedio de días que tardaron las oportunidades en llegar a reserva."],
       details: ["Se compara la fecha de reserva con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysReserve, 1)} días.`],
     },
     daysClose: {
-      title: "Días Cierre",
+      title: "Dí­as Cierre",
       general: ["Promedio de días que tardaron las oportunidades en cerrarse."],
       details: ["Se compara la fecha de cierre con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysClose, 1)} días.`],
     },
     daysFact: {
-      title: "Días Fact",
+      title: "Dí­as Fact",
       general: ["Promedio de días hasta facturación."],
       details: ["Se compara la fecha de facturación con la fecha de creación de la oportunidad.", `Promedio actual: ${formatNumber(kpis.daysFact, 1)} días.`],
     },
@@ -861,20 +861,28 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
             <ReportsLoadingState />
           ) : (
             <>
-              <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-12">
-                <Kpi title="Prospectos" value={formatNumber(kpis.prospects)} info={kpiInfoMap.prospects} onInfo={setKpiInfo} />
-                <Kpi title="Pros/Día" value={formatNumber(kpis.prospectsPerDay, 1)} info={kpiInfoMap.prospectsPerDay} onInfo={setKpiInfo} />
+              <section className="mb-2 grid gap-1.5 xl:grid-cols-[1.05fr_1fr_1.45fr_1.05fr]">
+                <KpiGroup title="Prospección" tone="red" columns="grid-cols-3">
+                  <Kpi title="Prospectos" value={formatNumber(kpis.prospects)} info={kpiInfoMap.prospects} onInfo={setKpiInfo} />
+                <Kpi title="Pros/Dí­a" value={formatNumber(kpis.prospectsPerDay, 1)} info={kpiInfoMap.prospectsPerDay} onInfo={setKpiInfo} />
                 <Kpi title="Proyectado" value={formatNumber(kpis.projected)} info={kpiInfoMap.projected} onInfo={setKpiInfo} />
-                <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} info={kpiInfoMap.quotes} onInfo={setKpiInfo} />
-                <Kpi title="Reservas" value={formatNumber(kpis.reservations)} info={kpiInfoMap.reservations} onInfo={setKpiInfo} />
-                <Kpi title="Días Reserva" value={formatNumber(kpis.daysReserve, 1)} info={kpiInfoMap.daysReserve} onInfo={setKpiInfo} />
-                <Kpi title="Días Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
-                <Kpi title="Días Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
-                <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
+                </KpiGroup>
+                <KpiGroup title="Cotización y digital" tone="fuchsia" columns="grid-cols-3">
+                  <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} info={kpiInfoMap.quotes} onInfo={setKpiInfo} />
+                  <Kpi title="Coti virtuales" value={formatNumber(kpis.virtualQuotes)} info={kpiInfoMap.virtualQuotes} onInfo={setKpiInfo} />
+                  <Kpi title="Total vistas" value={formatNumber(kpis.totalViews)} info={kpiInfoMap.totalViews} onInfo={setKpiInfo} />
+                </KpiGroup>
+                <KpiGroup title="Reserva y cierre" tone="emerald" columns="grid-cols-2 sm:grid-cols-4">
+                  <Kpi title="Reservas" value={formatNumber(kpis.reservations)} info={kpiInfoMap.reservations} onInfo={setKpiInfo} />
+                <Kpi title="Dí­as Reserva" value={formatNumber(kpis.daysReserve, 1)} info={kpiInfoMap.daysReserve} onInfo={setKpiInfo} />
+                <Kpi title="Dí­as Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
+                <Kpi title="Dí­as Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
+                </KpiGroup>
+                <KpiGroup title="Inventario y agenda" tone="blue" columns="grid-cols-3">
+                  <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
                 <Kpi title="Veh. Entregados" value={formatNumber(kpis.deliveredVehicles)} info={kpiInfoMap.deliveredVehicles} onInfo={setKpiInfo} />
-                <Kpi title="Cant Coti Virtuales" value={formatNumber(kpis.virtualQuotes)} info={kpiInfoMap.virtualQuotes} onInfo={setKpiInfo} />
-                <Kpi title="Total Vistas" value={formatNumber(kpis.totalViews)} info={kpiInfoMap.totalViews} onInfo={setKpiInfo} />
-                <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
+                  <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
+                </KpiGroup>
               </section>
               {isFordLeadView ? (
                 <section className="mb-2 grid gap-1.5 sm:grid-cols-2 xl:w-[520px]">
@@ -1210,24 +1218,60 @@ function dateTreeDisplay(level, value) {
   if (level === "day") return value.split("-").reverse().join("/");
   return "Todas";
 }
-function Kpi({ title, value, info, onInfo }) {
+function KpiGroup({ title, tone = "violet", columns = "grid-cols-2", children }) {
+  const tones = {
+    red: "border-red-500/80 bg-red-50/30 text-red-700",
+    pink: "border-pink-500/80 bg-pink-50/30 text-pink-700",
+    emerald: "border-emerald-500/80 bg-emerald-50/30 text-emerald-700",
+    blue: "border-blue-600/80 bg-blue-50/30 text-blue-700",
+    fuchsia: "border-fuchsia-500/80 bg-fuchsia-50/30 text-fuchsia-700",
+    indigo: "border-indigo-600/80 bg-indigo-50/30 text-indigo-700",
+    violet: "border-violet-500/80 bg-violet-50/30 text-violet-700",
+  };
+  const childItems = Children.toArray(children);
+  const infos = childItems.map((child) => child?.props?.info).filter(Boolean);
+  const onInfo = childItems.find((child) => child?.props?.onInfo)?.props?.onInfo;
+  const combinedInfo = infos.length
+    ? {
+      title,
+      general: infos.flatMap((info) => [
+        `${info.title || "Indicador"}`,
+        ...(info.general || []),
+      ]),
+      details: infos.flatMap((info) => [
+        `${info.title || "Indicador"}`,
+        ...(info.details || []),
+      ]),
+    }
+    : null;
   return (
-    <Card className="gap-0 overflow-hidden bg-white py-0 shadow-sm">
-      <div className="grid grid-cols-[1fr_auto] items-center bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-xs font-black text-white">
-        <span className="truncate text-center">{title}</span>
-        {info ? (
+    <Card className={`gap-0 overflow-hidden rounded-md border-2 bg-white py-0 shadow-sm ${tones[tone] || tones.violet}`}>
+      <div className="grid grid-cols-[1fr_auto] items-center gap-2 border-b px-2 py-1">
+        <p className="text-[10px] font-black uppercase leading-none">{title}</p>
+        {combinedInfo ? (
           <button
             type="button"
-            className="ml-1 inline-flex size-5 items-center justify-center rounded-sm text-white/90 hover:bg-white/15 hover:text-white"
-            title="Ver detalle"
-            onClick={() => onInfo?.(info)}
+            className="inline-flex size-5 items-center justify-center rounded-full text-current hover:bg-white/70"
+            title="Ver detalle combinado"
+            onClick={() => onInfo?.(combinedInfo)}
           >
             <Info className="size-3.5" />
           </button>
         ) : null}
       </div>
-      <CardContent className="flex h-14 items-center justify-center px-2 text-xl font-bold sm:text-2xl">{value || "-"}</CardContent>
+      <div className={`grid ${columns} divide-x divide-slate-100`}>{childItems}</div>
     </Card>
+  );
+}
+
+function Kpi({ title, value }) {
+  return (
+    <div className="min-w-0 bg-white px-2 py-2 text-center">
+      <div className="mx-auto flex max-w-full items-center justify-center gap-1 text-[10px] font-black uppercase leading-tight text-slate-500">
+        <span className="truncate">{title}</span>
+      </div>
+      <p className="mt-1 text-xl font-black leading-none text-slate-950 sm:text-2xl">{value || "-"}</p>
+    </div>
   );
 }
 function KpiInfoDialog({ info, onClose }) {
@@ -1244,13 +1288,13 @@ function KpiInfoDialog({ info, onClose }) {
           <div className="rounded-lg border border-violet-100 bg-violet-50/60 p-3">
             <p className="mb-2 text-sm font-black text-violet-700">Resumen general</p>
             <ul className="space-y-2 text-sm font-medium text-slate-700">
-              {(info?.general || []).map((item) => <li key={item}>{item}</li>)}
+              {(info?.general || []).map((item, index) => <li key={`general-${index}-${item}`}>{item}</li>)}
             </ul>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="mb-2 text-sm font-black text-slate-800">Detalle</p>
             <ul className="space-y-2 text-sm font-medium text-slate-700">
-              {(info?.details || []).map((item) => <li key={item}>{item}</li>)}
+              {(info?.details || []).map((item, index) => <li key={`detail-${index}-${item}`}>{item}</li>)}
             </ul>
           </div>
         </div>

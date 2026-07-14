@@ -9,6 +9,7 @@ import { canViewTab } from "@/components/generalconfiguration/permissionUtils";
 import { CentersTab } from "@/components/generalconfiguration/tabs/centers/CentersTab";
 import { CurrencyTab } from "@/components/generalconfiguration/tabs/currency/CurrencyTab";
 import { LinksTab } from "@/components/generalconfiguration/tabs/links/LinksTab";
+import { FiscalPointTab } from "@/components/generalconfiguration/tabs/fiscal-point/FiscalPointTab";
 import { MotivesTab } from "@/components/generalconfiguration/tabs/motives/MotivesTab";
 import { OriginsTab } from "@/components/generalconfiguration/tabs/origins/OriginsTab";
 import { PermissionProfilesTab } from "@/components/generalconfiguration/tabs/permission-profiles/PermissionProfilesTab";
@@ -95,6 +96,11 @@ export default function GeneralConfigurationPage({ userPermissions }) {
             />
           ) : activeConfig.id === "perfiles-permisos" ? (
             <PermissionProfilesTab
+              tab={activeConfig}
+              userPermissions={userPermissions}
+            />
+          ) : activeConfig.id === "datos-fiscales-punto" ? (
+            <FiscalPointTab
               tab={activeConfig}
               userPermissions={userPermissions}
             />

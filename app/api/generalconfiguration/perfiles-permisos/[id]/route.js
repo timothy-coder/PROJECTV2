@@ -37,7 +37,8 @@ export async function PUT(request, context) {
   if (auth.error) return auth.error;
 
   try {
-    const id = Number(context.params.id);
+    const routeParams = await context.params;
+    const id = Number(routeParams.id);
     const body = await request.json();
     const nombre = String(body?.nombre || "").trim();
     const permissions = body?.permissions && typeof body.permissions === "object" ? body.permissions : {};
@@ -81,7 +82,8 @@ export async function DELETE(_request, context) {
   if (auth.error) return auth.error;
 
   try {
-    const id = Number(context.params.id);
+    const routeParams = await context.params;
+    const id = Number(routeParams.id);
     if (!id) return NextResponse.json({ message: "Perfil invalido." }, { status: 400 });
 
     await pool.query(`DELETE FROM administracion_perfiles_permisos WHERE id = ?`, [id]);

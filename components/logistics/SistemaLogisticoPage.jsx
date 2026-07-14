@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { Calculator, Plus, RotateCcw, TableProperties } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { calculateLogisticsRow, LOGISTICS_MONTH_KEYS } from "@/lib/logisticsClassification";
 
-const MONTH_KEYS = Array.from({ length: 12 }, (_, index) => `m${index + 1}`);
+const MONTH_KEYS = LOGISTICS_MONTH_KEYS;
 
 function createRow(index) {
   return {
@@ -22,33 +23,8 @@ function defaultRows() {
   return Array.from({ length: 6 }, (_, index) => createRow(index));
 }
 
-function toNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function sold(value) {
-  return toNumber(value) > 0 ? 1 : 0;
-}
-
 function calculateRow(row) {
-  const m4 = ["m1", "m2", "m3", "m4"].reduce((sum, key) => sum + sold(row[key]), 0);
-  const m12 = MONTH_KEYS.reduce((sum, key) => sum + sold(row[key]), 0);
-  const m8 = ["m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12"].reduce((sum, key) => sum + sold(row[key]), 0);
-
-  let tipo = "";
-  if (m12 === 0) tipo = "D";
-  else if (m4 === 0 && m8 > 0) tipo = "C";
-  else if (m4 === 4) tipo = "A";
-  else if (m4 === 2 || m4 === 3) tipo = "B";
-  else if (m4 === 1) tipo = "C";
-
-  const subf1 = `${tipo}${m4}${m12}`;
-  const posible = tipo === "D" && toNumber(row.diasAlmacen) > 365 ? "POSIBLE" : "";
-  const nuevo = posible && toNumber(row.stockActual) > 0 ? "N" : "";
-  const respuestaFinal = nuevo || subf1;
-
-  return { tipo, respuestaFinal };
+  return calculateLogisticsRow(row);
 }
 
 export default function SistemaLogisticoPage({ initialRows = [] }) {

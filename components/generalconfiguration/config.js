@@ -5,6 +5,7 @@ import {
   CircleDollarSign,
   Factory,
   HandCoins,
+  Landmark,
   Link,
   MapPin,
   MessageSquareText,
@@ -150,6 +151,17 @@ export const configurationTabs = [
       create: ["configuracion_perfiles_permisos", "create"],
       edit: ["configuracion_perfiles_permisos", "edit"],
       delete: ["configuracion_perfiles_permisos", "delete"],
+    },
+  },
+  {
+    id: "datos-fiscales-punto",
+    label: "Datos fiscales",
+    icon: Landmark,
+    perm: ["configuracion_datos_fiscales_punto", "view"],
+    actions: {
+      create: ["configuracion_datos_fiscales_punto", "create"],
+      edit: ["configuracion_datos_fiscales_punto", "edit"],
+      delete: ["configuracion_datos_fiscales_punto", "delete"],
     },
   },
 ];

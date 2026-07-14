@@ -48,6 +48,18 @@ function monthName(value) {
   return MONTHS.find((item) => Number(item.value) === Number(value))?.label || "";
 }
 
+function monthIndex(year, month) {
+  return Number(year || 0) * 12 + Number(month || 0) - 1;
+}
+
+function productTypeCode(value) {
+  const text = String(value || "").trim().toUpperCase();
+  if (!text) return "";
+  const exact = text.match(/^[ABCDN]$/)?.[0];
+  if (exact) return exact;
+  return text.match(/\b([ABCDN])\b/)?.[1] || "";
+}
+
 function Hint({ label, children, side = "top" }) {
   return (
     <Tooltip>
@@ -97,6 +109,30 @@ function calculateFromMargin(purchase, margin, taxFactor) {
   return {
     precioVentaSinIgv: roundMoney(withoutTax),
     precioVentaConIgv: roundMoney(withoutTax * taxFactor),
+  };
+}
+
+function buildImportPricingRow(row, index, taxFactor) {
+  const precioCompra = rowValue(row, ["precio_compra", "Precio Compra", "PRECIO DE COMPRA", "PRECIO DE COMPRA (SIN IGV)", "precioCompra"]) || 0;
+  const precioVentaConIgvInput = rowValue(row, ["precio_venta_con_igv", "Precio Venta Con IGV", "PRECIO VENTA CON IGV", "precio_venta", "Precio Venta", "precioVenta"]) || 0;
+  const precioVentaSinIgv = rowValue(row, ["precio_venta_sin_igv", "Precio Venta Sin IGV", "PRECIO VENTA SIN IGV"]) || calculateSaleWithoutTax(precioVentaConIgvInput, taxFactor);
+  const margenComercial = rowValue(row, ["margen_comercial", "Margen Comercial", "MARGEN COMERCIAL", "MARGEN COMERCIAL (%)", "margen"]) || calculateMargin(precioCompra, precioVentaSinIgv);
+  const calculatedFromMargin = margenComercial !== "" ? calculateFromMargin(precioCompra, margenComercial, taxFactor) : {};
+  const precioVentaConIgv = precioVentaConIgvInput || calculatedFromMargin.precioVentaConIgv || "";
+  return {
+    key: `${index}-${rowValue(row, ["numero_parte", "Numero Parte", "NUMERO DE PARTE", "N Parte", "numeroParte"])}-${rowValue(row, ["numero_comprobante", "Numero Comprobante", "NUMERO DE COMPROBANTE", "numero_factura", "Numero Factura", "NUMERO DE FACTURA"])}`,
+    original: row,
+    numeroParte: rowValue(row, ["numero_parte", "Numero Parte", "NUMERO DE PARTE", "N Parte", "numeroParte"]),
+    descripcion: rowValue(row, ["descripcion", "Descripcion", "DESCRIPCION", "DescripciÃ³n"]),
+    numeroFactura: rowValue(row, ["numero_comprobante", "Numero Comprobante", "NUMERO DE COMPROBANTE", "numero_factura", "Numero Factura", "NUMERO DE FACTURA"]),
+    unidadMedida: rowValue(row, ["unidad_medida", "Unidad Medida", "UNIDAD DE MEDIDA", "tipo_medida", "Tipo Medida"]),
+    fechaVencimiento: rowValue(row, ["fecha_vencimiento", "Fecha Vencimiento", "FECHA DE VENCIMIENTO", "FEHCHA DE VENCIMIENTO"]),
+    proveedor: rowValue(row, ["proveedor", "Proveedor", "PROVEEDOR"]),
+    procedencia: rowValue(row, ["procedencia", "Procedencia", "PROCEDENCIA"]),
+    precioCompra,
+    margenComercial,
+    precioVentaSinIgv: precioVentaSinIgv || calculatedFromMargin.precioVentaSinIgv || "",
+    precioVentaConIgv,
   };
 }
 
@@ -155,6 +191,29 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
     }),
   })), [canLotsViewAll, canLotsViewOwn, currentUserId, data.products]);
 
+  const stockRotationByProduct = useMemo(() => {
+    const now = new Date();
+    const currentIndex = monthIndex(now.getFullYear(), now.getMonth() + 1);
+    const previousSixMonths = new Set(Array.from({ length: 6 }, (_, index) => currentIndex - index - 1));
+    const totals = new Map();
+
+    (data.soldProducts || []).forEach((item) => {
+      const key = monthIndex(item.anio, item.mes);
+      if (!previousSixMonths.has(key)) return;
+      const productId = Number(item.productoId || 0);
+      totals.set(productId, (totals.get(productId) || 0) + Number(item.cantidad || 0));
+    });
+
+    const result = new Map();
+    totals.forEach((total, productId) => {
+      result.set(productId, {
+        sixMonthSales: total,
+        average: total / 6,
+      });
+    });
+    return result;
+  }, [data.soldProducts]);
+
   const filteredProducts = useMemo(() => {
     const clean = query.trim().toLowerCase();
     const filtered = scopedProducts.filter((product) => {
@@ -165,9 +224,21 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
     });
     return filtered.map((product) => ({
       ...product,
-      available: Number(product.stockDisponible ?? product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0)),
+      ...(() => {
+        const available = Number(product.stockDisponible ?? product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0));
+        const rotation = stockRotationByProduct.get(Number(product.id)) || { average: 0, sixMonthSales: 0 };
+        const typeCode = productTypeCode(product.respuestaFinalLogistica || product.tipoLogistico);
+        const isLowStockByRotation = ["A", "B", "C"].includes(typeCode) && rotation.average > 0 && available < rotation.average;
+        return {
+          available,
+          rotationAverage: rotation.average,
+          rotationSixMonthSales: rotation.sixMonthSales,
+          typeCode,
+          isLowStockByRotation,
+        };
+      })(),
     }));
-  }, [brandFilter, providerFilter, query, scopedProducts]);
+  }, [brandFilter, providerFilter, query, scopedProducts, stockRotationByProduct]);
   const brandOptions = useMemo(() => {
     const names = Array.from(new Set(data.products.map((product) => String(product.marca || "").trim()).filter(Boolean)));
     return [{ value: "__all", label: "Todas" }, ...names.sort((a, b) => a.localeCompare(b, "es")).map((name) => ({ value: name, label: name }))];
@@ -215,20 +286,22 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
     const XLSX = await import("xlsx");
     const worksheet = XLSX.utils.json_to_sheet([
       {
-        numero_parte: "ABC-12345",
-        descripcion: "Filtro de aceite",
-        marca: "FORD",
-        tipo_inventario: "Repuestos",
-        unidad_medida: "Unidad",
-        fecha_vencimiento: "2027-06-05",
-        numero_comprobante: "F001-000123",
-        proveedor: "Proveedor SAC",
-        procedencia: "FORD",
-        fecha_ingreso: "2026-06-05",
-        stock_lote: 10,
-        precio_compra: 25,
-        precio_venta: 40,
-        moneda: "PEN",
+        "NUMERO DE PARTE": "ABC-12345",
+        DESCRIPCION: "Filtro de aceite",
+        MARCA: "FORD",
+        "TIPO INVENTARIO": "Repuestos",
+        "FECHA INGRESO": "2026-06-05",
+        "UNIDAD DE MEDIDA": "Unidad",
+        "FECHA DE VENCIMIENTO": "2027-06-05",
+        "NUMERO DE FACTURA": "F001-000123",
+        PROVEEDOR: "Proveedor SAC",
+        PROCEDENCIA: "FORD",
+        "STOCK LOTE": 10,
+        "PRECIO DE COMPRA (SIN IGV)": 25,
+        "MARGEN COMERCIAL (%)": 37.5,
+        "PRECIO VENTA SIN IGV": 40,
+        "PRECIO VENTA CON IGV": 47.2,
+        MONEDA: "PEN",
       },
     ]);
     const workbook = XLSX.utils.book_new();
@@ -428,7 +501,7 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
         onStock={(product) => setStockDialog({ open: true, product })}
         onLot={(product) => setLotDialog({ open: true, product, item: null, readonly: false })}
         onManageLots={(product) => setLotListDialog({ open: true, product })}
-        onEditLot={(product, item) => setLotDialog({ open: true, product, item, readonly: false })}
+        onEditLot={(product, item, readonly = false) => setLotDialog({ open: true, product, item, readonly })}
         onDeleteLot={(lot) => setDeleteDialog({ open: true, title: `Eliminar lote ${lot.numeroFactura}`, onConfirm: () => data.deleteLot(lot.id) })}
         onDelete={(product) => setDeleteDialog({ open: true, title: `Eliminar ${product.numeroParte}`, onConfirm: () => data.deleteProduct(product.id) })}
       /> : view === "combos" ? <CombosTable
@@ -438,6 +511,13 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
         canEdit={canEdit}
         canDelete={canDelete}
         onEdit={(combo) => setComboDialog({ open: true, item: combo, readonly: false })}
+        onToggleActive={(combo, checked) => data.updateCombo(combo.id, {
+          codigo: combo.codigo,
+          nombre: combo.nombre,
+          descripcion: combo.descripcion,
+          isActive: checked,
+          items: combo.items,
+        })}
         onDelete={(combo) => setDeleteDialog({ open: true, title: `Eliminar ${combo.nombre}`, onConfirm: () => data.deleteCombo(combo.id) })}
       /> : view === "locations" && canLocationView ? <InventoryLocationsTable
         loading={data.loading}
@@ -530,6 +610,7 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
           key={`${comboDialog.item?.id || "new"}-${comboDialog.readonly}`}
           state={comboDialog}
           products={data.products}
+          activeTax={data.options.activeTax}
           onClose={() => setComboDialog({ open: false, item: null, readonly: false })}
           onSubmit={async (payload) => {
             if (comboDialog.item) {
@@ -623,7 +704,7 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
               {loading ? (
                 <tr><td colSpan={showProcedencia ? 8 : 7} className="py-10 text-center text-slate-500"><Loader2 className="mr-2 inline size-4 animate-spin" />Cargando...</td></tr>
               ) : products.map((product) => (
-                <tr key={product.id}>
+                <tr key={product.id} className={product.isLowStockByRotation ? "bg-violet-50/80 hover:bg-violet-100/80" : undefined}>
                   <td className="px-3 py-3 font-bold text-slate-950">{product.numeroParte}</td>
                   <td className="px-3 py-3">{product.descripcion}</td>
                   <td className="px-3 py-3">{product.marca || "-"}</td>
@@ -631,6 +712,11 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                   <td className="px-3 py-3"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium">{product.tipoNombre}</span></td>
                   <td className="px-3 py-3">
                     <div className="font-bold text-emerald-700">{product.available}</div>
+                    {product.isLowStockByRotation ? (
+                      <div className="text-xs font-black text-violet-700">
+                        Stock bajo
+                      </div>
+                    ) : null}
                     {useLots ? <div className="text-xs font-medium text-slate-500">{product.lotes?.length || 0} lotes</div> : null}
                   </td>
                   <td className="px-3 py-3">
@@ -647,14 +733,22 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
                     </div>
                     {useLots && product.lotes?.length ? (
                       <div className="mt-2 flex justify-end gap-1">
-                        {product.lotes.slice(0, 2).map((lot) => (
+                        {product.lotes.slice(0, 2).map((lot) => {
+                          const canManage = canManageLot(lot);
+                          return (
                           <span key={lot.id} className="inline-flex overflow-hidden rounded-full bg-violet-50 text-[11px] font-bold text-violet-700">
-                            <button type="button" onClick={() => onEditLot(product, lot)} className="px-2 py-1">
+                            <button
+                              type="button"
+                              title={canManage ? "Editar lote" : "Ver lote"}
+                              onClick={() => onEditLot(product, lot, !canManage)}
+                              className="px-2 py-1 hover:bg-violet-100"
+                            >
                               {lot.numeroFactura} ({lot.stockDisponible})
                             </button>
-                            {canDelete && canManageLot(lot) ? <button type="button" onClick={() => onDeleteLot(lot)} className="border-l border-violet-100 px-1.5 py-1 text-red-600">x</button> : null}
+                            {canDelete && canManage ? <button type="button" onClick={() => onDeleteLot(lot)} className="border-l border-violet-100 px-1.5 py-1 text-red-600">x</button> : null}
                           </span>
-                        ))}
+                          );
+                        })}
                         {product.lotes.length > 2 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">+{product.lotes.length - 2}</span> : null}
                       </div>
                     ) : null}
@@ -664,8 +758,14 @@ function ProductsTable({ loading, products, total, canEdit, canDelete, canStock,
             </tbody>
           </table>
         </div>
-        <div className="flex shrink-0 justify-between bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
-          <span>Pagina 1 de 1 - {products.length} de {total} productos</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+          <div className="flex flex-wrap items-center gap-3">
+            <span>Pagina 1 de 1 - {products.length} de {total} productos</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2 py-1 font-bold text-violet-700">
+              <span className="size-2 rounded-full bg-violet-600" />
+              Morado: stock bajo
+            </span>
+          </div>
           <div className="flex gap-2"><Button variant="outline" disabled>Anterior</Button><Button variant="outline" disabled>Siguiente</Button></div>
         </div>
       </section>
@@ -811,7 +911,7 @@ function InventoryLocationsTable({ loading, locations, total, canEdit, canDelete
   );
 }
 
-function CombosTable({ loading, combos, total, canEdit, canDelete, onEdit, onDelete }) {
+function CombosTable({ loading, combos, total, canEdit, canDelete, onEdit, onToggleActive, onDelete }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
@@ -837,12 +937,21 @@ function CombosTable({ loading, combos, total, canEdit, canDelete, onEdit, onDel
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-1">
                     {combo.items.slice(0, 3).map((item) => (
-                      <span key={item.id} className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">{item.numeroParte} x{item.cantidad}</span>
+                      <span key={item.id} className="rounded-full bg-violet-50 px-2 py-1 text-xs font-bold text-violet-700">
+                        {item.numeroParte} x{item.cantidad}{Number(item.descuentoValor || 0) > 0 ? ` - Desc. ${item.descuentoTipo === "porcentaje" ? `${item.descuentoValor}%` : item.descuentoValor}` : ""}
+                      </span>
                     ))}
                     {combo.items.length > 3 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">+{combo.items.length - 3}</span> : null}
                   </div>
                 </td>
-                <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${combo.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{combo.isActive ? "Activo" : "Inactivo"}</span></td>
+                <td className="px-3 py-3">
+                  <Switch
+                    disabled={!canEdit}
+                    checked={Boolean(combo.isActive)}
+                    onCheckedChange={(checked) => onToggleActive(combo, checked)}
+                    aria-label={combo.isActive ? "Desactivar combo" : "Activar combo"}
+                  />
+                </td>
                 <td className="px-3 py-3">
                   <div className="flex justify-end gap-2">
                     {canEdit ? <Button variant="ghost" size="icon" onClick={() => onEdit(combo)}><Edit3 className="size-4" /></Button> : null}
@@ -911,50 +1020,42 @@ function SoldProductsTable({ loading, items, total, canEdit, canDelete, onEdit, 
 }
 
 function ProductImportPricingDialog({ state, options, onClose, onSubmit }) {
-  const firstRow = state.rows?.[0] || {};
   const taxPercent = Number(options?.activeTax?.porcentaje || 0) || 18;
   const taxFactor = 1 + taxPercent / 100;
-  const initialCompra = rowValue(firstRow, ["precio_compra", "Precio Compra", "PRECIO DE COMPRA", "precioCompra"]) || 0;
-  const initialVentaConIgv = rowValue(firstRow, ["precio_venta_con_igv", "Precio Venta Con IGV", "precio_venta", "Precio Venta", "precioVenta"]) || 0;
-  const initialVentaSinIgv = rowValue(firstRow, ["precio_venta_sin_igv", "Precio Venta Sin IGV"]) || calculateSaleWithoutTax(initialVentaConIgv, taxFactor);
-  const initialMargen = rowValue(firstRow, ["margen_comercial", "Margen Comercial", "margen"]) || calculateMargin(initialCompra, initialVentaSinIgv);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    precioCompra: initialCompra,
-    margenComercial: initialMargen,
-    precioVentaSinIgv: initialVentaSinIgv,
-    precioVentaConIgv: initialVentaConIgv || (initialMargen !== "" ? calculateFromMargin(initialCompra, initialMargen, taxFactor).precioVentaConIgv : ""),
-  });
+  const [rows, setRows] = useState(() => (state.rows || []).map((row, index) => buildImportPricingRow(row, index, taxFactor)));
 
-  function updatePurchase(value) {
-    setForm((current) => {
-      if (current.margenComercial !== "") {
-        return { ...current, precioCompra: value, ...calculateFromMargin(value, current.margenComercial, taxFactor) };
-      }
-      const withoutTax = calculateSaleWithoutTax(current.precioVentaConIgv, taxFactor);
-      return {
-        ...current,
-        precioCompra: value,
-        precioVentaSinIgv: withoutTax,
-        margenComercial: calculateMargin(value, withoutTax),
-      };
+  function updateRow(index, changes) {
+    setRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item));
+  }
+
+  function updatePurchase(index, value) {
+    const current = rows[index] || {};
+    if (current.margenComercial !== "") {
+      updateRow(index, { precioCompra: value, ...calculateFromMargin(value, current.margenComercial, taxFactor) });
+      return;
+    }
+    const withoutTax = calculateSaleWithoutTax(current.precioVentaConIgv, taxFactor);
+    updateRow(index, {
+      precioCompra: value,
+      precioVentaSinIgv: withoutTax,
+      margenComercial: calculateMargin(value, withoutTax),
     });
   }
 
-  function updateMargin(value) {
-    setForm((current) => ({ ...current, margenComercial: value, ...calculateFromMargin(current.precioCompra, value, taxFactor) }));
+  function updateMargin(index, value) {
+    const current = rows[index] || {};
+    updateRow(index, { margenComercial: value, ...calculateFromMargin(current.precioCompra, value, taxFactor) });
   }
 
-  function updateSaleWithTax(value) {
-    setForm((current) => {
-      const withoutTax = calculateSaleWithoutTax(value, taxFactor);
-      return {
-        ...current,
-        precioVentaConIgv: value,
-        precioVentaSinIgv: withoutTax,
-        margenComercial: calculateMargin(current.precioCompra, withoutTax),
-      };
+  function updateSaleWithTax(index, value) {
+    const current = rows[index] || {};
+    const withoutTax = calculateSaleWithoutTax(value, taxFactor);
+    updateRow(index, {
+      precioVentaConIgv: value,
+      precioVentaSinIgv: withoutTax,
+      margenComercial: calculateMargin(current.precioCompra, withoutTax),
     });
   }
 
@@ -963,15 +1064,15 @@ function ProductImportPricingDialog({ state, options, onClose, onSubmit }) {
     setError("");
     setSaving(true);
     try {
-      const rows = state.rows.map((row) => ({
-        ...row,
-        precio_compra: form.precioCompra || 0,
-        margen_comercial: form.margenComercial,
-        precio_venta_sin_igv: form.precioVentaSinIgv,
-        precio_venta_con_igv: form.precioVentaConIgv,
-        precio_venta: form.precioVentaConIgv,
+      const payloadRows = rows.map((item) => ({
+        ...item.original,
+        precio_compra: item.precioCompra || 0,
+        margen_comercial: item.margenComercial,
+        precio_venta_sin_igv: item.precioVentaSinIgv,
+        precio_venta_con_igv: item.precioVentaConIgv,
+        precio_venta: item.precioVentaConIgv,
       }));
-      await onSubmit(rows);
+      await onSubmit(payloadRows);
     } catch (err) {
       setError(err.message || "No se pudo importar productos.");
     } finally {
@@ -981,33 +1082,57 @@ function ProductImportPricingDialog({ state, options, onClose, onSubmit }) {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,620px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] max-w-[min(98vw,1280px)] overflow-y-auto bg-white p-0 text-slate-950">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
               <Upload className="size-5" />Confirmar importacion
             </DialogTitle>
-            <DialogDescription>{state.rows.length} productos cargados desde Excel. Ajusta precios antes de agregarlos.</DialogDescription>
+            <DialogDescription>{state.rows.length} filas cargadas desde Excel. Ajusta los precios de cada producto o lote antes de agregarlos.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 p-4">
             <Panel number="1" title="Precios de importacion">
-              <div className="grid gap-3 lg:grid-cols-3">
-                <Field label="PRECIO DE COMPRA (SIN IGV)">
-                  <Input type="number" step="0.01" min="0" value={form.precioCompra} onChange={(event) => updatePurchase(event.target.value)} />
-                </Field>
-                <Field label="Margen comercial (%)">
-                  <Input type="number" step="0.0001" min="0" max="99.9999" value={form.margenComercial} onChange={(event) => updateMargin(event.target.value)} />
-                </Field>
-                <Field label="Precio venta sin IGV">
-                  <Input disabled type="number" step="0.01" value={form.precioVentaSinIgv} />
-                </Field>
-                <Field label={`Precio venta con IGV${taxPercent ? ` (${taxPercent}%)` : ""}`}>
-                  <Input type="number" step="0.01" min="0" value={form.precioVentaConIgv} onChange={(event) => updateSaleWithTax(event.target.value)} />
-                </Field>
+              <div className="space-y-2">
+                {rows.map((item, index) => (
+                  <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="mb-3 grid gap-2 text-xs font-bold text-slate-700 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]">
+                      <div>
+                        <p className="text-[10px] uppercase text-slate-400">Producto</p>
+                        <p className="truncate text-sm text-slate-950">{item.numeroParte || "Sin numero"} - {item.descripcion || "Sin descripcion"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-slate-400">Lote</p>
+                        <p className="truncate">{item.numeroFactura || "Sin comprobante"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-slate-400">Unidad / vencimiento</p>
+                        <p className="truncate">{item.unidadMedida || "Sin unidad"} / {item.fechaVencimiento || "Sin vencimiento"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase text-slate-400">Proveedor / procedencia</p>
+                        <p className="truncate">{item.proveedor || "Sin proveedor"} / {item.procedencia || "Sin procedencia"}</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      <Field label="PRECIO DE COMPRA (SIN IGV)">
+                        <Input type="number" step="0.01" min="0" value={item.precioCompra} onChange={(event) => updatePurchase(index, event.target.value)} />
+                      </Field>
+                      <Field label="Margen comercial (%)">
+                        <Input type="number" step="0.0001" min="0" max="99.9999" value={item.margenComercial} onChange={(event) => updateMargin(index, event.target.value)} />
+                      </Field>
+                      <Field label="Precio venta sin IGV">
+                        <Input disabled type="number" step="0.01" value={item.precioVentaSinIgv} />
+                      </Field>
+                      <Field label={`Precio venta con IGV${taxPercent ? ` (${taxPercent}%)` : ""}`}>
+                        <Input type="number" step="0.01" min="0" value={item.precioVentaConIgv} onChange={(event) => updateSaleWithTax(index, event.target.value)} />
+                      </Field>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Panel>
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-              Se aplicaran estos precios a los lotes del archivo. El precio de compra medio del producto se recalcula automaticamente con sus lotes.
+              Se importaran los productos y, si la fila contiene datos de lote, tambien se registrara el lote. El precio de compra medio del producto se recalcula automaticamente con sus lotes.
             </div>
             {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-xs font-bold text-red-600">{error}</p> : null}
           </div>
@@ -1267,6 +1392,9 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
     setForm((current) => ({ ...current, ...recalculateWithPurchase(current) }));
   }
 
+  const readonlySaleWithoutTax = calculateSaleWithoutTax(form.precioVentaConIgv, taxFactor);
+  const readonlyMargin = calculateMargin(convertedPurchase, readonlySaleWithoutTax);
+
   async function submit(event) {
     event.preventDefault();
     if (readonly) return onClose();
@@ -1379,20 +1507,28 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
                       required
                     />
                   </Field>
-                  <Field label="Margen comercial (%)">
-                    <Input
-                      disabled={readonly}
-                      type="number"
-                      step="0.0001"
-                      min="0"
-                      max="99.9999"
-                      value={form.margenComercial}
-                      onChange={(event) => setForm((current) => ({ ...current, margenComercial: event.target.value }))}
-                    />
-                  </Field>
-                  <Field label="Precio venta sin IGV">
-                    <Input disabled type="number" step="0.01" min="0" value={form.precioVentaSinIgv} />
-                  </Field>
+                  {!readonly ? (
+                    <Field label="Margen comercial (%)">
+                      <Input
+                        disabled={readonly}
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        max="99.9999"
+                        value={form.margenComercial}
+                        onChange={(event) => setForm((current) => ({ ...current, margenComercial: event.target.value }))}
+                      />
+                    </Field>
+                  ) : (
+                    <ReadonlyMetric label="Margen comercial (%)" value={readonlyMargin !== "" ? `${readonlyMargin}%` : "-"} />
+                  )}
+                  {!readonly ? (
+                    <Field label="Precio venta sin IGV">
+                      <Input disabled type="number" step="0.01" min="0" value={form.precioVentaSinIgv} />
+                    </Field>
+                  ) : (
+                    <ReadonlyMetric label="Precio venta sin IGV" value={readonlySaleWithoutTax !== "" ? money(readonlySaleWithoutTax, defaultCurrency?.simbolo || product?.monedaSimbolo) : "-"} />
+                  )}
                   <Field label={`Precio venta con IGV${taxPercent ? ` (${taxPercent}%)` : ""}`}>
                     <Input
                       disabled={readonly}
@@ -1542,21 +1678,111 @@ function SoldProductDialog({ state, products, onClose, onSubmit }) {
   );
 }
 
-function ComboDialog({ state, products, onClose, onSubmit }) {
+function calculateComboItemPrices(item, product, activeTax) {
+  const quantity = Math.max(1, Number(item.cantidad || 1));
+  const purchaseUnit = Number(product?.precioCompra || 0);
+  const saleWithTaxUnit = Number(product?.precioVenta || 0);
+  const taxFactor = 1 + Number(activeTax?.porcentaje || 18) / 100;
+  const discountValue = Math.max(0, Number(item.descuentoValor || 0));
+  const discountUnit = item.descuentoTipo === "porcentaje"
+    ? saleWithTaxUnit * (discountValue / 100)
+    : discountValue;
+  const purchaseTotal = purchaseUnit * quantity;
+  const originalSaleWithTaxTotal = saleWithTaxUnit * quantity;
+  const saleWithTaxDiscountedUnit = Math.max(saleWithTaxUnit - discountUnit, 0);
+  const saleWithTaxTotal = saleWithTaxDiscountedUnit * quantity;
+  const saleWithoutTaxTotal = saleWithTaxDiscountedUnit > 0 ? (saleWithTaxDiscountedUnit / taxFactor) * quantity : 0;
+  return {
+    symbol: product?.monedaSimbolo || "S/",
+    purchase: roundMoney(purchaseTotal) || 0,
+    originalSaleWithTax: roundMoney(originalSaleWithTaxTotal) || 0,
+    defaultSaleWithTax: roundMoney(saleWithTaxTotal) || 0,
+    saleWithoutTax: roundMoney(saleWithoutTaxTotal) || 0,
+    saleWithTax: roundMoney(saleWithTaxTotal) || 0,
+    margin: calculateMargin(purchaseTotal, saleWithoutTaxTotal) || 0,
+    taxFactor,
+  };
+}
+
+function calculateComboDiscountFromMargin(item, product, activeTax, marginValue) {
+  const quantity = Math.max(1, Number(item.cantidad || 1));
+  const purchaseTotal = Number(product?.precioCompra || 0) * quantity;
+  const saleWithTaxUnit = Number(product?.precioVenta || 0);
+  const originalSaleWithTaxTotal = saleWithTaxUnit * quantity;
+  const margin = Number(marginValue || 0);
+  const taxFactor = 1 + Number(activeTax?.porcentaje || 18) / 100;
+  if (!Number.isFinite(margin) || margin >= 100 || purchaseTotal <= 0 || originalSaleWithTaxTotal <= 0) return 0;
+  const targetSaleWithoutTaxTotal = purchaseTotal / (1 - margin / 100);
+  const targetSaleWithTaxTotal = targetSaleWithoutTaxTotal * taxFactor;
+  const discountTotal = Math.max(originalSaleWithTaxTotal - targetSaleWithTaxTotal, 0);
+  if (item.descuentoTipo === "porcentaje") {
+    return roundMoney((discountTotal / originalSaleWithTaxTotal) * 100) || 0;
+  }
+  return roundMoney(discountTotal / quantity) || 0;
+}
+
+function formatLotExpiration(value) {
+  if (!value) return "Sin vencimiento";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Sin vencimiento" : date.toLocaleDateString("es-PE");
+}
+
+function comboLotValue(productId, lotId) {
+  return lotId ? `${productId}:${lotId}` : String(productId || "");
+}
+
+function parseComboLotValue(value) {
+  const [productId, lotId] = String(value || "").split(":");
+  return { productId, lotId: lotId || "" };
+}
+
+function getComboProductForPrice(product, lot) {
+  if (!product || !lot) return product;
+  return {
+    ...product,
+    precioCompra: Number(lot.precioCompra || 0) || product.precioCompra,
+    precioVenta: Number(lot.precioVentaConIgv || 0) || product.precioVenta,
+    monedaSimbolo: lot.monedaSimbolo || product.monedaSimbolo,
+  };
+}
+
+function ComboDialog({ state, products, activeTax, onClose, onSubmit }) {
   const readonly = state.readonly;
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  function firstLotIdForProduct(productId) {
+    const product = products.find((item) => Number(item.id) === Number(productId));
+    return product?.lotes?.[0]?.id ? String(product.lotes[0].id) : "";
+  }
   const [form, setForm] = useState({
     codigo: state.item?.codigo || "",
     nombre: state.item?.nombre || "",
     descripcion: state.item?.descripcion || "",
     isActive: state.item?.isActive ?? true,
-    items: state.item?.items?.length ? state.item.items.map((item) => ({ productoId: String(item.productoId), cantidad: item.cantidad || 1 })) : [{ productoId: "", cantidad: 1 }],
+    items: state.item?.items?.length
+      ? state.item.items.map((item) => ({
+          productoId: String(item.productoId),
+          loteId: firstLotIdForProduct(item.productoId),
+          cantidad: item.cantidad || 1,
+          descuentoTipo: item.descuentoTipo === "porcentaje" ? "porcentaje" : "monto",
+          descuentoValor: item.descuentoValor ?? 0,
+          margenComercial: "",
+        }))
+      : [{ productoId: "", loteId: "", cantidad: 1, descuentoTipo: "monto", descuentoValor: 0, margenComercial: "" }],
   });
-  const productOptions = products.map((item) => ({
-    value: item.id,
-    label: `${item.numeroParte} - ${item.descripcion}`,
-  }));
+  const productOptions = products.flatMap((product) => {
+    const lots = Array.isArray(product.lotes) ? product.lotes : [];
+    if (!lots.length) {
+      return [{
+        value: comboLotValue(product.id, ""),
+        label: `${product.numeroParte} - ${product.descripcion} - Sin lote - Vence: Sin vencimiento`,
+      }];
+    }
+    return lots.map((lot) => ({
+      value: comboLotValue(product.id, lot.id),
+      label: `${product.numeroParte} - ${product.descripcion} - ${lot.numeroFactura || `Lote ${lot.id}`} - Vence: ${formatLotExpiration(lot.fechaVencimiento)}`,
+    }));
+  });
 
   function updateItem(index, changes) {
     setForm((current) => ({
@@ -1572,6 +1798,12 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
     }));
   }
 
+  function updateItemMargin(index, marginValue, product, quantity) {
+    const current = form.items[index] || {};
+    const nextDiscount = calculateComboDiscountFromMargin({ ...current, cantidad: quantity }, product, activeTax, marginValue);
+    updateItem(index, { margenComercial: marginValue, descuentoValor: nextDiscount });
+  }
+
   async function submit(event) {
     event.preventDefault();
     if (readonly) return onClose();
@@ -1583,7 +1815,20 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
         nombre: form.nombre,
         descripcion: form.descripcion,
         isActive: form.isActive,
-        items: form.items.filter((item) => item.productoId).map((item) => ({ productoId: item.productoId, cantidad: item.cantidad || 1 })),
+        items: form.items.filter((item) => item.productoId).map((item) => ({
+          ...(() => {
+            const product = products.find((productItem) => Number(productItem.id) === Number(item.productoId));
+            const lot = product?.lotes?.find((lotItem) => Number(lotItem.id) === Number(item.loteId));
+            const prices = calculateComboItemPrices(item, getComboProductForPrice(product, lot), activeTax);
+            return {
+              productoId: item.productoId,
+              cantidad: item.cantidad || 1,
+              precioVenta: prices.saleWithTax,
+              descuentoTipo: item.descuentoTipo === "porcentaje" ? "porcentaje" : "monto",
+              descuentoValor: item.descuentoValor || 0,
+            };
+          })(),
+        })),
       });
     } catch (err) {
       setError(err.message || "No se pudo guardar el combo.");
@@ -1594,7 +1839,7 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[94svh] max-w-[min(94vw,720px)] overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[94svh] !w-[min(98vw,1440px)] !max-w-[min(98vw,1440px)] overflow-y-auto bg-white p-0 text-slate-950">
         <form onSubmit={submit}>
           <DialogHeader className="border-b border-violet-100 p-4">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold text-violet-700">
@@ -1604,49 +1849,83 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
           </DialogHeader>
           <div className="space-y-3 p-4">
             <Panel number="1" title="Informacion del Combo">
-              <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+              <div className="grid gap-3 md:grid-cols-[260px_1fr]">
                 <Field label="Codigo"><Input disabled={readonly} value={form.codigo} placeholder="Ej: COMBO-001" onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))} /></Field>
                 <Field label="Nombre *"><Input disabled={readonly} value={form.nombre} placeholder="Nombre del combo" onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} required /></Field>
               </div>
               <Field label="Descripcion"><Textarea disabled={readonly} value={form.descripcion} placeholder="Descripcion breve del combo" onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field>
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <div>
-                  <p className="text-sm font-bold text-slate-950">Combo activo</p>
-                  <p className="text-xs font-medium text-slate-500">Visible para usarlo en posventa</p>
-                </div>
-                <Switch disabled={readonly} checked={form.isActive} onCheckedChange={(checked) => setForm((f) => ({ ...f, isActive: checked }))} />
-              </div>
             </Panel>
             <Panel number="2" title="Productos del Combo">
               <div className="space-y-2">
-                {form.items.map((item, index) => (
-                  <div key={`${index}-${item.productoId}`} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-2 sm:grid-cols-[1fr_110px_auto]">
-                    <Field label="Producto">
-                      <SearchableSelect
-                        disabled={readonly}
-                        value={item.productoId}
-                        options={productOptions}
-                        placeholder="Seleccionar producto"
-                        searchPlaceholder="Buscar producto..."
-                        emptyText="No hay productos."
-                        onChange={(value) => updateItem(index, { productoId: value })}
-                      />
-                    </Field>
-                    <Field label="Cantidad">
-                      <Input disabled={readonly} type="number" min="1" value={item.cantidad} onChange={(e) => updateItem(index, { cantidad: e.target.value })} />
-                    </Field>
-                    {!readonly ? (
-                      <div className="flex items-end">
-                        <Button type="button" variant="outline" size="icon" onClick={() => removeItem(index)} disabled={form.items.length === 1}>
-                          <X className="size-4" />
-                        </Button>
+                {form.items.map((item, index) => {
+                  const product = products.find((productItem) => Number(productItem.id) === Number(item.productoId));
+                  const lot = product?.lotes?.find((lotItem) => Number(lotItem.id) === Number(item.loteId));
+                  const productForPrice = getComboProductForPrice(product, lot);
+                  const prices = calculateComboItemPrices(item, productForPrice, activeTax);
+                  return (
+                    <div key={`${index}-${item.productoId}`} className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="space-y-2">
+                        <Field label="Producto">
+                          <SearchableSelect
+                            disabled={readonly}
+                            value={comboLotValue(item.productoId, item.loteId)}
+                            options={productOptions}
+                            placeholder="Seleccionar lote"
+                            searchPlaceholder="Buscar lote..."
+                            emptyText="No hay lotes."
+                            onChange={(value) => {
+                              const parsed = parseComboLotValue(value);
+                              updateItem(index, { productoId: parsed.productId, loteId: parsed.lotId, margenComercial: "" });
+                            }}
+                          />
+                        </Field>
                       </div>
-                    ) : null}
-                  </div>
-                ))}
+                      <div className="grid gap-2 md:grid-cols-[110px_210px_150px_auto]">
+                        <Field label="Cantidad">
+                          <Input disabled={readonly} type="number" min="1" value={item.cantidad} onChange={(e) => updateItem(index, { cantidad: e.target.value, margenComercial: "" })} />
+                        </Field>
+                        <Field label="Tipo descuento">
+                          <div className="flex h-10 items-center justify-between rounded-md border border-slate-200 bg-white px-3">
+                            <span className="text-xs font-bold text-slate-600">Monto</span>
+                            <Switch disabled={readonly} checked={item.descuentoTipo === "porcentaje"} onCheckedChange={(checked) => updateItem(index, { descuentoTipo: checked ? "porcentaje" : "monto", margenComercial: "" })} />
+                            <span className="text-xs font-bold text-slate-600">%</span>
+                          </div>
+                        </Field>
+                        <Field label={item.descuentoTipo === "porcentaje" ? "Descuento (%)" : "Descuento monto"}>
+                          <Input disabled={readonly} type="number" min="0" step="0.01" value={item.descuentoValor} onChange={(e) => updateItem(index, { descuentoValor: e.target.value, margenComercial: "" })} />
+                        </Field>
+                        {!readonly ? (
+                          <div className="flex items-end">
+                            <Button type="button" variant="outline" size="icon" onClick={() => removeItem(index)} disabled={form.items.length === 1}>
+                              <X className="size-4" />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-2 rounded-md bg-violet-50/60 p-2 text-xs md:grid-cols-5">
+                        <ComboPrice label="Precio venta sin descuento" value={money(prices.originalSaleWithTax, prices.symbol)} />
+                        <ComboPrice label="Precio compra" value={money(prices.purchase, prices.symbol)} />
+                        <ComboPrice label="Precio venta sin IGV" value={money(prices.saleWithoutTax, prices.symbol)} />
+                        <Field label="Margen (%)">
+                          <Input
+                            disabled={readonly}
+                            type="number"
+                            min="0"
+                            max="99.99"
+                            step="0.01"
+                            value={item.margenComercial !== "" ? item.margenComercial : Number(prices.margin || 0).toFixed(2)}
+                            onChange={(event) => updateItemMargin(index, event.target.value, productForPrice, item.cantidad)}
+                            className="h-8 bg-white text-xs font-black"
+                          />
+                        </Field>
+                        <ComboPrice label="Precio venta con descuento" value={money(prices.saleWithTax, prices.symbol)} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               {!readonly ? (
-                <Button type="button" variant="outline" onClick={() => setForm((f) => ({ ...f, items: [...f.items, { productoId: "", cantidad: 1 }] }))}>
+                <Button type="button" variant="outline" onClick={() => setForm((f) => ({ ...f, items: [...f.items, { productoId: "", loteId: "", cantidad: 1, descuentoTipo: "monto", descuentoValor: 0, margenComercial: "" }] }))}>
                   <Plus className="size-4" />Agregar producto
                 </Button>
               ) : null}
@@ -1660,6 +1939,15 @@ function ComboDialog({ state, products, onClose, onSubmit }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ComboPrice({ label, value }) {
+  return (
+    <div className="rounded-md border border-violet-100 bg-white px-2 py-1">
+      <p className="font-bold text-slate-500">{label}</p>
+      <p className="mt-0.5 font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
@@ -1925,6 +2213,17 @@ function Panel({ number, title, action, children }) {
 
 function Field({ label, children }) {
   return <div className="space-y-1.5"><Label className="text-xs font-bold text-violet-700">{label}</Label>{children}</div>;
+}
+
+function ReadonlyMetric({ label, value }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-bold text-violet-700">{label}</Label>
+      <div className="flex h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700">
+        {value}
+      </div>
+    </div>
+  );
 }
 
 function MenuItem({ icon: Icon, label, onClick, close, className = "" }) {
