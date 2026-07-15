@@ -672,7 +672,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       details: ["Cuenta las unidades en inventario que aun no tienen registro de entrega."],
     },
     deliveredVehicles: {
-      title: "Vehiculos Entregados",
+      title: "Vehiculos Vendidos",
       general: [`Total general: ${formatNumber(kpis.deliveredVehicles)} vehiculos.`],
       details: ["Cuenta las unidades que ya tienen registro de entrega."],
     },
@@ -743,7 +743,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         ],
       },
       deliveredVehicles: {
-        title: "Vehiculos Entregados",
+        title: "Vehiculos Vendidos",
         general: [
           `Total general: ${formatNumber(kpis.deliveredVehicles)} vehiculos.`,
         ],
@@ -880,7 +880,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 </KpiGroup>
                 <KpiGroup title="Inventario y agenda" tone="blue" columns="grid-cols-3">
                   <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
-                <Kpi title="Veh. Entregados" value={formatNumber(kpis.deliveredVehicles)} info={kpiInfoMap.deliveredVehicles} onInfo={setKpiInfo} />
+                <Kpi title="Veh. Vendidos" value={formatNumber(kpis.deliveredVehicles)} info={kpiInfoMap.deliveredVehicles} onInfo={setKpiInfo} />
                   <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
                 </KpiGroup>
               </section>

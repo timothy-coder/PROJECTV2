@@ -828,7 +828,7 @@ function QuoteItemsDialog({ state, options, onClose, onSubmit }) {
   const isAccessory = state.type === "accessory";
   const quote = state.quote;
   const rows = isAccessory
-    ? (options.accessories || []).filter((item) => Number(item.marca_id) === Number(quote.marca_id) && Number(item.modelo_id) === Number(quote.modelo_id))
+    ? (options.accessories || []).filter((item) => (!item.marca_id && !item.modelo_id) || (Number(item.marca_id) === Number(quote.marca_id) && Number(item.modelo_id) === Number(quote.modelo_id)))
     : (options.gifts || []);
   const [selected, setSelected] = useState({});
   const totalSelected = Object.values(selected).filter((row) => row.checked).length;

@@ -332,9 +332,10 @@ export async function GET(_request, { params }) {
       [detail.cotizacion_id]
     ) : [[]];
     const [accessoryOptions] = detail ? await pool.query(
-      `SELECT id, detalle, numero_parte, COALESCE(precio_venta, precio, 0) AS precio, moneda_id
+      `SELECT id, detalle, numero_parte, marca_id, modelo_id, COALESCE(precio_venta, precio, 0) AS precio, moneda_id
        FROM ventas_accesorios_disponibles
-       WHERE marca_id=? AND modelo_id=?
+       WHERE (marca_id IS NULL AND modelo_id IS NULL)
+          OR (marca_id=? AND modelo_id=?)
        ORDER BY detalle ASC`,
       [detail.marca_id, detail.modelo_id]
     ) : [[]];
@@ -546,7 +547,7 @@ export async function GET(_request, { params }) {
       options: {
         accessories: accessoryOptions.map((row) => ({
           value: row.id,
-          label: `${row.detalle}${row.numero_parte ? ` - ${row.numero_parte}` : ""}`,
+          label: `${row.detalle}${row.numero_parte ? ` - ${row.numero_parte}` : ""}${!row.marca_id && !row.modelo_id ? " - Todas las marcas y modelos" : ""}`,
           price: Number(row.precio || 0),
           monedaId: row.moneda_id,
         })),
@@ -759,7 +760,11 @@ export async function PUT(request, { params }) {
         : await connection.query(
           `SELECT id, precio, precio_venta, moneda_id
            FROM ventas_accesorios_disponibles
-           WHERE id=? AND marca_id=? AND modelo_id=?`,
+           WHERE id=?
+             AND (
+               (marca_id IS NULL AND modelo_id IS NULL)
+               OR (marca_id=? AND modelo_id=?)
+             )`,
           [catalogId, detail.marca_id, detail.modelo_id]
         );
       if (!catalog) {

@@ -54,31 +54,36 @@ function formatDate(value) {
 function buildSaleChoices(product) {
   const locations = (product?.stock || []).filter((stock) => Number(stock.stock || 0) > 0);
   const lots = (product?.lotes || []).filter((lot) => Number(lot.stockDisponible || 0) > 0);
-  if (lots.length > 1) {
+  if (locations.length) {
+    return locations.map((stock) => {
+      const lot = lots.find((lotItem) => Number(lotItem.id) === Number(stock.loteId)) || null;
+      return {
+        key: `stock-${stock.id}`,
+        lot,
+        stock,
+        title: lot?.numeroFactura || stock.loteLabel || `Lote ${stock.loteId}`,
+        detail: stockLabel(stock),
+        stockValue: stock.stock,
+        purchaseDate: lot?.createdAt || product?.fechaIngreso,
+        expirationDate: lot?.fechaVencimiento,
+      };
+    });
+  }
+  if (lots.length) {
     return lots.map((lot) => {
-      const lotLocations = locations.filter((stock) => Number(stock.loteId) === Number(lot.id));
       return {
         key: `lot-${lot.id}`,
         lot,
-        stock: lotLocations[0] || null,
+        stock: null,
         title: lot.numeroFactura || `Lote ${lot.id}`,
-        detail: lotLocations.length ? lotLocations.map(stockLabel).join(" / ") : "Sin ubicacion asignada",
+        detail: "Sin ubicacion asignada",
         stockValue: lot.stockDisponible,
         purchaseDate: lot.createdAt || product?.fechaIngreso,
         expirationDate: lot.fechaVencimiento,
       };
     });
   }
-  return locations.map((stock) => ({
-    key: `stock-${stock.id}`,
-    lot: lots.find((lot) => Number(lot.id) === Number(stock.loteId)) || null,
-    stock,
-    title: stock.loteLabel || `Lote ${stock.loteId}`,
-    detail: stockLabel(stock),
-    stockValue: stock.stock,
-    purchaseDate: lots.find((lot) => Number(lot.id) === Number(stock.loteId))?.createdAt || product?.fechaIngreso,
-    expirationDate: lots.find((lot) => Number(lot.id) === Number(stock.loteId))?.fechaVencimiento,
-  }));
+  return [];
 }
 
 function PartsSuiteLoader({ compact = false }) {
@@ -122,7 +127,7 @@ function PartsSuiteLoader({ compact = false }) {
 }
 
 export default function PointOfSalePage({ userPermissions = {}, initialQuoteId = "", initialMode = "" }) {
-  const inventory = usePostInventory();
+  const inventory = usePostInventory("pointofsale");
   const clientsData = useClients();
   const pointOfSale = usePointOfSaleConfig();
   const comboInstanceRef = useRef(0);
@@ -155,7 +160,7 @@ export default function PointOfSalePage({ userPermissions = {}, initialQuoteId =
   useEffect(() => {
     const quoteId = String(initialQuoteId || "").trim();
     if (!quoteId || loadedQuoteRef.current === quoteId) return;
-    loadedQuoteRef.current = quoteId;
+    if (inventory.loading) return;
     let cancelled = false;
 
     async function loadQuoteIntoSale() {
@@ -222,6 +227,7 @@ export default function PointOfSalePage({ userPermissions = {}, initialQuoteId =
         setSelectedClientId(quote.clienteId ? String(quote.clienteId) : "");
         setScreenMode(String(initialMode || "").toLowerCase() === "venta" ? "venta" : "cotizacion");
         setSaveMessage(`${quote.codigo} cargada correctamente.`);
+        loadedQuoteRef.current = quoteId;
       } catch (error) {
         loadedQuoteRef.current = "";
         setCloseError(error?.message || "No se pudo cargar la cotizacion.");
@@ -234,7 +240,7 @@ export default function PointOfSalePage({ userPermissions = {}, initialQuoteId =
     return () => {
       cancelled = true;
     };
-  }, [initialMode, initialQuoteId, inventory.products]);
+  }, [initialMode, initialQuoteId, inventory.loading, inventory.products]);
 
   const clientOptions = useMemo(() => clientsData.clients.map((client) => ({
     value: client.id,
@@ -282,9 +288,10 @@ export default function PointOfSalePage({ userPermissions = {}, initialQuoteId =
         product.tipoNombre,
         product.monedaCodigo,
       ].join(" ").toLowerCase();
-      return available > 0 && matchesCategory && matchesBrand && (!needle || haystack.includes(needle));
+      const matchesStock = screenMode === "cotizacion" || available > 0;
+      return matchesStock && matchesCategory && matchesBrand && (!needle || haystack.includes(needle));
     });
-  }, [brand, category, inventory.products, query]);
+  }, [brand, category, inventory.products, query, screenMode]);
 
   const filteredCombos = useMemo(() => {
     const needle = query.trim().toLowerCase();

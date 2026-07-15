@@ -46,10 +46,11 @@ export default async function Page({ params }) {
     const [accessories] = await connection.query(`SELECT ca.*, ad.detalle, ad.numero_parte FROM ventas_cotizaciones_accesorios ca INNER JOIN ventas_accesorios_disponibles ad ON ad.id=ca.accesorio_id WHERE ca.cotizacion_id=?`, [id]);
     const [gifts] = await connection.query(`SELECT cr.*, rd.detalle, rd.lote FROM ventas_cotizaciones_regalos cr INNER JOIN ventas_regalos_disponibles rd ON rd.id=cr.regalo_id WHERE cr.cotizacion_id=?`, [id]);
     const [availableAccessories] = await connection.query(
-      `SELECT ad.id, ad.detalle, ad.numero_parte, ad.precio, ad.precio_venta, ad.moneda_id
+      `SELECT ad.id, ad.detalle, ad.numero_parte, ad.marca_id, ad.modelo_id, ad.precio, ad.precio_venta, ad.moneda_id
        FROM ventas_accesorios_disponibles ad
        INNER JOIN ventas_precios p ON p.id=?
-       WHERE ad.marca_id=p.marca_id AND ad.modelo_id=p.modelo_id
+       WHERE (ad.marca_id IS NULL AND ad.modelo_id IS NULL)
+          OR (ad.marca_id=p.marca_id AND ad.modelo_id=p.modelo_id)
        ORDER BY ad.detalle ASC`,
       [quote.precio_id]
     );
@@ -164,7 +165,7 @@ export default async function Page({ params }) {
             gifts={gifts.map((item) => ({ ...item }))}
             accessoryOptions={availableAccessories.map((item) => ({
               value: item.id,
-              label: `${item.detalle} - ${item.numero_parte}`,
+              label: `${item.detalle}${item.numero_parte ? ` - ${item.numero_parte}` : ""}${!item.marca_id && !item.modelo_id ? " - Todas las marcas y modelos" : ""}`,
               price: Number(item.precio_venta ?? item.precio ?? 0),
             }))}
             giftOptions={availableGifts.map((item) => ({

@@ -1,7 +1,12 @@
 import { apiFetch } from "./client";
 
 export const postInventoryApi = {
-  list: () => apiFetch("/api/postinventory"),
+  list: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.context) query.set("context", params.context);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiFetch(`/api/postinventory${suffix}`);
+  },
   listTypes: () => apiFetch("/api/configinventory"),
   createProduct: (payload) => apiFetch("/api/postinventory/products", { method: "POST", body: JSON.stringify(payload) }),
   updateProduct: (id, payload) => apiFetch(`/api/postinventory/products/${id}`, { method: "PUT", body: JSON.stringify(payload) }),

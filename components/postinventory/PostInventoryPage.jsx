@@ -225,7 +225,7 @@ export default function PostInventoryPage({ userPermissions, currentUserId = nul
     return filtered.map((product) => ({
       ...product,
       ...(() => {
-        const available = Number(product.stockDisponible ?? product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0));
+        const available = Number(product.stockTotal ?? product.stockDisponible ?? product.stock.reduce((sum, item) => sum + Number(item.stock || 0), 0));
         const rotation = stockRotationByProduct.get(Number(product.id)) || { average: 0, sixMonthSales: 0 };
         const typeCode = productTypeCode(product.respuestaFinalLogistica || product.tipoLogistico);
         const isLowStockByRotation = ["A", "B", "C"].includes(typeCode) && rotation.average > 0 && available < rotation.average;
@@ -1371,14 +1371,36 @@ function LotDialog({ state, options, settings, onClose, onSubmit }) {
   function recalculateWithPurchase(current, overrides = {}) {
     const purchase = purchaseForCalculation(current, overrides);
     const margin = overrides.margenComercial ?? current.margenComercial;
-    if (margin !== "") {
-      return calculateFromMargin(purchase, margin);
+    const priceWithTax = overrides.precioVentaConIgv ?? current.precioVentaConIgv;
+    const priceWithoutTax = overrides.precioVentaSinIgv ?? current.precioVentaSinIgv;
+    const saleWithTaxNumber = Number(priceWithTax || 0);
+    const saleWithoutTaxNumber = Number(priceWithoutTax || 0);
+    const hasPurchase = Number.isFinite(purchase) && purchase > 0;
+
+    if (margin !== "" && hasPurchase) {
+      const calculated = calculateFromMargin(purchase, margin);
+      return calculated.precioVentaConIgv !== "" ? calculated : {};
     }
-    const withoutTax = calculateSaleWithoutTax(overrides.precioVentaConIgv ?? current.precioVentaConIgv, taxFactor);
-    return {
-      precioVentaSinIgv: withoutTax,
-      margenComercial: calculateMargin(purchase, withoutTax),
-    };
+
+    if (Number.isFinite(saleWithTaxNumber) && saleWithTaxNumber > 0) {
+      const withoutTax = calculateSaleWithoutTax(saleWithTaxNumber, taxFactor);
+      return {
+        precioVentaConIgv: roundMoney(saleWithTaxNumber),
+        precioVentaSinIgv: withoutTax,
+        ...(hasPurchase ? { margenComercial: calculateMargin(purchase, withoutTax) } : {}),
+      };
+    }
+
+    if (Number.isFinite(saleWithoutTaxNumber) && saleWithoutTaxNumber > 0) {
+      const withTax = roundMoney(saleWithoutTaxNumber * taxFactor);
+      return {
+        precioVentaSinIgv: roundMoney(saleWithoutTaxNumber),
+        precioVentaConIgv: withTax,
+        ...(hasPurchase ? { margenComercial: calculateMargin(purchase, saleWithoutTaxNumber) } : {}),
+      };
+    }
+
+    return {};
   }
 
   function updateCurrency(value) {

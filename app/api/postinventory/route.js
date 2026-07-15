@@ -108,15 +108,18 @@ function mapSettings(row) {
   };
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const context = String(searchParams.get("context") || "");
+    const isPointOfSaleContext = context === "pointofsale";
     const user = await getCurrentUser();
     const currentUserId = Number(user?.id || 0);
     const permissions = user?.permissions || {};
     const canViewAllLots = hasPerm(permissions, ["inventario", "lotes_viewall"]);
     const canViewOwnLots = hasPerm(permissions, ["inventario", "lotes_view"]) || hasPerm(permissions, ["inventario", "lotes"]);
-    const lotScopeSql = canViewAllLots ? "" : canViewOwnLots ? "WHERE l.created_by = ?" : "WHERE 1 = 0";
-    const lotScopeParams = canViewAllLots ? [] : canViewOwnLots ? [currentUserId] : [];
+    const lotScopeSql = isPointOfSaleContext || canViewAllLots ? "" : canViewOwnLots ? "WHERE l.created_by = ?" : "WHERE 1 = 0";
+    const lotScopeParams = isPointOfSaleContext || canViewAllLots ? [] : canViewOwnLots ? [currentUserId] : [];
 
     const [productRows] = await pool.query(
       `SELECT p.id, p.numero_parte, p.descripcion, p.marca, p.procedencia, p.tipo_inventario_id, p.fecha_ingreso,

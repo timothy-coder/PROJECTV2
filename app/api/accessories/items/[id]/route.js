@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 
 function payloadFromBody(body) {
+  const appliesAll = Boolean(body.aplicaTodos);
   return {
-    marcaId: Number(body.marcaId),
-    modeloId: Number(body.modeloId),
+    aplicaTodos: appliesAll,
+    marcaId: appliesAll ? null : Number(body.marcaId),
+    modeloId: appliesAll ? null : Number(body.modeloId),
     detalle: String(body.detalle || "").trim(),
     numeroParte: String(body.numeroParte || "").trim(),
     precio: Number(body.precio || 0),
@@ -20,7 +22,7 @@ export async function PUT(request, { params }) {
     const { id: rawId } = await params;
     const id = Number(rawId);
     const payload = payloadFromBody(await request.json());
-    if (!id || !payload.marcaId || !payload.modeloId || !payload.detalle || !payload.numeroParte || !payload.monedaId || Number.isNaN(payload.precio)) {
+    if (!id || (!payload.aplicaTodos && (!payload.marcaId || !payload.modeloId)) || !payload.detalle || !payload.numeroParte || !payload.monedaId || Number.isNaN(payload.precio)) {
       return NextResponse.json({ message: "Accesorio invalido." }, { status: 400 });
     }
 

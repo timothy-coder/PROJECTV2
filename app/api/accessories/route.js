@@ -11,8 +11,8 @@ export async function GET() {
               im.nombre AS impuesto_nombre, im.porcentaje AS impuesto_porcentaje,
               mon.codigo AS moneda_codigo, mon.simbolo AS moneda_simbolo
        FROM ventas_accesorios_disponibles a
-       INNER JOIN administracion_marcas ma ON ma.id = a.marca_id
-       INNER JOIN administracion_modelos mo ON mo.id = a.modelo_id
+       LEFT JOIN administracion_marcas ma ON ma.id = a.marca_id
+       LEFT JOIN administracion_modelos mo ON mo.id = a.modelo_id
        LEFT JOIN configuracion_impuestos im ON im.id = a.impuesto_id
        INNER JOIN configuracion_monedas mon ON mon.id = a.moneda_id
        ORDER BY a.id DESC`
@@ -37,8 +37,8 @@ export async function GET() {
         precioVenta: row.precio_venta === null ? null : Number(row.precio_venta),
         impuestoId: row.impuesto_id,
         monedaId: row.moneda_id,
-        marcaName: row.marca_name,
-        modeloName: row.modelo_name,
+        marcaName: row.marca_name || "",
+        modeloName: row.modelo_name || "",
         impuestoName: row.impuesto_nombre || "",
         impuestoPorcentaje: row.impuesto_porcentaje === null ? null : Number(row.impuesto_porcentaje),
         monedaCodigo: row.moneda_codigo,

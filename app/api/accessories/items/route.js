@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 
 function payloadFromBody(body) {
+  const appliesAll = Boolean(body.aplicaTodos);
   return {
-    marcaId: Number(body.marcaId),
-    modeloId: Number(body.modeloId),
+    aplicaTodos: appliesAll,
+    marcaId: appliesAll ? null : Number(body.marcaId),
+    modeloId: appliesAll ? null : Number(body.modeloId),
     detalle: String(body.detalle || "").trim(),
     numeroParte: String(body.numeroParte || "").trim(),
     precio: Number(body.precio || 0),
@@ -18,8 +20,8 @@ function payloadFromBody(body) {
 export async function POST(request) {
   try {
     const payload = payloadFromBody(await request.json());
-    if (!payload.marcaId || !payload.modeloId || !payload.detalle || !payload.numeroParte || !payload.monedaId || Number.isNaN(payload.precio)) {
-      return NextResponse.json({ message: "Completa marca, modelo, detalle, numero de parte, moneda y precio." }, { status: 400 });
+    if ((!payload.aplicaTodos && (!payload.marcaId || !payload.modeloId)) || !payload.detalle || !payload.numeroParte || !payload.monedaId || Number.isNaN(payload.precio)) {
+      return NextResponse.json({ message: "Completa marca, modelo, detalle, numero de parte, moneda y precio; o marca que aplica a todas las marcas y modelos." }, { status: 400 });
     }
 
     const [result] = await pool.query(

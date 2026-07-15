@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAccessories } from "@/hooks/accessories/useAccessories";
 import { hasPerm } from "@/lib/permissions";
 
@@ -33,8 +34,8 @@ export default function AccessoriesPage({ userPermissions }) {
     const query = filters.query.trim().toLowerCase();
     return data.accessories.filter((item) => {
       const matchesQuery = !query || `${item.detalle} ${item.numeroParte}`.toLowerCase().includes(query);
-      const matchesBrand = !filters.marcaId || Number(filters.marcaId) === item.marcaId;
-      const matchesModel = !filters.modeloId || Number(filters.modeloId) === item.modeloId;
+      const matchesBrand = !filters.marcaId || !item.marcaId || Number(filters.marcaId) === item.marcaId;
+      const matchesModel = !filters.modeloId || !item.modeloId || Number(filters.modeloId) === item.modeloId;
       return matchesQuery && matchesBrand && matchesModel;
     });
   }, [data.accessories, filters]);
@@ -126,8 +127,8 @@ export default function AccessoriesPage({ userPermissions }) {
                     <div className="mt-1 text-xs font-medium text-slate-500">N Parte: {item.numeroParte}</div>
                   </td>
                   <td className="px-3 py-3">
-                    <div><Badge>{item.marcaName}</Badge></div>
-                    <div className="mt-1"><Badge>{item.modeloName}</Badge></div>
+                    <div><Badge>{item.marcaName || "Todas las marcas"}</Badge></div>
+                    <div className="mt-1"><Badge>{item.modeloName || "Todos los modelos"}</Badge></div>
                   </td>
                   <td className="px-3 py-3">
                     <div className="font-bold text-emerald-700">Compra: {item.monedaSimbolo} {item.precio.toFixed(2)}</div>
@@ -188,6 +189,7 @@ function AccessoryDialog({ state, options, onClose, onSubmit }) {
   const [form, setForm] = useState({
     marcaId: state.item?.marcaId ? String(state.item.marcaId) : "",
     modeloId: state.item?.modeloId ? String(state.item.modeloId) : "",
+    aplicaTodos: !state.item ? false : !state.item?.marcaId && !state.item?.modeloId,
     detalle: state.item?.detalle || "",
     numeroParte: state.item?.numeroParte || "",
     precio: state.item?.precio ?? "",
@@ -220,8 +222,29 @@ function AccessoryDialog({ state, options, onClose, onSubmit }) {
             <DialogDescription>Completa los datos del accesorio.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Marca *"><SearchableSelect value={form.marcaId} options={brandOptions} placeholder="Seleccionar marca" onChange={(value) => setForm((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
-            <Field label="Modelo *"><SearchableSelect value={form.modeloId} options={modelOptions} placeholder="Seleccionar modelo" onChange={(value) => setForm((current) => ({ ...current, modeloId: value }))} /></Field>
+            <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-3 sm:col-span-2">
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block text-sm font-bold text-violet-700">Agregar a todas las marcas y modelos</span>
+                  <span className="mt-0.5 block text-xs font-medium text-slate-500">Al activar esta opcion no se guarda marca ni modelo.</span>
+                </span>
+                <Switch
+                  checked={form.aplicaTodos}
+                  onCheckedChange={(checked) => setForm((current) => ({
+                    ...current,
+                    aplicaTodos: checked,
+                    marcaId: checked ? "" : current.marcaId,
+                    modeloId: checked ? "" : current.modeloId,
+                  }))}
+                />
+              </label>
+            </div>
+            {!form.aplicaTodos ? (
+              <>
+                <Field label="Marca *"><SearchableSelect value={form.marcaId} options={brandOptions} placeholder="Seleccionar marca" onChange={(value) => setForm((current) => ({ ...current, marcaId: value, modeloId: "" }))} /></Field>
+                <Field label="Modelo *"><SearchableSelect value={form.modeloId} options={modelOptions} placeholder="Seleccionar modelo" onChange={(value) => setForm((current) => ({ ...current, modeloId: value }))} /></Field>
+              </>
+            ) : null}
             <Field label="Detalle *"><Input value={form.detalle} onChange={(event) => setForm((current) => ({ ...current, detalle: event.target.value }))} required /></Field>
             <Field label="Numero de parte *"><Input value={form.numeroParte} onChange={(event) => setForm((current) => ({ ...current, numeroParte: event.target.value }))} required /></Field>
             <Field label="Precio compra *"><Input type="number" step="0.01" value={form.precio} onChange={(event) => setForm((current) => ({ ...current, precio: event.target.value }))} required /></Field>

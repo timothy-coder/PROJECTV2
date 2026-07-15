@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { postInventoryApi } from "@/app/api/postinventory.api";
 
-export function usePostInventory() {
+export function usePostInventory(context = "") {
   const [data, setData] = useState({
     products: [],
     combos: [],
@@ -33,7 +33,7 @@ export function usePostInventory() {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const next = await postInventoryApi.list();
+    const next = await postInventoryApi.list(context ? { context } : {});
     if (!next.options?.types?.length) {
       const inventoryConfig = await postInventoryApi.listTypes();
       next.options = {
@@ -66,7 +66,7 @@ export function usePostInventory() {
       },
     });
     setLoading(false);
-  }, []);
+  }, [context]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
