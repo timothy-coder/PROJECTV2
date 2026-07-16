@@ -524,10 +524,11 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
     const previousManaged = managedBeforePeriod(records, filters, chartFilters);
-    const opportunityBalance = Math.max(Number(maintenanceDueTotal || 0) - previousManaged, 0);
+    const currentManaged = createdOpportunityRecords.length;
+    const opportunityBalance = Math.max(Number(maintenanceDueTotal || 0) - previousManaged - currentManaged, 0);
     return {
       opportunities: opportunityBalance,
-      managed: createdOpportunityRecords.length,
+      managed: currentManaged,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
       quoted: reportRecords.reduce((sum, item) => sum + item.quoteTotal, 0),

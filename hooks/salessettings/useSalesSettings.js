@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { salesSettingsApi } from "@/app/api/sales-settings.api";
 
 export function useSalesSettings(scope) {
-  const [data, setData] = useState({ centers: [], schedules: [], stages: [], times: [], closings: [], hours: [], userCounts: [], userCountUsers: [], measurementTypes: [] });
+  const [data, setData] = useState({ centers: [], schedules: [], stages: [], times: [], closings: [], hours: [], userCounts: [], userCountUsers: [], measurementTypes: [], testdrive: null });
   const [loading, setLoading] = useState(true);
   const reload = useCallback(async () => {
     setLoading(true);

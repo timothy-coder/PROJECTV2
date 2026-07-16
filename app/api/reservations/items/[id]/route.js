@@ -547,7 +547,7 @@ export async function GET(_request, { params }) {
       options: {
         accessories: accessoryOptions.map((row) => ({
           value: row.id,
-          label: `${row.detalle}${row.numero_parte ? ` - ${row.numero_parte}` : ""}${!row.marca_id && !row.modelo_id ? " - Todas las marcas y modelos" : ""}`,
+          label: `${row.detalle}${row.numero_parte ? ` - ${row.numero_parte}` : ""}`,
           price: Number(row.precio || 0),
           monedaId: row.moneda_id,
         })),

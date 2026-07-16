@@ -58,6 +58,10 @@ export async function GET(_request, { params }) {
       const [measurementRows] = await pool.query(`SELECT id, nombre, abreviatura, created_at FROM ${cfg.measurementTypes} ORDER BY nombre ASC`);
       measurementTypes = measurementRows.map((row) => ({ id: row.id, nombre: row.nombre, abreviatura: row.abreviatura || "", createdAt: row.created_at }));
     }
+    let testdrive = null;
+    if (scope === "ventas" && hasPerm(user.permissions || {}, ["config_testdrive", "view"])) {
+      testdrive = await ensureTestDriveSettings();
+    }
     let userCounts = [];
     let userCountUsers = [];
     if (scope === "ventas" && hasPerm(user.permissions || {}, ["configuracion_usuario_counts", "view"])) {
@@ -106,6 +110,7 @@ export async function GET(_request, { params }) {
       closings,
       hours,
       measurementTypes,
+      testdrive,
       userCounts,
       userCountUsers,
     });
@@ -147,6 +152,8 @@ export async function POST(request, { params }) {
       await upsertHour(cfg.hours, body);
     } else if (scope === "posventa" && body.resource === "measurement-type" && cfg.measurementTypes) {
       await upsertMeasurementType(cfg.measurementTypes, body);
+    } else if (scope === "ventas" && body.resource === "testdrive") {
+      await updateTestDriveSettings(body);
     } else if (scope === "ventas" && body.resource === "user-count") {
       await upsertUserCount(body);
     } else if (scope === "ventas" && body.resource === "user-count-reset") {
@@ -204,6 +211,50 @@ async function upsertMeasurementType(table, body) {
   if (!nombre) throw new Error("Nombre requerido");
   if (body.id) await pool.query(`UPDATE ${table} SET nombre=?, abreviatura=? WHERE id=?`, [nombre, abreviatura, Number(body.id)]);
   else await pool.query(`INSERT INTO ${table} (nombre, abreviatura) VALUES (?, ?)`, [nombre, abreviatura]);
+}
+async function ensureTestDriveSettings() {
+  const [rows] = await pool.query(
+      `SELECT id, activar_pdf_testdrive, activar_ruta_testdrive, minutos_testdrive, habilitar_encuesta_en_vivo, created_at, updated_at
+     FROM configuracion_testdrive
+     ORDER BY id ASC`
+  );
+  if (rows.length) {
+    if (rows.length > 1) await pool.query(`DELETE FROM configuracion_testdrive WHERE id <> ?`, [rows[0].id]);
+    return mapTestDriveSettings(rows[0]);
+  }
+  const [result] = await pool.query(
+    `INSERT INTO configuracion_testdrive (activar_pdf_testdrive, activar_ruta_testdrive, minutos_testdrive, habilitar_encuesta_en_vivo)
+     VALUES (1, 0, 30, 0)`
+  );
+  const [[created]] = await pool.query(
+    `SELECT id, activar_pdf_testdrive, activar_ruta_testdrive, minutos_testdrive, habilitar_encuesta_en_vivo, created_at, updated_at
+     FROM configuracion_testdrive
+     WHERE id = ?`,
+    [result.insertId]
+  );
+  return mapTestDriveSettings(created);
+}
+async function updateTestDriveSettings(body) {
+  const current = await ensureTestDriveSettings();
+  const minutos = Math.max(1, Math.min(1440, Number(body.minutosTestdrive || 30)));
+  await pool.query(
+    `UPDATE configuracion_testdrive
+     SET activar_pdf_testdrive = ?, activar_ruta_testdrive = ?, minutos_testdrive = ?, habilitar_encuesta_en_vivo = ?
+     WHERE id = ?`,
+    [body.activarPdfTestdrive ? 1 : 0, body.activarRutaTestdrive ? 1 : 0, minutos, body.habilitarEncuestaEnVivo ? 1 : 0, current.id]
+  );
+  await pool.query(`DELETE FROM configuracion_testdrive WHERE id <> ?`, [current.id]);
+}
+function mapTestDriveSettings(row) {
+  return {
+    id: row.id,
+    activarPdfTestdrive: Boolean(row.activar_pdf_testdrive),
+    activarRutaTestdrive: Boolean(row.activar_ruta_testdrive),
+    minutosTestdrive: Number(row.minutos_testdrive || 30),
+    habilitarEncuestaEnVivo: Boolean(row.habilitar_encuesta_en_vivo),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 async function upsertUserCount(body) {
   const usuarioId = Number(body.usuarioId);
@@ -287,6 +338,7 @@ function canReadSettings(user, scope) {
       hasPerm(permissions, ["configagenda", "view"]) ||
       hasPerm(permissions, ["configuracion_horas", "view"]) ||
       hasPerm(permissions, ["configuracion_usuario_counts", "view"]) ||
+      hasPerm(permissions, ["config_testdrive", "view"]) ||
       hasPerm(permissions, ["config_ventas_plantillas", "view"])
     );
   }
@@ -299,6 +351,7 @@ function canWriteSettings(user, scope, body) {
   const action = body?.action === "delete" ? "delete" : body?.id ? "edit" : "create";
   if (scope === "ventas" && resource === "hour") return hasPerm(permissions, ["configuracion_horas", action]);
   if (scope === "ventas" && resource === "user-count") return hasPerm(permissions, ["configuracion_usuario_counts", action]);
+  if (scope === "ventas" && resource === "testdrive") return hasPerm(permissions, ["config_testdrive", "edit"]);
   if (scope === "ventas" && resource === "user-count-reset") {
     return hasPerm(permissions, ["configuracion_usuario_counts", "create"]) || hasPerm(permissions, ["configuracion_usuario_counts", "edit"]);
   }

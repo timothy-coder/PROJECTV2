@@ -56,6 +56,7 @@ export const USER_PERMISSION_GROUPS = [
   { section: "Configuracion", key: "configagenda", label: "Configuracion de ventas", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_horas", label: "Horas", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configuracion_usuario_counts", label: "Conteos de usuarios", actions: ["view", "create", "edit", "delete"] },
+  { section: "Configuracion", key: "config_testdrive", label: "Configuracion test drive", actions: ["view", "edit"] },
   { section: "Configuracion", key: "config_ventas_plantillas", label: "Plantillas de venta", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configcotizacion", label: "Configuracion de citas", actions: ["view", "create", "edit", "delete"] },
   { section: "Configuracion", key: "configinventario", label: "Configuracion de inventario", actions: ["view", "create", "edit", "delete"] },

@@ -64,10 +64,13 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
     canEdit: hasPerm(userPermissions, ["config_ventas_plantillas", "edit"]) || canEdit,
     canDelete: hasPerm(userPermissions, ["config_ventas_plantillas", "delete"]) || canDelete,
   };
+  const canViewTestDrive = scope === "ventas" && hasPerm(userPermissions, ["config_testdrive", "view"]);
+  const canEditTestDrive = scope === "ventas" && hasPerm(userPermissions, ["config_testdrive", "edit"]);
   const tabs = [
     ...(canViewBase ? [{ id: "schedule", label: scope === "ventas" ? "Horarios Ventas" : "Horarios PostVenta" }] : []),
     ...(canViewHours ? [{ id: "hours", label: "Horas" }] : []),
     ...(canViewUserCounts ? [{ id: "user-counts", label: "Usuarios Lead" }] : []),
+    ...(canViewTestDrive ? [{ id: "testdrive", label: "Test Drive" }] : []),
     ...(canViewBase ? [{ id: "stages", label: "Etapas de Conversion" }, { id: "times", label: "Tiempos" }] : []),
     ...(canViewClosings ? [{ id: "closings", label: "Detalles de cierre" }] : []),
     ...(canViewMeasurementTypes ? [{ id: "measurement-types", label: "Tipos de medida" }] : []),
@@ -75,7 +78,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
   ];
   const [tab, setTab] = useState(tabs[0]?.id || "schedule");
   const activeTab = tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id;
-  const canView = canViewBase || canViewHours || canViewUserCounts || canViewClosings || canViewMeasurementTypes || canViewTemplates;
+  const canView = canViewBase || canViewHours || canViewUserCounts || canViewTestDrive || canViewClosings || canViewMeasurementTypes || canViewTemplates;
   if (!canView) return <div className="rounded-lg bg-white p-4 text-sm text-slate-700">No tienes permiso para ver esta configuracion.</div>;
   return (
     <div className="min-w-0 bg-slate-50 p-2 text-slate-950 sm:p-4">
@@ -89,6 +92,7 @@ export default function SalesSettingsPage({ scope, userPermissions }) {
       {activeTab === "schedule" ? <ScheduleTab data={data} canEdit={canEdit} scope={scope} /> : null}
       {activeTab === "hours" ? <HoursTab data={data} canCreate={hourPerms.canCreate} canEdit={hourPerms.canEdit} canDelete={hourPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "hour", item })} /> : null}
       {activeTab === "user-counts" ? <UserCountsTab data={data} canCreate={userCountPerms.canCreate} canEdit={userCountPerms.canEdit} canDelete={userCountPerms.canDelete} /> : null}
+      {activeTab === "testdrive" ? <TestDriveSettingsTab data={data} canEdit={canEditTestDrive} /> : null}
       {activeTab === "stages" ? <StageTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "stage", item })} /> : null}
       {activeTab === "times" ? <TimeTab data={data} canCreate={canCreate} canEdit={canEdit} canDelete={canDelete} openDialog={(item) => setDialog({ open: true, resource: "time", item })} /> : null}
       {activeTab === "closings" ? <ClosingTab data={data} scope={scope} canCreate={closingPerms.canCreate} canEdit={closingPerms.canEdit} canDelete={closingPerms.canDelete} openDialog={(item) => setDialog({ open: true, resource: "closing", item })} /> : null}
@@ -303,6 +307,86 @@ function ScheduleTab({ data, canEdit, scope }) {
         })}
       </div>
       {canEdit ? <div className="mt-3 flex justify-end"><Button className="w-full sm:w-auto" disabled={!selectedCenterId} onClick={() => data.save({ resource: "schedule", centroId: selectedCenterId, slotMinutes: slot, week })}>Guardar Cambios</Button></div> : null}
+    </section>
+  );
+}
+
+function TestDriveSettingsTab({ data, canEdit }) {
+  const settings = data.testdrive || { activarPdfTestdrive: true, activarRutaTestdrive: false, minutosTestdrive: 30, habilitarEncuestaEnVivo: false };
+  const minutesSource = String(settings.minutosTestdrive || 30);
+  const [minutesDraftState, setMinutesDraftState] = useState({ source: minutesSource, value: minutesSource });
+  const minutesDraft = minutesDraftState.source === minutesSource ? minutesDraftState.value : minutesSource;
+  const save = (patch) => data.save({ resource: "testdrive", ...settings, ...patch });
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+      <Header icon={FileText} title="Configuracion Test Drive" subtitle="Activa el PDF y la ruta usada en los test drive de ventas" />
+      <div className="grid gap-3 lg:grid-cols-4">
+        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900">PDF de test drive</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Permite generar y usar el documento PDF de test drive.</p>
+            </div>
+            <Switch disabled={!canEdit} checked={settings.activarPdfTestdrive} onCheckedChange={(checked) => save({ activarPdfTestdrive: Boolean(checked) })} />
+          </div>
+          <span className={cn("mt-3 inline-flex rounded-full px-2 py-1 text-xs font-bold", settings.activarPdfTestdrive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+            {settings.activarPdfTestdrive ? "Activado" : "Desactivado"}
+          </span>
+        </div>
+        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Ruta de test drive</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Muestra el modulo o campo de ruta para registrar el recorrido.</p>
+            </div>
+            <Switch disabled={!canEdit} checked={settings.activarRutaTestdrive} onCheckedChange={(checked) => save({ activarRutaTestdrive: Boolean(checked) })} />
+          </div>
+          <span className={cn("mt-3 inline-flex rounded-full px-2 py-1 text-xs font-bold", settings.activarRutaTestdrive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+            {settings.activarRutaTestdrive ? "Activado" : "Desactivado"}
+          </span>
+        </div>
+        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-4">
+          <div>
+            <p className="text-sm font-bold text-slate-900">Duracion por defecto</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Minutos que se asignaran al programar un test drive.</p>
+          </div>
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <Input
+              disabled={!canEdit}
+              type="number"
+              min="1"
+              max="1440"
+              value={minutesDraft}
+              onChange={(event) => setMinutesDraftState({ source: minutesSource, value: event.target.value })}
+            />
+            <span className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-500">min</span>
+          </div>
+          {canEdit ? (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-3 w-full"
+              disabled={minutesSource === String(minutesDraft || 30)}
+              onClick={() => save({ minutosTestdrive: minutesDraft })}
+            >
+              Guardar duracion
+            </Button>
+          ) : null}
+        </div>
+        <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-900">Encuesta en vivo</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Habilita la encuesta durante el test drive.</p>
+            </div>
+            <Switch disabled={!canEdit} checked={settings.habilitarEncuestaEnVivo} onCheckedChange={(checked) => save({ habilitarEncuestaEnVivo: Boolean(checked) })} />
+          </div>
+          <span className={cn("mt-3 inline-flex rounded-full px-2 py-1 text-xs font-bold", settings.habilitarEncuestaEnVivo ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+            {settings.habilitarEncuestaEnVivo ? "Activado" : "Desactivado"}
+          </span>
+        </div>
+      </div>
+      {!canEdit ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-xs font-medium text-slate-500">Tienes permiso de lectura. Para modificar esta configuracion necesitas permiso de editar.</p> : null}
     </section>
   );
 }

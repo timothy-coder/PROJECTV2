@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, Copy, Eye, FileText, Gift, Info as InfoIcon, Link, MessageSquare, MoreVertical, Package, Pencil, Plus, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Calendar, Copy, Download, Eye, FileText, Frown, Gift, Info as InfoIcon, Link, Meh, MessageSquare, MoreVertical, Package, Pencil, PlayCircle, Plus, RotateCcw, Send, Smile, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/app/api/client";
 import { ClientDialog } from "@/components/clients/ClientDialog";
@@ -69,14 +69,19 @@ export default function OpportunityDetailPage({ id }) {
             </Button>
           ) : null}
           <div className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-1 sm:overflow-visible">
-            {stages.map((stage, index) => (
-              <div key={stage.id} className="flex shrink-0 items-center sm:flex-1 sm:shrink">
-                <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${index <= currentIndex ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
-                  {stage.nombre}
-                </span>
-                {index < stages.length - 1 ? <span className={`h-0.5 w-5 shrink-0 sm:w-6 ${index < currentIndex ? "bg-emerald-400" : "bg-slate-300"}`} /> : null}
-              </div>
-            ))}
+            {stages.map((stage, index) => {
+              const active = index <= currentIndex;
+              const nextActive = index < currentIndex;
+              const nextStage = stages[index + 1];
+              return (
+                <div key={stage.id} className="flex shrink-0 items-center sm:flex-1 sm:shrink">
+                  <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${stageStepClass(stage.nombre, active)}`}>
+                    {stage.nombre}
+                  </span>
+                  {index < stages.length - 1 ? <span className={`h-0.5 w-5 shrink-0 sm:w-6 ${stageConnectorClass(stage.nombre, nextStage?.nombre, nextActive)}`} /> : null}
+                </div>
+              );
+            })}
           </div>
         </header>
         <InfoSection opportunity={opportunity} canEditClient={canEditClient} onEditClient={() => setClientDialogOpen(true)} />
@@ -87,7 +92,7 @@ export default function OpportunityDetailPage({ id }) {
         <InterestSection items={interest} onOpen={(item) => setDialog({ type: "interest", item })} onQuote={(item) => setDialog({ type: "quote", item })} onDelete={(item) => setConfirmDelete({ title: "Eliminar vehiculo de interes", description: `${item.marca || ""} ${item.modelo || ""}`.trim() || "Este vehiculo de interes", onConfirm: () => saveWithToast({ action: "interest", deleteId: item.id }) })} />
         <QuotesSection items={quotes} options={options} userPermissions={currentUser.permissions || {}} onOpen={() => setDialog({ type: "quote", item: null })} onEdit={(item) => setDialog({ type: "quote", item })} onAction={saveWithToast} onConfirmDelete={setConfirmDelete} />
         <ReservationsSection items={reservations || []} onDelete={(item) => setConfirmDelete({ title: "Eliminar reserva", description: `Reserva ID ${item.id}`, onConfirm: () => saveWithToast({ action: "reservation-delete", reservaId: item.id }) })} />
-        <TestDriveSection items={testDrives} onOpen={(item = null) => setDialog({ type: "testdrive", item })} onAction={(payload) => saveWithToast({ action: "testdrive", ...payload })} />
+        <TestDriveSection items={testDrives} config={options.testdriveConfig} onOpen={(item = null) => setDialog({ type: "testdrive", item })} onAction={(payload) => saveWithToast({ action: "testdrive", ...payload })} />
         <ClosureSection items={closures} onOpen={() => setDialog({ type: "closure", item: null })} />
         {confirmDelete ? <ConfirmDeleteDialog state={confirmDelete} onClose={() => setConfirmDelete(null)} /> : null}
         {dialog.type === "interest" ? <InterestDialog state={dialog} clientId={opportunity.clienteId} options={options} onClose={() => setDialog({ type: "", item: null })} onSubmit={(payload) => saveWithToast({ action: "interest", ...payload })} /> : null}
@@ -149,6 +154,38 @@ function opportunityActionMessage(payload = {}) {
     closure: "Cierre registrado correctamente.",
   };
   return messages[action] || "Accion guardada correctamente.";
+}
+
+function stageStepClass(name, active) {
+  if (!active || isClosedStage(name)) return "bg-slate-200 text-slate-600";
+  if (isReserveStage(name)) return "bg-[#FFFF00] text-slate-900";
+  if (isBilledSaleStage(name)) return "bg-[#29c115] text-white";
+  return "bg-[#e60f0f] text-white";
+}
+
+function stageConnectorClass(name, nextName, active) {
+  if (!active || isClosedStage(name) || isClosedStage(nextName)) return "bg-slate-300";
+  if (isBilledSaleStage(name)) return "bg-[#29c115]";
+  if (isReserveStage(name)) return "bg-[#FFFF00]";
+  return "bg-[#e60f0f]";
+}
+
+function isReserveStage(name) {
+  return normalizeStageName(name).includes("reserva");
+}
+
+function isBilledSaleStage(name) {
+  const normalized = normalizeStageName(name);
+  return normalized.includes("venta facturada") || normalized.includes("facturada") || normalized.includes("facturado");
+}
+
+function isClosedStage(name) {
+  const normalized = normalizeStageName(name);
+  return normalized.includes("cerrada") || normalized.includes("cerrado");
+}
+
+function normalizeStageName(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
 function InfoSection({ opportunity, canEditClient, onEditClient }) {
@@ -900,9 +937,11 @@ function QuoteItemsDialog({ state, options, onClose, onSubmit }) {
   );
 }
 
-function TestDriveSection({ items, onOpen, onAction }) {
+function TestDriveSection({ items, config, onOpen, onAction }) {
   const [openMenu, setOpenMenu] = useState(null);
-  const setStatus = (item, estado) => onAction({
+  const [certificate, setCertificate] = useState(null);
+  const [survey, setSurvey] = useState(null);
+  const setStatus = (item, estado, extra = {}) => onAction({
     id: item.id,
     fechaTestdrive: item.fechaTestdrive,
     horaInicio: item.horaInicio,
@@ -912,11 +951,13 @@ function TestDriveSection({ items, onOpen, onAction }) {
     placa: item.placa || "",
     descripcion: item.descripcion || "",
     estado,
+    ...extra,
   });
   const runMobile = (action) => {
     action();
     setOpenMenu(null);
   };
+  const testConfig = config || { minutosTestdrive: 0, activarPdfTestdrive: true };
   return (
     <section className="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -924,7 +965,13 @@ function TestDriveSection({ items, onOpen, onAction }) {
         <Button onClick={() => onOpen(null)}><Plus className="size-4" />Programar</Button>
       </div>
       <div className="space-y-2">
-        {items.map((t) => (
+        {items.map((t) => {
+          const status = String(t.estado || "programado").toLowerCase();
+          const routeActive = Boolean(testConfig.activarRutaTestdrive);
+          const canStartRoute = routeActive && status === "en_proceso" && !t.rutaInicioAt;
+          const canFinishRoute = routeActive && status === "en_proceso" && t.rutaInicioAt && !t.rutaFinAt;
+          const canResumeRoute = routeActive && status === "finalizado";
+          return (
           <div key={t.id} className="relative flex items-start justify-between gap-3 rounded-lg border p-3">
             <div className="min-w-0">
               <p className="font-bold">{formatDateEs(t.fechaTestdrive || t.fecha_testdrive)} - {formatTimeEs(t.horaInicio || t.hora_inicio)}{t.horaFin ? ` a ${formatTimeEs(t.horaFin)}` : ""}</p>
@@ -932,33 +979,473 @@ function TestDriveSection({ items, onOpen, onAction }) {
               <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{testDriveStatusLabel(t.estado)}</p>
             </div>
             <div className="hidden flex-wrap justify-end gap-2 sm:flex">
+              {canStartTestDrive(t, testConfig) ? <Button size="sm" className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => setCertificate({ item: t, startedAt: new Date() })}><PlayCircle className="size-4" />Inicio de prueba</Button> : null}
+              {status === "en_proceso" ? <Button size="sm" variant="outline" onClick={() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() })}><FileText className="size-4" />Certificado</Button> : null}
+              {canStartRoute ? <Button size="sm" variant="outline" className="border-violet-300 text-violet-700" onClick={() => setStatus(t, "en_proceso", { startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
+              {canFinishRoute ? <Button size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setStatus(t, "finalizado", { finishRoute: true })}>Finalizar</Button> : null}
+              {canResumeRoute ? <Button size="sm" variant="outline" className="border-amber-300 text-amber-700" onClick={() => setStatus(t, "en_proceso", { resumeRoute: true })}>Reanudar</Button> : null}
+              {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="border-blue-300 text-blue-700" onClick={() => setSurvey(t)}><MessageSquare className="size-4" />Encuesta</Button> : null}
               <Button size="sm" variant="outline" onClick={() => onOpen(t)}><Pencil className="size-4" />Editar</Button>
-              <Button size="sm" variant="outline" className="border-emerald-300 text-emerald-700" onClick={() => setStatus(t, "realizado")}>Realizado</Button>
+              {!testConfig.activarRutaTestdrive ? <Button size="sm" variant="outline" className="border-emerald-300 text-emerald-700" onClick={() => setStatus(t, "realizado")}>Realizado</Button> : null}
               <Button size="sm" variant="outline" className="border-red-300 text-red-700" onClick={() => setStatus(t, "cancelado")}>Cancelado</Button>
             </div>
             <div className="sm:hidden">
               <Button size="icon" variant="outline" onClick={() => setOpenMenu((current) => current === t.id ? null : t.id)}><MoreVertical className="size-4" /></Button>
               {openMenu === t.id ? (
                 <div className="absolute right-3 top-12 z-30 w-44 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl">
+                  {canStartTestDrive(t, testConfig) ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => setCertificate({ item: t, startedAt: new Date() }))}>Inicio de prueba</button> : null}
+                  {status === "en_proceso" ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobile(() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() }))}>Certificado</button> : null}
+                  {canStartRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { startRoute: true }))}>Iniciar</button> : null}
+                  {canFinishRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "finalizado", { finishRoute: true }))}>Finalizar</button> : null}
+                  {canResumeRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-amber-700 hover:bg-amber-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { resumeRoute: true }))}>Reanudar</button> : null}
+                  {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-blue-700 hover:bg-blue-50" onClick={() => runMobile(() => setSurvey(t))}>Encuesta</button> : null}
                   <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobile(() => onOpen(t))}>Editar</button>
-                  <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "realizado"))}>Marcar realizado</button>
+                  {!testConfig.activarRutaTestdrive ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "realizado"))}>Marcar realizado</button> : null}
                   <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-red-600 hover:bg-red-50" onClick={() => runMobile(() => setStatus(t, "cancelado"))}>Marcar cancelado</button>
                 </div>
               ) : null}
             </div>
           </div>
-        ))}
+          );
+        })}
         {!items.length ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-slate-500">No hay test drive programados.</div> : null}
       </div>
+      {certificate ? (
+        <TestDriveCertificateDialog
+          state={certificate}
+          config={testConfig}
+          onClose={() => setCertificate(null)}
+          onSubmit={async (payload) => {
+            await onAction(payload);
+          }}
+        />
+      ) : null}
+      {survey ? (
+        <TestDriveSurveyDialog
+          item={survey}
+          onClose={() => setSurvey(null)}
+          onSubmit={async (payload) => {
+            await onAction({ action: "testdrive-survey", testdriveId: survey.id, ...payload });
+            setSurvey(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
 function testDriveStatusLabel(value) {
   const status = String(value || "programado").toLowerCase();
   if (status === "realizado") return "Realizado";
+  if (status === "finalizado") return "Finalizado";
   if (status === "cancelado") return "Cancelado";
+  if (status === "en_proceso") return "En proceso";
   return "Programado";
 }
+function canStartTestDrive(item, config) {
+  const minutes = Number(config?.minutosTestdrive || 0);
+  if (minutes <= 0) return false;
+  const status = String(item.estado || "programado").toLowerCase();
+  if (["realizado", "cancelado", "en_proceso", "finalizado"].includes(status)) return false;
+  const date = item.fechaTestdrive || item.fecha_testdrive;
+  const time = item.horaInicio || item.hora_inicio;
+  if (!date || !time) return false;
+  const datePartValue = String(date).match(/\d{4}-\d{2}-\d{2}/)?.[0];
+  const timePartValue = String(time).match(/\d{2}:\d{2}/)?.[0];
+  if (!datePartValue || !timePartValue) return false;
+  const start = new Date(`${datePartValue}T${timePartValue}:00`);
+  if (Number.isNaN(start.getTime())) return false;
+  return Date.now() >= start.getTime() - minutes * 60000;
+}
+
+function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
+  const survey = item.survey || {};
+  const [form, setForm] = useState({
+    rutaErgonomia: survey.rutaErgonomia || 0,
+    rutaVisibilidad: survey.rutaVisibilidad || 0,
+    rutaDinamica: survey.rutaDinamica || 0,
+    rutaSeguridad: survey.rutaSeguridad || 0,
+    rutaConfort: survey.rutaConfort || 0,
+    rutaTecnologia: survey.rutaTecnologia || 0,
+    feedbackSatisfaccion: survey.feedbackSatisfaccion || "",
+    asesorExplico: survey.asesorExplico || "",
+    experienciaTestdrive: survey.experienciaTestdrive || "",
+    explicacionesDemostraciones: survey.explicacionesDemostraciones || "",
+    fordManejo: survey.fordManejo || "",
+    estadoVehiculo: survey.estadoVehiculo || "",
+    autoSuficiente: survey.autoSuficiente || "",
+    realizaraCompra: survey.realizaraCompra || "",
+    compraPlazo: survey.compraPlazo || "",
+  });
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const routeItems = [
+    ["rutaErgonomia", "Ergonomia y posicion de manejo"],
+    ["rutaVisibilidad", "Visibilidad y percepcion del entorno"],
+    ["rutaDinamica", "Dinamica y sensacion de manejo"],
+    ["rutaSeguridad", "Seguridad y confianza del vehiculo"],
+    ["rutaConfort", "Confort acustico y sensorial"],
+    ["rutaTecnologia", "Tecnologia e interfaz de usuario"],
+  ];
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto bg-white text-slate-950 sm:max-w-[980px]">
+        <DialogHeader>
+          <DialogTitle>Encuesta del Test Drive</DialogTitle>
+          <DialogDescription>Registra la calificacion de ruta y el feedback del cliente.</DialogDescription>
+        </DialogHeader>
+        <div className="rounded-lg border bg-slate-50 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold">Rutas</p>
+              <p className="text-xs text-slate-500">Segun la prueba de manejo, califica del 1 al 10.</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">N TD {item.id}</span>
+          </div>
+          <RouteRadarScore items={routeItems} values={form} onChange={update} />
+        </div>
+        <div className="rounded-lg border bg-white p-3">
+          <p className="mb-3 text-center text-sm font-bold">Feedback del Cliente</p>
+          <div className="mt-3 grid gap-3">
+            <SurveyFaceScale label="1. ¿El asesor comercial explicó adecuadamente las funciones principales del vehículo antes de la prueba?" value={form.asesorExplico} onChange={(value) => update("asesorExplico", value)} />
+            <SurveyFaceScale label="2. ¿Cuán satisfecho se encuentra con la experiencia del test drive?" value={form.experienciaTestdrive} onChange={(value) => update("experienciaTestdrive", value)} />
+            <SurveyFaceScale label="3. ¿Cuán satisfecho se encuentra con las explicaciones y demostraciones recibidas durante el test drive?" value={form.explicacionesDemostraciones} onChange={(value) => update("explicacionesDemostraciones", value)} />
+            <SurveyFaceScale label="4. ¿Cuán satisfecho se encuentra con el Ford que manejó?" value={form.fordManejo} onChange={(value) => update("fordManejo", value)} />
+            <SurveyFaceScale label="5. ¿Cuán satisfecho se encuentra con el estado del vehículo?" value={form.estadoVehiculo} onChange={(value) => update("estadoVehiculo", value)} />
+            <SurveyFaceScale label="6. ¿El tiempo de la prueba de manejo fue suficiente para evaluar el vehículo?" value={form.autoSuficiente} onChange={(value) => update("autoSuficiente", value)} />
+            <div className="grid gap-3 sm:grid-cols-[1fr_220px]">
+              <SurveyYesNo label="7. ¿Realizaría la compra ahora?" value={form.realizaraCompra} onChange={(value) => update("realizaraCompra", value)} />
+              <Field label="O en"><Input value={form.compraPlazo} placeholder="Ej. 30 días" onChange={(e) => update("compraPlazo", e.target.value)} /></Field>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button type="button" onClick={() => onSubmit(form)}>Guardar encuesta</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RouteRadarScore({ items, values, onChange }) {
+  const [selected, setSelected] = useState(null);
+  const center = 150;
+  const radius = 86;
+  const labelRadius = 125;
+  const angles = [-90, -30, 30, 90, 150, 210];
+  const pointAt = (angle, currentRadius) => {
+    const radians = (angle * Math.PI) / 180;
+    return {
+      x: center + Math.cos(radians) * currentRadius,
+      y: center + Math.sin(radians) * currentRadius,
+    };
+  };
+  const rings = Array.from({ length: 10 }, (_, index) => {
+    const ringRadius = ((index + 1) / 10) * radius;
+    return angles.map((angle) => pointAt(angle, ringRadius)).map((point) => `${point.x},${point.y}`).join(" ");
+  });
+  const valuePoints = items
+    .map(([key], index) => pointAt(angles[index], (Math.max(0, Math.min(10, Number(values[key] || 0))) / 10) * radius))
+    .map((point) => `${point.x},${point.y}`)
+    .join(" ");
+  const selectedItem = selected ? items.find(([key]) => key === selected) : null;
+  const selectedValue = selected ? Number(values[selected] || 0) : 0;
+
+  return (
+    <div className="rounded-lg border bg-white p-3">
+      <div className="relative mx-auto min-h-[330px] max-w-[520px]">
+        <svg viewBox="0 0 300 300" className="mx-auto h-[330px] w-full max-w-[420px] overflow-visible">
+          {rings.map((points, index) => (
+            <polygon key={index} points={points} fill="none" stroke={index === 9 ? "#64748b" : "#cbd5e1"} strokeWidth={index === 9 ? 2.5 : 1.3} />
+          ))}
+          {angles.map((angle, index) => {
+            const end = pointAt(angle, radius);
+            return <line key={index} x1={center} y1={center} x2={end.x} y2={end.y} stroke="#e2e8f0" strokeWidth="1" />;
+          })}
+          <polygon points={valuePoints} fill="rgba(124, 58, 237, 0.16)" stroke="#7c3aed" strokeWidth="2" />
+          {items.map(([key], index) => {
+            const value = Number(values[key] || 0);
+            const point = pointAt(angles[index], (Math.max(0, Math.min(10, value)) / 10) * radius);
+            const fallback = pointAt(angles[index], 12);
+            const visiblePoint = value > 0 ? point : fallback;
+            return (
+              <g key={key}>
+                <circle cx={visiblePoint.x} cy={visiblePoint.y} r="3.5" fill="#7c3aed" />
+              </g>
+            );
+          })}
+        </svg>
+        {items.map(([key, label], index) => {
+          const labelPoint = pointAt(angles[index], labelRadius);
+          const value = values[key] || "-";
+          return (
+            <button
+              key={key}
+              type="button"
+              className="absolute w-36 -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-white/95 px-2 py-1.5 text-center text-[11px] font-semibold leading-tight text-slate-600 shadow-sm transition hover:border-violet-300 hover:text-violet-700"
+              style={{ left: `${(labelPoint.x / 300) * 100}%`, top: `${(labelPoint.y / 300) * 100}%` }}
+              onClick={() => setSelected(key)}
+            >
+              <span className="block">{label}</span>
+              <span className="mt-1 inline-flex min-w-7 items-center justify-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-black text-violet-700">{value}</span>
+            </button>
+          );
+        })}
+      </div>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="bg-white text-slate-950 sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{selectedItem?.[1] || "Calificacion"}</DialogTitle>
+            <DialogDescription>Selecciona un valor del 1 al 10.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: 10 }, (_, index) => index + 1).map((score) => (
+              <button
+                key={score}
+                type="button"
+                className={`rounded-lg border px-3 py-3 text-base font-black transition hover:bg-violet-50 ${selectedValue === score ? "border-violet-500 bg-violet-100 text-violet-700" : "text-slate-700"}`}
+                onClick={() => {
+                  if (selected) onChange(selected, score);
+                  setSelected(null);
+                }}
+              >
+                {score}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function FeedbackSelector({ value, onChange }) {
+  const options = [
+    { value: "muy_satisfecho", label: "Muy satisfecho", note: "Nota 10", icon: Smile, className: "border-emerald-300 bg-emerald-50 text-emerald-700" },
+    { value: "satisfecho", label: "Satisfecho", note: "Nota 9", icon: Meh, className: "border-amber-300 bg-amber-50 text-amber-700" },
+    { value: "insatisfecho", label: "Insatisfecho", note: "Nota 8 a 1", icon: Frown, className: "border-red-300 bg-red-50 text-red-700" },
+  ];
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {options.map((option) => {
+        const Icon = option.icon;
+        const active = value === option.value;
+        return (
+          <button key={option.value} type="button" className={`rounded-lg border p-3 text-left transition ${option.className} ${active ? "ring-2 ring-violet-400" : "opacity-80 hover:opacity-100"}`} onClick={() => onChange(option.value)}>
+            <Icon className="mb-2 size-6" />
+            <span className="block text-sm font-bold">{option.label}</span>
+            <span className="text-xs font-semibold">{option.note}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SurveyFaceScale({ label, value, onChange }) {
+  const options = [
+    { value: "muy_satisfecho", label: "Muy satisfecho", note: "Nota 10", icon: Smile, className: "border-emerald-200 bg-emerald-50 text-emerald-700", activeClass: "ring-2 ring-emerald-400" },
+    { value: "satisfecho", label: "Satisfecho", note: "Nota 9", icon: Meh, className: "border-amber-200 bg-amber-50 text-amber-700", activeClass: "ring-2 ring-amber-400" },
+    { value: "insatisfecho", label: "Insatisfecho", note: "Nota 8 a 1", icon: Frown, className: "border-red-200 bg-red-50 text-red-700", activeClass: "ring-2 ring-red-400" },
+  ];
+  return (
+    <div className="rounded-lg border bg-slate-50 p-2">
+      <p className="mb-2 text-xs font-semibold text-slate-700">{label}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
+              onClick={() => onChange(option.value)}
+            >
+              <Icon className="size-5 shrink-0" />
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-bold">{option.label}</span>
+                <span className="block truncate text-[11px] font-semibold">{option.note}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SurveyYesNo({ label, value, onChange }) {
+  const options = [
+    { value: "si", label: "Sí", className: "border-emerald-200 bg-emerald-50 text-emerald-700", activeClass: "ring-2 ring-emerald-400" },
+    { value: "no", label: "No", className: "border-red-200 bg-red-50 text-red-700", activeClass: "ring-2 ring-red-400" },
+  ];
+  return (
+    <div className="rounded-lg border bg-slate-50 p-2">
+      <p className="mb-2 text-xs font-semibold text-slate-700">{label}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`rounded-lg border px-4 py-3 text-center text-sm font-black transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
+              onClick={() => onChange(option.value)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
+  const item = state.item;
+  const startDate = state.startedAt instanceof Date && !Number.isNaN(state.startedAt.getTime()) ? state.startedAt : new Date();
+  const defaultVehicle = item.certificadoVehiculo || item.modelo || "";
+  const routeEnabled = Boolean(config?.activarRutaTestdrive);
+  const [localState, setLocalState] = useState({
+    generated: Boolean(item.certificadoGeneradoAt || item.inicioPruebaAt),
+    routeStarted: Boolean(item.rutaInicioAt),
+    routeFinished: Boolean(item.rutaFinAt),
+  });
+  const [form, setForm] = useState({
+    conductorNombre: item.conductorNombre || "",
+    conductorRegistro: item.conductorRegistro || "",
+    certificadoVehiculo: defaultVehicle,
+    placa: item.placa || "",
+    certificadoLocal: item.certificadoLocal || "Ford Wankamotors, Huancayo",
+    rutaTestdrive: item.rutaTestdrive || "",
+  });
+  const certificateData = {
+    ...form,
+    fecha: startDate.toLocaleDateString("es-PE"),
+    hora: startDate.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" }),
+  };
+  const payload = {
+    id: item.id,
+    fechaTestdrive: item.fechaTestdrive,
+    horaInicio: item.horaInicio,
+    horaFin: item.horaFin,
+    modeloId: item.modelo_id ? String(item.modelo_id) : "",
+    vin: item.vin || "",
+    placa: form.placa,
+    descripcion: item.descripcion || "",
+    estado: "en_proceso",
+    generateCertificate: true,
+    ...form,
+  };
+  async function persist(extra = {}) {
+    await onSubmit({ ...payload, ...extra });
+    if (extra.finishRoute) setLocalState({ generated: true, routeStarted: true, routeFinished: true });
+    else if (extra.startRoute) setLocalState((current) => ({ ...current, generated: true, routeStarted: true }));
+    else setLocalState((current) => ({ ...current, generated: true }));
+  }
+  async function downloadCertificate() {
+    await persist();
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Certificado de Responsabilidad del Test Drive", 421, 54, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const paragraph = `Yo, ${certificateData.conductorNombre || "(PARA EDITAR)"}, portador del registro de conducir N° ${certificateData.conductorRegistro || "(PARA EDITAR)"}, declaro estar en condiciones fisicas y psicologicas para conducir siguiendo el trayecto elegido de acuerdo con la legislacion local vigente de las normas de transito y que asumo cualquier costo por danos personales o a terceros, asi como el pago de papeletas o multas generadas durante el periodo de la prueba.`;
+    doc.text(doc.splitTextToSize(paragraph, 760), 421, 86, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.text("Conductor:", 55, 160);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.conductorNombre || "-", 120, 160);
+    doc.setFont("helvetica", "bold");
+    doc.text("Vehiculo:", 385, 160);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.certificadoVehiculo || "-", 450, 160);
+    doc.setFont("helvetica", "bold");
+    doc.text("Placa:", 605, 160);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.placa || "-", 655, 160);
+    doc.setFont("helvetica", "bold");
+    doc.text("Local:", 55, 182);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.certificadoLocal || "-", 120, 182);
+    doc.setFont("helvetica", "bold");
+    doc.text("Fecha:", 385, 182);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.fecha, 450, 182);
+    doc.setFont("helvetica", "bold");
+    doc.text("Hora:", 605, 182);
+    doc.setFont("helvetica", "normal");
+    doc.text(certificateData.hora, 655, 182);
+    doc.line(310, 300, 530, 300);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(18);
+    doc.text(certificateData.conductorNombre || "", 421, 292, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Firma", 421, 318, { align: "center" });
+    doc.save(`certificado-test-drive-${item.id}.pdf`);
+  }
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[92svh] overflow-y-auto bg-white text-slate-950 sm:max-w-[980px]">
+        <DialogHeader>
+          <DialogTitle>Certificado de responsabilidad del Test Drive</DialogTitle>
+          <DialogDescription>Completa los datos del conductor antes de iniciar la prueba.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Nombre del conductor"><Input value={form.conductorNombre} onChange={(e) => setForm((f) => ({ ...f, conductorNombre: e.target.value }))} /></Field>
+          <Field label="Registro de conducir"><Input value={form.conductorRegistro} onChange={(e) => setForm((f) => ({ ...f, conductorRegistro: e.target.value }))} /></Field>
+          <Field label="Vehiculo"><Input value={form.certificadoVehiculo} onChange={(e) => setForm((f) => ({ ...f, certificadoVehiculo: e.target.value }))} /></Field>
+          <Field label="Placa"><Input value={form.placa} onChange={(e) => setForm((f) => ({ ...f, placa: e.target.value }))} /></Field>
+          <div className="md:col-span-2"><Field label="Local"><Input value={form.certificadoLocal} onChange={(e) => setForm((f) => ({ ...f, certificadoLocal: e.target.value }))} /></Field></div>
+          {routeEnabled ? (
+            <div className="md:col-span-2">
+              <Field label="Ruta / calles recorridas">
+                <Textarea value={form.rutaTestdrive} placeholder="Ej. Av. Ferrocarril, Real Plaza, Av. Circunvalacion..." onChange={(e) => setForm((f) => ({ ...f, rutaTestdrive: e.target.value }))} />
+              </Field>
+            </div>
+          ) : null}
+        </div>
+        <CertificatePreview data={certificateData} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
+          <Button type="button" variant="outline" onClick={downloadCertificate}><Download className="size-4" />Descargar</Button>
+          {!localState.generated ? <Button type="button" onClick={() => persist()}><FileText className="size-4" />Guardar certificado</Button> : null}
+          {localState.generated && routeEnabled && !localState.routeStarted ? <Button type="button" onClick={() => persist({ startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
+          {localState.generated && routeEnabled && localState.routeStarted && !localState.routeFinished ? <Button type="button" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => persist({ finishRoute: true })}>Finalizar</Button> : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CertificatePreview({ data }) {
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg border bg-white p-3">
+      <div className="min-w-[860px] border border-slate-300 p-2 text-center text-sm">
+        <h3 className="font-bold">Certificado de Responsabilidad del Test Drive</h3>
+        <p className="mx-auto mt-2 max-w-4xl leading-relaxed">
+          Yo, {data.conductorNombre || "(PARA EDITAR)"}, portador del registro de conducir N° {data.conductorRegistro || "(PARA EDITAR)"}, declaro estar en condiciones fisicas y psicologicas para conducir siguiendo el trayecto elegido de acuerdo con la legislacion local vigente de las normas de transito y que asumo cualquier costo por danos personales o a terceros, asi como el pago de papeletas o multas generadas durante el periodo de la prueba.
+        </p>
+        <div className="mt-5 grid grid-cols-6 gap-y-2 text-left">
+          <span className="font-semibold">Conductor:</span><span className="col-span-2">{data.conductorNombre || "-"}</span>
+          <span className="font-semibold">Vehiculo:</span><span>{data.certificadoVehiculo || "-"}</span>
+          <span><b>Placa:</b> {data.placa || "-"}</span>
+          <span className="font-semibold">Local:</span><span className="col-span-2">{data.certificadoLocal || "-"}</span>
+          <span className="font-semibold">Fecha:</span><span>{data.fecha}</span>
+          <span><b>Hora:</b> {data.hora}</span>
+        </div>
+        <div className="mx-auto mt-16 w-64 border-t border-slate-900 pt-2">
+          <div className="text-2xl text-slate-800" style={{ fontFamily: "Autography, 'Segoe Script', 'Brush Script MT', cursive" }}>{data.conductorNombre || ""}</div>
+          <div>Firma</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClosureSection({ items, onOpen }) { return <section className="mb-4 rounded-lg bg-white p-5 shadow-sm"><div className="mb-4 flex justify-between"><h2 className="text-lg font-bold">Cierres</h2><Button variant="destructive" onClick={onOpen}><Plus className="size-4" />Registrar cierre</Button></div>{items.map((c) => <div key={c.id} className="rounded border p-3">{c.detalle}</div>)}</section>; }
 
 function InterestDialog({ state, clientId, options, onClose, onSubmit }) { const [form, setForm] = useState({ id: state.item?.id, clientId, marcaId: state.item?.marca_id || "", modeloId: state.item?.modelo_id || "", anioInteres: state.item?.anio_interes || "" }); const brands = options.brands.map((b) => ({ value: b.id, label: b.name })); const models = options.models.filter((m) => !form.marcaId || m.marca_id === Number(form.marcaId)).map((m) => ({ value: m.id, label: m.name })); return <BaseDialog title="Vehiculo de interes" onClose={onClose} onSubmit={() => onSubmit(form)}><Field label="Marca"><SearchableSelect value={form.marcaId} options={brands} onChange={(v) => setForm((f) => ({ ...f, marcaId: v, modeloId: "" }))} /></Field><Field label="Modelo"><SearchableSelect value={form.modeloId} options={models} onChange={(v) => setForm((f) => ({ ...f, modeloId: v }))} /></Field><Field label="Año"><Input value={form.anioInteres} onChange={(e) => setForm((f) => ({ ...f, anioInteres: e.target.value }))} /></Field></BaseDialog>; }
@@ -976,7 +1463,6 @@ function TestDriveDialog({ state, options, onClose, onSubmit }) {
     descripcion: item?.descripcion || "",
     estado: item?.estado || "programado",
   });
-  const models = options.models.map((m) => ({ value: m.id, label: m.name }));
   const submit = (estado = form.estado) => onSubmit({ ...form, estado });
   return (
     <BaseDialog title={item ? "Editar Test Drive" : "Programar Test Drive"} onClose={onClose} onSubmit={() => submit()}>
@@ -985,10 +1471,9 @@ function TestDriveDialog({ state, options, onClose, onSubmit }) {
         <Field label="Hora inicio"><Input type="time" value={form.horaInicio} onChange={(e) => setForm((f) => ({ ...f, horaInicio: e.target.value }))} /></Field>
         <Field label="Hora fin"><Input type="time" value={form.horaFin} onChange={(e) => setForm((f) => ({ ...f, horaFin: e.target.value }))} /></Field>
         <Field label="Estado">
-          <SearchableSelect value={form.estado} options={[{ value: "programado", label: "Programado" }, { value: "realizado", label: "Realizado" }, { value: "cancelado", label: "Cancelado" }]} onChange={(v) => setForm((f) => ({ ...f, estado: v }))} />
+          <SearchableSelect value={form.estado} options={[{ value: "programado", label: "Programado" }, { value: "en_proceso", label: "En proceso" }, { value: "realizado", label: "Realizado" }, { value: "cancelado", label: "Cancelado" }]} onChange={(v) => setForm((f) => ({ ...f, estado: v }))} />
         </Field>
       </div>
-      <Field label="Modelo"><SearchableSelect value={form.modeloId} options={models} onChange={(v) => setForm((f) => ({ ...f, modeloId: v }))} /></Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Placa"><Input value={form.placa} onChange={(e) => setForm((f) => ({ ...f, placa: e.target.value }))} /></Field>
         <Field label="VIN"><Input value={form.vin} onChange={(e) => setForm((f) => ({ ...f, vin: e.target.value }))} /></Field>

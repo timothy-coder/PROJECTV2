@@ -1342,11 +1342,11 @@ function ReservationItemDialog({ dialog, options, onClose, onSubmit }) {
   const total = Math.max(subtotal - discount, 0);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92svh] w-[min(96vw,720px)] max-w-none overflow-y-auto bg-white p-0 text-slate-950">
+      <DialogContent className="max-h-[92svh] w-[min(96vw,860px)] max-w-none overflow-y-auto bg-white p-0 text-slate-950">
         <DialogHeader className="border-b px-5 py-4">
           <DialogTitle>{item ? "Editar" : "Agregar"} {isGift ? "regalo" : "accesorio"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 px-5 py-4 md:grid-cols-2">
+        <div className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1.7fr)_minmax(160px,0.7fr)]">
           <Field label={isGift ? "Regalo" : "Accesorio"}>
             <SearchableSelect value={form.catalogId} options={options} placeholder={`Seleccionar ${isGift ? "regalo" : "accesorio"}`} onChange={(value) => setForm((prev) => ({ ...prev, catalogId: value }))} />
           </Field>

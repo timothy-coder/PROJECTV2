@@ -33,9 +33,51 @@ function timePart(value) {
   return text.match(/\d{2}:\d{2}/)?.[0] || text.slice(0, 5);
 }
 
+function mapTestDriveSurvey(row) {
+  return {
+    id: row.id,
+    testdriveId: row.testdrive_id,
+    rutaErgonomia: Number(row.ruta_ergonomia || 0),
+    rutaVisibilidad: Number(row.ruta_visibilidad || 0),
+    rutaDinamica: Number(row.ruta_dinamica || 0),
+    rutaSeguridad: Number(row.ruta_seguridad || 0),
+    rutaConfort: Number(row.ruta_confort || 0),
+    rutaTecnologia: Number(row.ruta_tecnologia || 0),
+    feedbackSatisfaccion: row.feedback_satisfaccion || "",
+    asesorExplico: row.asesor_explico || "",
+    experienciaTestdrive: row.experiencia_testdrive || "",
+    explicacionesDemostraciones: row.explicaciones_demostraciones || "",
+    fordManejo: row.ford_manejo || "",
+    estadoVehiculo: row.estado_vehiculo || "",
+    autoSuficiente: row.auto_suficiente || "",
+    realizaraCompra: row.realizara_compra || "",
+    compraPlazo: row.compra_plazo || "",
+  };
+}
+
 async function stageId(connection, name) {
   const [rows] = await connection.query(`SELECT id FROM ventas_etapasconversion WHERE LOWER(nombre)=LOWER(?) LIMIT 1`, [name]);
   return rows[0]?.id || null;
+}
+
+async function loadTestDriveConfig(connection) {
+  try {
+    const [rows] = await connection.query(
+      `SELECT activar_pdf_testdrive, activar_ruta_testdrive, minutos_testdrive, habilitar_encuesta_en_vivo
+       FROM configuracion_testdrive
+       ORDER BY id ASC
+       LIMIT 1`
+    );
+    const row = rows[0] || {};
+    return {
+      activarPdfTestdrive: row.activar_pdf_testdrive !== undefined ? Boolean(row.activar_pdf_testdrive) : true,
+      activarRutaTestdrive: Boolean(row.activar_ruta_testdrive),
+      minutosTestdrive: Number(row.minutos_testdrive || 0),
+      habilitarEncuestaEnVivo: Boolean(row.habilitar_encuesta_en_vivo),
+    };
+  } catch {
+    return { activarPdfTestdrive: true, activarRutaTestdrive: false, minutosTestdrive: 0, habilitarEncuestaEnVivo: false };
+  }
 }
 
 async function maybeMoveToAttention(connection, opportunity, canAll) {
@@ -112,6 +154,16 @@ export async function GET(request, { params }) {
       )
       : [[]];
     const [testDrives] = await connection.query(`SELECT t.*, mo.name AS modelo FROM ventas_oportunidades_test_drives t LEFT JOIN administracion_modelos mo ON mo.id=t.modelo_id WHERE t.oportunidad_id=? ORDER BY t.created_at DESC`, [id]);
+    const testDriveIds = testDrives.map((item) => item.id);
+    const [testDriveSurveys] = testDriveIds.length
+      ? await connection.query(
+        `SELECT *
+         FROM ventas_oportunidades_test_drive_encuestas
+         WHERE testdrive_id IN (?)`,
+        [testDriveIds]
+      )
+      : [[]];
+    const surveyByTestDrive = new Map(testDriveSurveys.map((row) => [Number(row.testdrive_id), row]));
     const [closures] = await connection.query(`SELECT c.*, u.fullname AS user_name, cd.detalle AS clasificacion FROM ventas_oportunidades_cierres c INNER JOIN administracion_usuarios u ON u.id=c.created_by LEFT JOIN configuracion_ventas_cierres_detalle cd ON cd.id=c.cierre_detalle_id WHERE c.oportunidad_id=? ORDER BY c.created_at DESC`, [id]);
     const [reservations] = await connection.query(
       `SELECT r.id, r.estado, r.created_at, rd.tipo_persona
@@ -133,6 +185,7 @@ export async function GET(request, { params }) {
     const [provincias] = await connection.query(`SELECT id, nombre, departamento_id, codigo_ubigeo FROM provincias ORDER BY nombre ASC`);
     const [distritos] = await connection.query(`SELECT id, nombre, provincia_id, departamento_id, codigo_ubigeo FROM distritos ORDER BY nombre ASC`);
     const [users] = await connection.query(`SELECT id, fullname, username FROM administracion_usuarios WHERE is_active=1 ORDER BY fullname ASC, username ASC`);
+    const testdriveConfig = await loadTestDriveConfig(connection);
     return NextResponse.json({
       currentUser: { id: user.id, fullname: user.fullname, canViewAll: canAll, permissions: user.permissions || {} },
       opportunity: {
@@ -195,6 +248,16 @@ export async function GET(request, { params }) {
         fechaTestdrive: datePart(row.fecha_testdrive),
         horaInicio: timePart(row.hora_inicio),
         horaFin: timePart(row.hora_fin),
+        inicioPruebaAt: row.inicio_prueba_at,
+        conductorNombre: row.conductor_nombre || "",
+        conductorRegistro: row.conductor_registro || "",
+        certificadoVehiculo: row.certificado_vehiculo || "",
+        certificadoLocal: row.certificado_local || "",
+        certificadoGeneradoAt: row.certificado_generado_at,
+        rutaTestdrive: row.ruta_testdrive || "",
+        rutaInicioAt: row.ruta_inicio_at,
+        rutaFinAt: row.ruta_fin_at,
+        survey: surveyByTestDrive.has(Number(row.id)) ? mapTestDriveSurvey(surveyByTestDrive.get(Number(row.id))) : null,
       })),
       closures,
       reservations: reservations.map((row) => ({ id: row.id, estado: row.estado || "borrador", createdAt: row.created_at, tipoPersona: row.tipo_persona || "" })),
@@ -209,6 +272,7 @@ export async function GET(request, { params }) {
         provincias: provincias.map((row) => ({ id: row.id, nombre: row.nombre, departamentoId: row.departamento_id, codigoUbigeo: row.codigo_ubigeo })),
         distritos: distritos.map((row) => ({ id: row.id, nombre: row.nombre, provinciaId: row.provincia_id, departamentoId: row.departamento_id, codigoUbigeo: row.codigo_ubigeo })),
         users: users.map((row) => ({ id: row.id, name: row.fullname || row.username || `Usuario ${row.id}` })),
+        testdriveConfig,
       },
     });
   } catch (error) {
@@ -367,6 +431,11 @@ export async function POST(request, { params }) {
     if (body.action === "testdrive") {
       const [[op]] = await connection.query(`SELECT cliente_id FROM ventas_oportunidades WHERE id=?`, [id]);
       if (body.id) {
+        const generateCertificate = Boolean(body.generateCertificate || body.startCertificate);
+        const startRoute = Boolean(body.startRoute);
+        const finishRoute = Boolean(body.finishRoute);
+        const resumeRoute = Boolean(body.resumeRoute);
+        const nextStatus = finishRoute ? "finalizado" : resumeRoute || startRoute || generateCertificate ? "en_proceso" : body.estado || null;
         await connection.query(
           `UPDATE ventas_oportunidades_test_drives
            SET fecha_testdrive=COALESCE(?, fecha_testdrive),
@@ -376,15 +445,122 @@ export async function POST(request, { params }) {
                vin=?,
                placa=?,
                descripcion=?,
-               estado=COALESCE(?, estado)
+               estado=COALESCE(?, estado),
+               conductor_nombre=?,
+               conductor_registro=?,
+               certificado_vehiculo=?,
+               certificado_local=?,
+               inicio_prueba_at=CASE WHEN ?=1 AND inicio_prueba_at IS NULL THEN NOW() ELSE inicio_prueba_at END,
+               certificado_generado_at=CASE WHEN ?=1 AND certificado_generado_at IS NULL THEN NOW() ELSE certificado_generado_at END,
+               ruta_testdrive=?,
+               ruta_inicio_at=CASE WHEN ?=1 AND ruta_inicio_at IS NULL THEN NOW() ELSE ruta_inicio_at END,
+               ruta_fin_at=CASE WHEN ?=1 THEN NULL WHEN ?=1 AND ruta_fin_at IS NULL THEN NOW() ELSE ruta_fin_at END
            WHERE id=? AND oportunidad_id=?`,
-          [body.fechaTestdrive || null, body.horaInicio || null, body.horaFin || null, body.modeloId || null, body.vin || null, body.placa || null, body.descripcion || null, body.estado || null, Number(body.id), id]
+          [
+            body.fechaTestdrive || null,
+            body.horaInicio || null,
+            body.horaFin || null,
+            body.modeloId || null,
+            body.vin || null,
+            body.placa || null,
+            body.descripcion || null,
+            nextStatus,
+            body.conductorNombre || null,
+            body.conductorRegistro || null,
+            body.certificadoVehiculo || null,
+            body.certificadoLocal || null,
+            generateCertificate ? 1 : 0,
+            generateCertificate ? 1 : 0,
+            body.rutaTestdrive || null,
+            startRoute ? 1 : 0,
+            resumeRoute ? 1 : 0,
+            finishRoute ? 1 : 0,
+            Number(body.id),
+            id,
+          ]
         );
       } else {
-        await connection.query(`INSERT INTO ventas_oportunidades_test_drives (oportunidad_id, cliente_id, fecha_testdrive, hora_inicio, hora_fin, modelo_id, vin, placa, descripcion, estado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, op.cliente_id, body.fechaTestdrive, body.horaInicio, body.horaFin || null, body.modeloId || null, body.vin || null, body.placa || null, body.descripcion || null, body.estado || "programado", user.id]);
+        await connection.query(
+          `INSERT INTO ventas_oportunidades_test_drives
+           (oportunidad_id, cliente_id, fecha_testdrive, hora_inicio, hora_fin, modelo_id, vin, placa, descripcion, estado, conductor_nombre, conductor_registro, certificado_vehiculo, certificado_local, inicio_prueba_at, certificado_generado_at, ruta_testdrive, ruta_inicio_at, ruta_fin_at, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            op.cliente_id,
+            body.fechaTestdrive,
+            body.horaInicio,
+            body.horaFin || null,
+            body.modeloId || null,
+            body.vin || null,
+            body.placa || null,
+            body.descripcion || null,
+            body.estado || "programado",
+            body.conductorNombre || null,
+            body.conductorRegistro || null,
+            body.certificadoVehiculo || null,
+            body.certificadoLocal || null,
+            body.startCertificate || body.generateCertificate ? new Date() : null,
+            body.startCertificate || body.generateCertificate ? new Date() : null,
+            body.rutaTestdrive || null,
+            body.startRoute ? new Date() : null,
+            body.finishRoute ? new Date() : null,
+            user.id,
+          ]
+        );
       }
       const testId = await stageId(connection, "Test drive");
       if (testId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [testId, id]);
+    }
+    if (body.action === "testdrive-survey") {
+      const testdriveId = Number(body.testdriveId);
+      const [[testdrive]] = await connection.query(`SELECT id FROM ventas_oportunidades_test_drives WHERE id=? AND oportunidad_id=? LIMIT 1`, [testdriveId, id]);
+      if (!testdrive) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Test drive no encontrado." }, { status: 404 });
+      }
+      const values = [
+        id,
+        testdriveId,
+        Number(body.rutaErgonomia || 0),
+        Number(body.rutaVisibilidad || 0),
+        Number(body.rutaDinamica || 0),
+        Number(body.rutaSeguridad || 0),
+        Number(body.rutaConfort || 0),
+        Number(body.rutaTecnologia || 0),
+        body.feedbackSatisfaccion || null,
+        body.asesorExplico || null,
+        body.experienciaTestdrive || null,
+        body.explicacionesDemostraciones || null,
+        body.fordManejo || null,
+        body.estadoVehiculo || null,
+        body.autoSuficiente || null,
+        body.realizaraCompra || null,
+        body.compraPlazo || null,
+        user.id,
+      ];
+      await connection.query(
+        `INSERT INTO ventas_oportunidades_test_drive_encuestas
+         (oportunidad_id, testdrive_id, ruta_ergonomia, ruta_visibilidad, ruta_dinamica, ruta_seguridad, ruta_confort, ruta_tecnologia, feedback_satisfaccion, asesor_explico, experiencia_testdrive, explicaciones_demostraciones, ford_manejo, estado_vehiculo, auto_suficiente, realizara_compra, compra_plazo, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           ruta_ergonomia=VALUES(ruta_ergonomia),
+           ruta_visibilidad=VALUES(ruta_visibilidad),
+           ruta_dinamica=VALUES(ruta_dinamica),
+           ruta_seguridad=VALUES(ruta_seguridad),
+           ruta_confort=VALUES(ruta_confort),
+           ruta_tecnologia=VALUES(ruta_tecnologia),
+           feedback_satisfaccion=VALUES(feedback_satisfaccion),
+           asesor_explico=VALUES(asesor_explico),
+           experiencia_testdrive=VALUES(experiencia_testdrive),
+           explicaciones_demostraciones=VALUES(explicaciones_demostraciones),
+           ford_manejo=VALUES(ford_manejo),
+           estado_vehiculo=VALUES(estado_vehiculo),
+           auto_suficiente=VALUES(auto_suficiente),
+           realizara_compra=VALUES(realizara_compra),
+           compra_plazo=VALUES(compra_plazo),
+           updated_at=CURRENT_TIMESTAMP`,
+        values
+      );
     }
     if (body.action === "closure") {
       await connection.query(`INSERT INTO ventas_oportunidades_cierres (oportunidad_id, detalle, cierre_detalle_id, created_by) VALUES (?, ?, ?, ?)`, [id, body.detalle, body.cierreDetalleId || null, user.id]);
