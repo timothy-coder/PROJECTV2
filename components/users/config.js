@@ -22,6 +22,7 @@ export const USER_PERMISSION_GROUPS = [
   { section: "Ventas", key: "reservas", label: "Notas de pedido", actions: ["view", "viewall", "review", "firm", "edit", "car_data", "send_signature", "observe", "subsanate", "sign"] },
 
   { section: "Posventa", key: "citas", label: "Agenda posventa", actions: ["view", "create", "edit", "delete", "viewall"] },
+  { section: "Posventa", key: "citas_nueva", label: "Nueva cita posventa", actions: ["view"] },
   { section: "Posventa", key: "proximosmantenimientos", label: "Proximos mantenimientos", actions: ["view", "viewall"] },
   { section: "Posventa", key: "oportunidadespv", label: "Oportunidades posventa", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },
   { section: "Posventa", key: "leadspv", label: "Leads posventa", actions: ["view", "create", "edit", "delete", "viewall", "asignar"] },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Copy, FileText, Link2, MessageSquare, Pencil, RotateCcw, Wrench, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +18,8 @@ import { usePostventaQuotes } from "@/hooks/postventaquotes/usePostventaQuotes";
 import { QuoteForm } from "@/components/postventaquotes/PostventaQuotesPage";
 
 export default function PostventaOpportunityDetailPage({ id }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { data, loading, save, createAppointment, updateAppointment, updateClientData, updateVehicleData } = usePostventaOpportunityDetail(id);
   const [activity, setActivity] = useState("");
   const [agenda, setAgenda] = useState({ fechaAgenda: "", horaAgenda: "" });
@@ -39,6 +42,14 @@ export default function PostventaOpportunityDetailPage({ id }) {
   const temperature = stages.slice(0, currentIndex + 1).reduce((sum, stage) => sum + Number(stage.temp || 0), 0);
   const newStage = stages.find((stage) => stage.nombre?.toLowerCase() === "nuevo");
   const isClosed = String(opportunity.etapaNombre || "").toLowerCase().includes("cerrad");
+  const returnTo = searchParams.get("returnTo");
+  const goBack = () => {
+    if (returnTo) {
+      router.push(returnTo);
+      return;
+    }
+    history.back();
+  };
 
   async function runAction(action, successMessage) {
     try {
@@ -93,7 +104,7 @@ export default function PostventaOpportunityDetailPage({ id }) {
                   <RotateCcw className="size-3.5" />Inicio
                 </Button>
               ) : null}
-              <Button variant="ghost" size="icon" onClick={() => history.back()}>x</Button>
+              <Button variant="ghost" size="icon" onClick={goBack}>x</Button>
             </div>
           </div>
           {currentUser.canViewAll && newStage ? (

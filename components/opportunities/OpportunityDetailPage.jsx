@@ -1248,8 +1248,8 @@ function SurveyFaceScale({ label, value, onChange }) {
     { value: "insatisfecho", label: "Insatisfecho", note: "Nota 8 a 1", icon: Frown, className: "border-red-200 bg-red-50 text-red-700", activeClass: "ring-2 ring-red-400" },
   ];
   return (
-    <div className="rounded-lg border bg-slate-50 p-2">
-      <p className="mb-2 text-xs font-semibold text-slate-700">{label}</p>
+    <div className="grid items-center gap-2 rounded-lg border bg-slate-50 p-2 sm:grid-cols-[minmax(260px,1fr)_420px]">
+      <p className="text-xs font-semibold leading-snug text-slate-700">{label}</p>
       <div className="grid grid-cols-3 gap-2">
         {options.map((option) => {
           const Icon = option.icon;
@@ -1258,7 +1258,7 @@ function SurveyFaceScale({ label, value, onChange }) {
             <button
               key={option.value}
               type="button"
-              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
+              className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-2 text-left transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
               onClick={() => onChange(option.value)}
             >
               <Icon className="size-5 shrink-0" />
@@ -1280,8 +1280,8 @@ function SurveyYesNo({ label, value, onChange }) {
     { value: "no", label: "No", className: "border-red-200 bg-red-50 text-red-700", activeClass: "ring-2 ring-red-400" },
   ];
   return (
-    <div className="rounded-lg border bg-slate-50 p-2">
-      <p className="mb-2 text-xs font-semibold text-slate-700">{label}</p>
+    <div className="grid items-center gap-2 rounded-lg border bg-slate-50 p-2 sm:grid-cols-[minmax(220px,1fr)_160px]">
+      <p className="text-xs font-semibold leading-snug text-slate-700">{label}</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map((option) => {
           const active = value === option.value;
@@ -1289,7 +1289,7 @@ function SurveyYesNo({ label, value, onChange }) {
             <button
               key={option.value}
               type="button"
-              className={`rounded-lg border px-4 py-3 text-center text-sm font-black transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
+              className={`min-h-12 rounded-lg border px-4 py-2 text-center text-sm font-black transition hover:shadow-sm ${option.className} ${active ? option.activeClass : "opacity-80 hover:opacity-100"}`}
               onClick={() => onChange(option.value)}
             >
               {option.label}

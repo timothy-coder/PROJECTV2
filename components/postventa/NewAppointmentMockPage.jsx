@@ -53,10 +53,10 @@ const HOURS = [
 
 export default function NewAppointmentMockPage({ userPermissions }) {
   const [selectedHour, setSelectedHour] = useState("17:30 - 18:00");
-  const canView = Boolean(hasPerm(userPermissions, ["citas", "create"]) || hasPerm(userPermissions, ["citas", "view"]) || hasPerm(userPermissions, ["citas", "viewall"]));
+  const canView = Boolean(hasPerm(userPermissions, ["citas_nueva", "view"]));
 
   if (!canView) {
-    return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para crear citas de PostVenta.</div>;
+    return <div className="rounded-lg bg-white p-4 text-sm font-medium text-slate-700">No tienes permiso para ingresar a Nueva cita de PostVenta.</div>;
   }
 
   return (

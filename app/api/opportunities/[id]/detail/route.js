@@ -518,49 +518,57 @@ export async function POST(request, { params }) {
         await connection.rollback();
         return NextResponse.json({ message: "Test drive no encontrado." }, { status: 404 });
       }
-      const values = [
-        id,
-        testdriveId,
-        Number(body.rutaErgonomia || 0),
-        Number(body.rutaVisibilidad || 0),
-        Number(body.rutaDinamica || 0),
-        Number(body.rutaSeguridad || 0),
-        Number(body.rutaConfort || 0),
-        Number(body.rutaTecnologia || 0),
-        body.feedbackSatisfaccion || null,
-        body.asesorExplico || null,
-        body.experienciaTestdrive || null,
-        body.explicacionesDemostraciones || null,
-        body.fordManejo || null,
-        body.estadoVehiculo || null,
-        body.autoSuficiente || null,
-        body.realizaraCompra || null,
-        body.compraPlazo || null,
-        user.id,
-      ];
-      await connection.query(
-        `INSERT INTO ventas_oportunidades_test_drive_encuestas
-         (oportunidad_id, testdrive_id, ruta_ergonomia, ruta_visibilidad, ruta_dinamica, ruta_seguridad, ruta_confort, ruta_tecnologia, feedback_satisfaccion, asesor_explico, experiencia_testdrive, explicaciones_demostraciones, ford_manejo, estado_vehiculo, auto_suficiente, realizara_compra, compra_plazo, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           ruta_ergonomia=VALUES(ruta_ergonomia),
-           ruta_visibilidad=VALUES(ruta_visibilidad),
-           ruta_dinamica=VALUES(ruta_dinamica),
-           ruta_seguridad=VALUES(ruta_seguridad),
-           ruta_confort=VALUES(ruta_confort),
-           ruta_tecnologia=VALUES(ruta_tecnologia),
-           feedback_satisfaccion=VALUES(feedback_satisfaccion),
-           asesor_explico=VALUES(asesor_explico),
-           experiencia_testdrive=VALUES(experiencia_testdrive),
-           explicaciones_demostraciones=VALUES(explicaciones_demostraciones),
-           ford_manejo=VALUES(ford_manejo),
-           estado_vehiculo=VALUES(estado_vehiculo),
-           auto_suficiente=VALUES(auto_suficiente),
-           realizara_compra=VALUES(realizara_compra),
-           compra_plazo=VALUES(compra_plazo),
-           updated_at=CURRENT_TIMESTAMP`,
-        values
-      );
+      let surveyColumns = [];
+      try {
+        const [columns] = await connection.query(`SHOW COLUMNS FROM ventas_oportunidades_test_drive_encuestas`);
+        surveyColumns = columns.map((column) => column.Field);
+      } catch {
+        await connection.rollback();
+        return NextResponse.json({ message: "Falta crear la tabla de encuestas de test drive." }, { status: 400 });
+      }
+      const payload = {
+        oportunidad_id: id,
+        testdrive_id: testdriveId,
+        ruta_ergonomia: Number(body.rutaErgonomia || 0),
+        ruta_visibilidad: Number(body.rutaVisibilidad || 0),
+        ruta_dinamica: Number(body.rutaDinamica || 0),
+        ruta_seguridad: Number(body.rutaSeguridad || 0),
+        ruta_confort: Number(body.rutaConfort || 0),
+        ruta_tecnologia: Number(body.rutaTecnologia || 0),
+        feedback_satisfaccion: body.feedbackSatisfaccion || null,
+        asesor_explico: body.asesorExplico || null,
+        experiencia_testdrive: body.experienciaTestdrive || null,
+        explicaciones_demostraciones: body.explicacionesDemostraciones || null,
+        ford_manejo: body.fordManejo || null,
+        estado_vehiculo: body.estadoVehiculo || null,
+        auto_suficiente: body.autoSuficiente || null,
+        realizara_compra: body.realizaraCompra || null,
+        compra_plazo: body.compraPlazo || null,
+        respondido_por: "interno",
+        respondido_at: new Date(),
+        created_by: user.id,
+      };
+      const allowedColumns = Object.keys(payload).filter((column) => surveyColumns.includes(column));
+      const [[existingSurvey]] = await connection.query(`SELECT id FROM ventas_oportunidades_test_drive_encuestas WHERE testdrive_id=? LIMIT 1`, [testdriveId]);
+      if (existingSurvey) {
+        const updateColumns = allowedColumns.filter((column) => !["oportunidad_id", "testdrive_id", "created_by"].includes(column));
+        if (surveyColumns.includes("updated_at")) updateColumns.push("updated_at");
+        if (updateColumns.length) {
+          const setSql = updateColumns.map((column) => (column === "updated_at" ? "`updated_at`=CURRENT_TIMESTAMP" : `\`${column}\`=?`)).join(", ");
+          const updateValues = updateColumns.filter((column) => column !== "updated_at").map((column) => payload[column]);
+          await connection.query(`UPDATE ventas_oportunidades_test_drive_encuestas SET ${setSql} WHERE id=?`, [...updateValues, existingSurvey.id]);
+        }
+      } else {
+        const insertColumns = allowedColumns;
+        if (!insertColumns.includes("testdrive_id")) {
+          await connection.rollback();
+          return NextResponse.json({ message: "La tabla de encuestas no tiene la columna testdrive_id." }, { status: 400 });
+        }
+        const insertSql = insertColumns.map((column) => `\`${column}\``).join(", ");
+        const placeholders = insertColumns.map(() => "?").join(", ");
+        const insertValues = insertColumns.map((column) => payload[column]);
+        await connection.query(`INSERT INTO ventas_oportunidades_test_drive_encuestas (${insertSql}) VALUES (${placeholders})`, insertValues);
+      }
     }
     if (body.action === "closure") {
       await connection.query(`INSERT INTO ventas_oportunidades_cierres (oportunidad_id, detalle, cierre_detalle_id, created_by) VALUES (?, ?, ?, ?)`, [id, body.detalle, body.cierreDetalleId || null, user.id]);

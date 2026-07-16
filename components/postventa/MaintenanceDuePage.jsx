@@ -72,11 +72,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
       const rowHeight = 60;
       const availableRowsHeight = height - tableTop - paginationHeight - tableHeaderHeight - bottomGap;
       const nextLimit = Math.max(4, Math.min(100, Math.floor(availableRowsHeight / rowHeight)));
-      setLimit((current) => {
-        if (current === nextLimit) return current;
-        setPage(1);
-        return nextLimit;
-      });
+      setLimit((current) => (current === nextLimit ? current : nextLimit));
     }
 
     const frame = window.requestAnimationFrame(updateLimit);
@@ -174,7 +170,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
     }
 
     const opportunityId = opportunities[0]?.id || item.oportunidadId;
-    if (opportunityId) router.push(`/oportunidadespv/${opportunityId}`);
+    if (opportunityId) router.push(`/oportunidadespv/${opportunityId}?returnTo=${encodeURIComponent(`${pathname}${window.location.search}`)}`);
   }
 
   if (!canView) {
@@ -544,7 +540,7 @@ export default function MaintenanceDuePage({ userPermissions }) {
         <OpportunityPickerDialog
           item={opportunityPicker}
           onClose={() => setOpportunityPicker(null)}
-          onOpenOpportunity={(id) => router.push(`/oportunidadespv/${id}`)}
+          onOpenOpportunity={(id) => router.push(`/oportunidadespv/${id}?returnTo=${encodeURIComponent(`${pathname}${window.location.search}`)}`)}
         />
       ) : null}
     </div>
