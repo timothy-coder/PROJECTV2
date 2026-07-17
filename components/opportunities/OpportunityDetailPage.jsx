@@ -69,19 +69,21 @@ export default function OpportunityDetailPage({ id }) {
             </Button>
           ) : null}
           <div className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-1 sm:overflow-visible">
-            {stages.map((stage, index) => {
-              const active = index <= currentIndex;
-              const nextActive = index < currentIndex;
-              const nextStage = stages[index + 1];
-              return (
-                <div key={stage.id} className="flex shrink-0 items-center sm:flex-1 sm:shrink">
-                  <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${stageStepClass(stage.nombre, active)}`}>
-                    {stage.nombre}
-                  </span>
-                  {index < stages.length - 1 ? <span className={`h-0.5 w-5 shrink-0 sm:w-6 ${stageConnectorClass(stage.nombre, nextStage?.nombre, nextActive)}`} /> : null}
-                </div>
-              );
-            })}
+            {(() => {
+              const currentStageTone = stageProgressTone(stages[currentIndex]?.nombre);
+              return stages.map((stage, index) => {
+                const active = currentStageTone && index <= currentIndex;
+                const connectorActive = currentStageTone && index < currentIndex;
+                return (
+                  <div key={stage.id} className="flex shrink-0 items-center sm:flex-1 sm:shrink">
+                    <span className={`whitespace-nowrap rounded-md px-3 py-1.5 text-[11px] font-bold sm:w-full sm:text-center ${stageStepClass(currentStageTone, active)}`}>
+                      {stage.nombre}
+                    </span>
+                    {index < stages.length - 1 ? <span className={`h-0.5 w-5 shrink-0 sm:w-6 ${stageConnectorClass(currentStageTone, connectorActive)}`} /> : null}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </header>
         <InfoSection opportunity={opportunity} canEditClient={canEditClient} onEditClient={() => setClientDialogOpen(true)} />
@@ -156,18 +158,25 @@ function opportunityActionMessage(payload = {}) {
   return messages[action] || "Accion guardada correctamente.";
 }
 
-function stageStepClass(name, active) {
-  if (!active || isClosedStage(name)) return "bg-slate-200 text-slate-600";
-  if (isReserveStage(name)) return "bg-[#FFFF00] text-slate-900";
-  if (isBilledSaleStage(name)) return "bg-[#29c115] text-white";
-  return "bg-[#e60f0f] text-white";
+function stageProgressTone(name) {
+  if (isClosedStage(name)) return "";
+  if (isBilledSaleStage(name)) return "billed";
+  if (isReserveStage(name)) return "reserve";
+  return "quote";
 }
 
-function stageConnectorClass(name, nextName, active) {
-  if (!active || isClosedStage(name) || isClosedStage(nextName)) return "bg-slate-300";
-  if (isBilledSaleStage(name)) return "bg-[#29c115]";
-  if (isReserveStage(name)) return "bg-[#FFFF00]";
-  return "bg-[#e60f0f]";
+function stageStepClass(tone, active) {
+  if (!active) return "bg-slate-200 text-slate-600";
+  if (tone === "reserve") return "bg-[#FFFF00]/55 text-slate-900";
+  if (tone === "billed") return "bg-[#29c115]/55 text-emerald-950";
+  return "bg-[#e60f0f]/55 text-red-950";
+}
+
+function stageConnectorClass(tone, active) {
+  if (!active) return "bg-slate-300";
+  if (tone === "reserve") return "bg-[#FFFF00]/55";
+  if (tone === "billed") return "bg-[#29c115]/55";
+  return "bg-[#e60f0f]/55";
 }
 
 function isReserveStage(name) {
