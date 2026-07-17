@@ -991,16 +991,11 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     lastRoutePoints.current[item.id] = point;
     await apiFetch(`/api/testdrives/${item.id}/route-points`, { method: "POST", body: JSON.stringify(point) });
   };
-  const startRouteTracking = async (item, extra = {}) => {
-    if (!testConfig.activarRutaTestdrive) {
-      toast.error("La ruta de test drive no esta activa.");
-      return;
-    }
+  const beginRouteWatcher = (item, { showToast = false } = {}) => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("Este navegador no permite capturar ubicacion.");
-      return;
+      return false;
     }
-    await setStatus(item, "en_proceso", extra);
     const options = { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 };
     const onPosition = (position) => {
       saveRoutePoint(item, position).catch(() => toast.error("No se pudo guardar un punto de la ruta."));
@@ -1011,7 +1006,16 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     navigator.geolocation.getCurrentPosition(onPosition, onError, options);
     if (routeWatchers.current[item.id]) navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
     routeWatchers.current[item.id] = navigator.geolocation.watchPosition(onPosition, onError, options);
-    toast.success("Captura de ruta iniciada.");
+    if (showToast) toast.success("Captura de ruta iniciada.");
+    return true;
+  };
+  const startRouteTracking = async (item, extra = {}) => {
+    if (!testConfig.activarRutaTestdrive) {
+      toast.error("La ruta de test drive no esta activa.");
+      return;
+    }
+    await setStatus(item, "en_proceso", extra);
+    beginRouteWatcher(item, { showToast: true });
   };
   const finishRouteTracking = async (item) => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -1052,6 +1056,16 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     }
   };
   const testConfig = config || { minutosTestdrive: 0, activarPdfTestdrive: true };
+  useEffect(() => {
+    if (!testConfig.activarRutaTestdrive) return;
+    items.forEach((item) => {
+      const status = String(item.estado || "").toLowerCase();
+      const shouldResume = status === "en_proceso" && item.rutaInicioAt && !item.rutaFinAt && !routeWatchers.current[item.id];
+      if (shouldResume) beginRouteWatcher(item);
+    });
+    // El watcher debe reaccionar a cambios reales de items/config; beginRouteWatcher usa refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, testConfig.activarRutaTestdrive]);
   return (
     <section className="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-2">

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Frown, Meh, Send, Smile } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 const TestDriveRouteMap = dynamic(() => import("@/components/opportunities/TestDriveRouteMap"), { ssr: false });
@@ -115,35 +116,23 @@ export default function PublicTestDriveSurveyPage({ token }) {
             <h1 className="text-base font-black text-slate-950 sm:text-lg">{testdrive.numero}</h1>
           </div>
           <div className="text-left sm:text-right">
-          <p className="text-xs font-medium text-slate-500">
-            {testdrive.fecha} {testdrive.horaInicio ? `- ${testdrive.horaInicio}` : ""}{testdrive.horaFin ? ` a ${testdrive.horaFin}` : ""}
-          </p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{[testdrive.clienteNombre, testdrive.modelo, testdrive.placa].filter(Boolean).join(" - ")}</p>
+            <p className="text-xs font-medium text-slate-500">
+              {testdrive.fecha} {testdrive.horaInicio ? `- ${testdrive.horaInicio}` : ""}{testdrive.horaFin ? ` a ${testdrive.horaFin}` : ""}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{[testdrive.clienteNombre, testdrive.modelo, testdrive.placa].filter(Boolean).join(" - ")}</p>
           </div>
         </header>
 
         <div className="space-y-3 p-3 sm:p-4">
-          <div className="rounded-lg border bg-white p-3">
+          <div className="rounded-lg border bg-slate-50 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-bold leading-tight">Ruta realizada</p>
-                <p className="text-xs font-medium text-slate-500">Trayecto registrado durante la prueba de manejo.</p>
+                <p className="text-sm font-bold leading-tight">Rutas</p>
+                <p className="text-xs font-medium text-slate-500">Según la prueba de manejo, califica del 1 al 10.</p>
               </div>
-              <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700">{data?.routePoints?.length || 0} puntos</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">N TD {testdrive.id}</span>
             </div>
-            <TestDriveRouteMap points={data?.routePoints || []} className="h-64" />
-          </div>
-
-          <div className="rounded-lg border bg-slate-50 p-3">
-            <div className="mb-2">
-              <p className="text-sm font-bold leading-tight">Rutas</p>
-              <p className="text-xs font-medium text-slate-500">Según la prueba de manejo, califica del 1 al 10.</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {ROUTE_ITEMS.map(([key, label]) => (
-                <ScoreCard key={key} label={label} value={form[key]} onChange={(value) => update(key, value)} />
-              ))}
-            </div>
+            <PublicRouteRadarScore items={ROUTE_ITEMS} values={form} onChange={update} />
           </div>
 
           <div className="rounded-lg border bg-white p-3">
@@ -166,6 +155,17 @@ export default function PublicTestDriveSurveyPage({ token }) {
           </div>
 
           {message ? <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-700">{message}</div> : null}
+
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold leading-tight">Ruta realizada</p>
+                <p className="text-xs font-medium text-slate-500">Trayecto registrado durante la prueba de manejo.</p>
+              </div>
+              <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700">{data?.routePoints?.length || 0} puntos</span>
+            </div>
+            <TestDriveRouteMap points={data?.routePoints || []} className="h-64" />
+          </div>
         </div>
 
         <footer className="flex justify-end border-t px-4 py-3">
@@ -179,22 +179,90 @@ export default function PublicTestDriveSurveyPage({ token }) {
   );
 }
 
-function ScoreCard({ label, value, onChange }) {
+function PublicRouteRadarScore({ items, values, onChange }) {
+  const [selected, setSelected] = useState(null);
+  const center = 150;
+  const radius = 82;
+  const labelRadius = 122;
+  const angles = [-90, -30, 30, 90, 150, 210];
+  const pointAt = (angle, currentRadius) => {
+    const radians = (angle * Math.PI) / 180;
+    return {
+      x: center + Math.cos(radians) * currentRadius,
+      y: center + Math.sin(radians) * currentRadius,
+    };
+  };
+  const rings = Array.from({ length: 10 }, (_, index) => {
+    const ringRadius = ((index + 1) / 10) * radius;
+    return angles.map((angle) => pointAt(angle, ringRadius)).map((point) => `${point.x},${point.y}`).join(" ");
+  });
+  const valuePoints = items
+    .map(([key], index) => pointAt(angles[index], (Math.max(0, Math.min(10, Number(values[key] || 0))) / 10) * radius))
+    .map((point) => `${point.x},${point.y}`)
+    .join(" ");
+  const selectedItem = selected ? items.find(([key]) => key === selected) : null;
+  const selectedValue = selected ? Number(values[selected] || 0) : 0;
+
   return (
-    <div className="rounded-lg border bg-white p-2">
-      <p className="mb-1.5 min-h-7 text-[11px] font-bold leading-tight text-slate-700">{label}</p>
-      <div className="grid grid-cols-10 gap-1">
-        {Array.from({ length: 10 }, (_, index) => index + 1).map((score) => (
-          <button
-            key={score}
-            type="button"
-            className={`h-7 rounded-md border text-[11px] font-black ${Number(value) === score ? "border-violet-500 bg-violet-100 text-violet-700" : "bg-white text-slate-600"}`}
-            onClick={() => onChange(score)}
-          >
-            {score}
-          </button>
-        ))}
+    <div className="rounded-lg border bg-white p-2 sm:p-3">
+      <div className="relative mx-auto min-h-[300px] max-w-[520px] sm:min-h-[330px]">
+        <svg viewBox="0 0 300 300" className="mx-auto h-[300px] w-full max-w-[410px] overflow-visible sm:h-[330px]">
+          {rings.map((points, index) => (
+            <polygon key={index} points={points} fill="none" stroke={index === 9 ? "#64748b" : "#cbd5e1"} strokeWidth={index === 9 ? 2.5 : 1.2} />
+          ))}
+          {angles.map((angle, index) => {
+            const end = pointAt(angle, radius);
+            return <line key={index} x1={center} y1={center} x2={end.x} y2={end.y} stroke="#e2e8f0" strokeWidth="1" />;
+          })}
+          <polygon points={valuePoints} fill="rgba(124, 58, 237, 0.16)" stroke="#7c3aed" strokeWidth="2" />
+          {items.map(([key], index) => {
+            const value = Number(values[key] || 0);
+            const point = pointAt(angles[index], (Math.max(0, Math.min(10, value)) / 10) * radius);
+            const fallback = pointAt(angles[index], 12);
+            const visiblePoint = value > 0 ? point : fallback;
+            return <circle key={key} cx={visiblePoint.x} cy={visiblePoint.y} r="3.5" fill="#7c3aed" />;
+          })}
+        </svg>
+        {items.map(([key, label], index) => {
+          const labelPoint = pointAt(angles[index], labelRadius);
+          const value = values[key] || "-";
+          return (
+            <button
+              key={key}
+              type="button"
+              className="absolute w-32 -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-white/95 px-2 py-1.5 text-center text-[10px] font-semibold leading-tight text-slate-600 shadow-sm transition hover:border-violet-300 hover:text-violet-700 sm:w-36 sm:text-[11px]"
+              style={{ left: `${(labelPoint.x / 300) * 100}%`, top: `${(labelPoint.y / 300) * 100}%` }}
+              onClick={() => setSelected(key)}
+            >
+              <span className="block">{label}</span>
+              <span className="mt-1 inline-flex min-w-7 items-center justify-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-black text-violet-700">{value}</span>
+            </button>
+          );
+        })}
       </div>
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="bg-white text-slate-950 sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{selectedItem?.[1] || "Calificación"}</DialogTitle>
+            <DialogDescription>Selecciona un valor del 1 al 10.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: 10 }, (_, index) => index + 1).map((score) => (
+              <button
+                key={score}
+                type="button"
+                className={`rounded-lg border px-3 py-3 text-base font-black transition hover:bg-violet-50 ${selectedValue === score ? "border-violet-500 bg-violet-100 text-violet-700" : "text-slate-700"}`}
+                onClick={() => {
+                  if (selected) onChange(selected, score);
+                  setSelected(null);
+                }}
+              >
+                {score}
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
