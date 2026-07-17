@@ -1201,13 +1201,61 @@ function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
   ];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[92svh] overflow-y-auto bg-white text-slate-950 sm:max-w-[980px]">
-        <DialogHeader>
-          <DialogTitle>Encuesta del Test Drive</DialogTitle>
-          <DialogDescription>Registra la calificacion de ruta y el feedback del cliente.</DialogDescription>
-        </DialogHeader>
-        <div className="rounded-lg border bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
+      <DialogContent className="max-h-[92svh] overflow-y-auto bg-white p-0 text-slate-950 sm:max-w-[980px]">
+        <div className="sticky top-0 z-20 flex flex-col gap-3 border-b bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <DialogHeader className="space-y-0">
+            <DialogTitle>Encuesta del Test Drive</DialogTitle>
+            <DialogDescription>Registra la calificación de ruta y el feedback del cliente.</DialogDescription>
+          </DialogHeader>
+          <div className="flex shrink-0 justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
+            <Button type="button" size="sm" onClick={() => onSubmit(form)}>Guardar encuesta</Button>
+          </div>
+        </div>
+        <div className="space-y-3 p-4">
+          <div className="rounded-lg border bg-slate-50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">Rutas</p>
+                <p className="text-xs text-slate-500">Según la prueba de manejo, califica del 1 al 10.</p>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">N TD {item.id}</span>
+            </div>
+            <RouteRadarScore items={routeItems} values={form} onChange={update} />
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <p className="mb-3 text-center text-sm font-bold">Feedback del Cliente</p>
+            <div className="mt-3 grid gap-3">
+              <SurveyFaceScale label="1. ¿El asesor comercial explicó adecuadamente las funciones principales del vehículo antes de la prueba?" value={form.asesorExplico} onChange={(value) => update("asesorExplico", value)} />
+              <SurveyFaceScale label="2. ¿Cuán satisfecho se encuentra con la experiencia del test drive?" value={form.experienciaTestdrive} onChange={(value) => update("experienciaTestdrive", value)} />
+              <SurveyFaceScale label="3. ¿Cuán satisfecho se encuentra con las explicaciones y demostraciones recibidas durante el test drive?" value={form.explicacionesDemostraciones} onChange={(value) => update("explicacionesDemostraciones", value)} />
+              <SurveyFaceScale label="4. ¿Cuán satisfecho se encuentra con el Ford que manejó?" value={form.fordManejo} onChange={(value) => update("fordManejo", value)} />
+              <SurveyFaceScale label="5. ¿Cuán satisfecho se encuentra con el estado del vehículo?" value={form.estadoVehiculo} onChange={(value) => update("estadoVehiculo", value)} />
+              <SurveyFaceScale label="6. ¿El tiempo de la prueba de manejo fue suficiente para evaluar el vehículo?" value={form.autoSuficiente} onChange={(value) => update("autoSuficiente", value)} />
+              <div className="grid gap-3 sm:grid-cols-[1fr_220px]">
+                <SurveyYesNo label="7. ¿Realizaría la compra ahora?" value={form.realizaraCompra} onChange={(value) => update("realizaraCompra", value)} />
+                <Field label="O en"><Input value={form.compraPlazo} placeholder="Ej. 30 días" onChange={(e) => update("compraPlazo", e.target.value)} /></Field>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold leading-tight">Ruta GPS registrada</p>
+                <p className="text-xs font-medium text-slate-500">Trayecto capturado desde el inicio hasta la finalización.</p>
+              </div>
+              <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700">{item.routePoints?.length || 0} puntos</span>
+            </div>
+            <TestDriveRouteMap points={item.routePoints || []} className="h-64" />
+          </div>
+        </div>
+        {/*
+          La ruta GPS queda al final del contenido; las acciones quedan fijas arriba para evitar
+          recorrer todo el formulario al guardar o cancelar.
+        */}
+        {false ? (
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold leading-tight">Ruta GPS registrada</p>
               <p className="text-xs font-medium text-slate-500">Trayecto capturado desde el inicio hasta la finalizacion.</p>
@@ -1245,6 +1293,7 @@ function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="button" onClick={() => onSubmit(form)}>Guardar encuesta</Button>
         </DialogFooter>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
