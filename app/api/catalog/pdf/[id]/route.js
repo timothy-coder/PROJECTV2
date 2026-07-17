@@ -11,6 +11,9 @@ import { pool } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PUBLIC_DIR = path.join(process.cwd(), "public");
+const FONT_DIR = path.join(PUBLIC_DIR, "fonts");
+
 export async function GET(request, { params }) {
   const { id } = await params;
   const priceId = Number(id);
@@ -395,7 +398,7 @@ function resolvePublicFile(source) {
     }
   }
   normalized = normalized.replace(/^\/+/, "");
-  const file = path.join(process.cwd(), "public", normalized);
+  const file = path.join(PUBLIC_DIR, normalized);
   return fs.existsSync(file) ? file : null;
 }
 
@@ -414,8 +417,8 @@ function groupElementsByOrder(elements) {
 }
 
 function registerPdfFonts(doc) {
-  const regular = path.join(process.cwd(), "public", "fonts", "Montserrat-VariableFont_wght.ttf");
-  const italic = path.join(process.cwd(), "public", "fonts", "Montserrat-Italic-VariableFont_wght.ttf");
+  const regular = path.join(FONT_DIR, "Montserrat-VariableFont_wght.ttf");
+  const italic = path.join(FONT_DIR, "Montserrat-Italic-VariableFont_wght.ttf");
   if (fs.existsSync(regular)) {
     const regularBuffer = fs.readFileSync(regular);
     doc.registerFont("Helvetica", regularBuffer);

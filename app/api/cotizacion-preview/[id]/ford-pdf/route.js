@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
+const PUBLIC_DIR = path.join(process.cwd(), "public");
+const AUTOGRAPHY_FONT_PATH = path.join(PUBLIC_DIR, "fonts", "Autography.ttf");
 
 function money(value) {
   return Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1336,14 +1338,13 @@ function drawQrPlaceholder(doc, href, x, y, size = 42) {
 function resolvePublicFile(source) {
   if (!source || /^https?:\/\//i.test(source)) return null;
   const normalized = String(source).replace(/^\/+/, "");
-  const file = path.join(process.cwd(), "public", normalized);
+  const file = path.join(PUBLIC_DIR, normalized);
   return fs.existsSync(file) ? file : null;
 }
 
 function registerPdfFonts(doc) {
-  const fontPath = path.join(process.cwd(), "public", "fonts", "Autography.ttf");
-  if (fs.existsSync(fontPath)) {
-    doc.registerFont("Autography", fs.readFileSync(fontPath));
+  if (fs.existsSync(AUTOGRAPHY_FONT_PATH)) {
+    doc.registerFont("Autography", fs.readFileSync(AUTOGRAPHY_FONT_PATH));
     doc._registeredAutography = true;
   }
 }

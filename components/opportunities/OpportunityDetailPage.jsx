@@ -1082,7 +1082,7 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
           return (
           <div key={t.id} className="relative flex items-start justify-between gap-3 rounded-lg border p-3">
             <div className="min-w-0">
-              <p className="text-sm font-bold leading-tight sm:text-base">{formatDateEs(t.fechaTestdrive || t.fecha_testdrive)} - {formatTimeEs(t.horaInicio || t.hora_inicio)}{t.horaFin ? ` a ${formatTimeEs(t.horaFin)}` : ""}</p>
+              <p className="text-sm font-bold leading-tight sm:text-base">{formatDateEs(t.fechaTestdrive || t.fecha_testdrive)} - {formatTimeEs(t.horaInicio || t.hora_inicio)}</p>
               {t.modelo ? <p className="mt-1 truncate text-xs font-medium text-slate-600">{t.modelo}</p> : null}
               <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{testDriveStatusLabel(t.estado)}</p>
             </div>
@@ -1446,7 +1446,7 @@ function SurveyYesNo({ label, value, onChange }) {
 function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
   const item = state.item;
   const startDate = state.startedAt instanceof Date && !Number.isNaN(state.startedAt.getTime()) ? state.startedAt : new Date();
-  const defaultVehicle = item.certificadoVehiculo || item.modelo || "";
+  const defaultVehicle = item.modelo || item.certificadoVehiculo || "";
   const routeEnabled = Boolean(config?.activarRutaTestdrive);
   const [localState, setLocalState] = useState({
     generated: Boolean(item.certificadoGeneradoAt || item.inicioPruebaAt),
@@ -1470,9 +1470,9 @@ function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
     id: item.id,
     fechaTestdrive: item.fechaTestdrive,
     horaInicio: item.horaInicio,
-    horaFin: item.horaFin,
+    horaFin: null,
     modeloId: item.modelo_id ? String(item.modelo_id) : "",
-    vin: item.vin || "",
+    vin: "",
     placa: form.placa,
     descripcion: item.descripcion || "",
     estado: "en_proceso",
@@ -1491,17 +1491,19 @@ function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text("Certificado de Responsabilidad del Test Drive", 421, 54, { align: "center" });
+    const pageCenterX = doc.internal.pageSize.getWidth() / 2;
+    const signatureY = doc.internal.pageSize.getHeight() / 2 + 18;
+    doc.text("Certificado de Responsabilidad del Test Drive", pageCenterX, 54, { align: "center" });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     const paragraph = `Yo, ${certificateData.conductorNombre || "(PARA EDITAR)"}, portador del registro de conducir N° ${certificateData.conductorRegistro || "(PARA EDITAR)"}, declaro estar en condiciones fisicas y psicologicas para conducir siguiendo el trayecto elegido de acuerdo con la legislacion local vigente de las normas de transito y que asumo cualquier costo por danos personales o a terceros, asi como el pago de papeletas o multas generadas durante el periodo de la prueba.`;
-    doc.text(doc.splitTextToSize(paragraph, 760), 421, 86, { align: "center" });
+    doc.text(doc.splitTextToSize(paragraph, 760), pageCenterX, 86, { align: "center" });
     doc.setFont("helvetica", "bold");
     doc.text("Conductor:", 55, 160);
     doc.setFont("helvetica", "normal");
     doc.text(certificateData.conductorNombre || "-", 120, 160);
     doc.setFont("helvetica", "bold");
-    doc.text("Vehiculo:", 385, 160);
+    doc.text("Modelo:", 385, 160);
     doc.setFont("helvetica", "normal");
     doc.text(certificateData.certificadoVehiculo || "-", 450, 160);
     doc.setFont("helvetica", "bold");
@@ -1520,13 +1522,10 @@ function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
     doc.text("Hora:", 605, 182);
     doc.setFont("helvetica", "normal");
     doc.text(certificateData.hora, 655, 182);
-    doc.line(310, 300, 530, 300);
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(18);
-    doc.text(certificateData.conductorNombre || "", 421, 292, { align: "center" });
+    doc.line(pageCenterX - 110, signatureY, pageCenterX + 110, signatureY);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text("Firma", 421, 318, { align: "center" });
+    doc.text("Firma", pageCenterX, signatureY + 18, { align: "center" });
     doc.save(`certificado-test-drive-${item.id}.pdf`);
   }
   return (
@@ -1539,7 +1538,7 @@ function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Nombre del conductor"><Input value={form.conductorNombre} onChange={(e) => setForm((f) => ({ ...f, conductorNombre: e.target.value }))} /></Field>
           <Field label="Registro de conducir"><Input value={form.conductorRegistro} onChange={(e) => setForm((f) => ({ ...f, conductorRegistro: e.target.value }))} /></Field>
-          <Field label="Vehiculo"><Input value={form.certificadoVehiculo} onChange={(e) => setForm((f) => ({ ...f, certificadoVehiculo: e.target.value }))} /></Field>
+          <Field label="Modelo"><Input value={form.certificadoVehiculo} onChange={(e) => setForm((f) => ({ ...f, certificadoVehiculo: e.target.value }))} /></Field>
           <Field label="Placa"><Input value={form.placa} onChange={(e) => setForm((f) => ({ ...f, placa: e.target.value }))} /></Field>
           <div className="md:col-span-2"><Field label="Local"><Input value={form.certificadoLocal} onChange={(e) => setForm((f) => ({ ...f, certificadoLocal: e.target.value }))} /></Field></div>
           {routeEnabled ? (
@@ -1573,14 +1572,13 @@ function CertificatePreview({ data }) {
         </p>
         <div className="mt-5 grid grid-cols-6 gap-y-2 text-left">
           <span className="font-semibold">Conductor:</span><span className="col-span-2">{data.conductorNombre || "-"}</span>
-          <span className="font-semibold">Vehiculo:</span><span>{data.certificadoVehiculo || "-"}</span>
+          <span className="font-semibold">Modelo:</span><span>{data.certificadoVehiculo || "-"}</span>
           <span><b>Placa:</b> {data.placa || "-"}</span>
           <span className="font-semibold">Local:</span><span className="col-span-2">{data.certificadoLocal || "-"}</span>
           <span className="font-semibold">Fecha:</span><span>{data.fecha}</span>
           <span><b>Hora:</b> {data.hora}</span>
         </div>
-        <div className="mx-auto mt-16 w-64 border-t border-slate-900 pt-2">
-          <div className="text-2xl text-slate-800" style={{ fontFamily: "Autography, 'Segoe Script', 'Brush Script MT', cursive" }}>{data.conductorNombre || ""}</div>
+        <div className="mx-auto mt-24 w-64 border-t border-slate-900 pt-2">
           <div>Firma</div>
         </div>
       </div>
@@ -1598,9 +1596,9 @@ function TestDriveDialog({ state, options, onClose, onSubmit }) {
     id: item?.id,
     fechaTestdrive: item?.fechaTestdrive || dateInputValue(item?.fecha_testdrive) || "",
     horaInicio: item?.horaInicio || timeInputValue(item?.hora_inicio),
-    horaFin: item?.horaFin || timeInputValue(item?.hora_fin),
+    horaFin: "",
     modeloId: item?.modelo_id ? String(item.modelo_id) : "",
-    vin: item?.vin || "",
+    vin: "",
     placa: item?.placa || "",
     descripcion: item?.descripcion || "",
     estado: item?.estado || "programado",
@@ -1611,14 +1609,19 @@ function TestDriveDialog({ state, options, onClose, onSubmit }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Fecha"><Input type="date" value={form.fechaTestdrive} onChange={(e) => setForm((f) => ({ ...f, fechaTestdrive: e.target.value }))} /></Field>
         <Field label="Hora inicio"><Input type="time" value={form.horaInicio} onChange={(e) => setForm((f) => ({ ...f, horaInicio: e.target.value }))} /></Field>
-        <Field label="Hora fin"><Input type="time" value={form.horaFin} onChange={(e) => setForm((f) => ({ ...f, horaFin: e.target.value }))} /></Field>
         <Field label="Estado">
           <SearchableSelect value={form.estado} options={[{ value: "programado", label: "Programado" }, { value: "en_proceso", label: "En proceso" }, { value: "realizado", label: "Realizado" }, { value: "cancelado", label: "Cancelado" }]} onChange={(v) => setForm((f) => ({ ...f, estado: v }))} />
         </Field>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Placa"><Input value={form.placa} onChange={(e) => setForm((f) => ({ ...f, placa: e.target.value }))} /></Field>
-        <Field label="VIN"><Input value={form.vin} onChange={(e) => setForm((f) => ({ ...f, vin: e.target.value }))} /></Field>
+        <Field label="Modelo">
+          <SearchableSelect
+            value={form.modeloId}
+            options={(options.models || []).map((model) => ({ value: model.id, label: model.name }))}
+            onChange={(value) => setForm((f) => ({ ...f, modeloId: value }))}
+          />
+        </Field>
       </div>
       <Field label="Descripcion"><Textarea value={form.descripcion} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))} /></Field>
       {item ? (

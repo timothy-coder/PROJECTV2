@@ -2,6 +2,9 @@ import DashboardNav from "@/components/layout/DashboardNav";
 import { getCurrentUser } from "@/lib/server/getCurrentUser";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function DashboardLayout({ children }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
