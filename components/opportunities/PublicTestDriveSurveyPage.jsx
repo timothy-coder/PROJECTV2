@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Frown, Meh, Send, Smile } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+const TestDriveRouteMap = dynamic(() => import("@/components/opportunities/TestDriveRouteMap"), { ssr: false });
 
 const ROUTE_ITEMS = [
   ["rutaErgonomia", "Ergonomía y posición de manejo"],
@@ -120,6 +123,17 @@ export default function PublicTestDriveSurveyPage({ token }) {
         </header>
 
         <div className="space-y-3 p-3 sm:p-4">
+          <div className="rounded-lg border bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold leading-tight">Ruta realizada</p>
+                <p className="text-xs font-medium text-slate-500">Trayecto registrado durante la prueba de manejo.</p>
+              </div>
+              <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700">{data?.routePoints?.length || 0} puntos</span>
+            </div>
+            <TestDriveRouteMap points={data?.routePoints || []} className="h-64" />
+          </div>
+
           <div className="rounded-lg border bg-slate-50 p-3">
             <div className="mb-2">
               <p className="text-sm font-bold leading-tight">Rutas</p>

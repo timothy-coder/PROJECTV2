@@ -49,6 +49,18 @@ async function loadPublicSurvey(connection, token) {
   return rows[0] || null;
 }
 
+function mapRoutePoint(row) {
+  return {
+    id: row.id,
+    lat: Number(row.latitud),
+    lng: Number(row.longitud),
+    accuracy: row.precision_metros === null ? null : Number(row.precision_metros),
+    speed: row.velocidad === null ? null : Number(row.velocidad),
+    heading: row.heading === null ? null : Number(row.heading),
+    capturedAt: row.capturado_at,
+  };
+}
+
 export async function GET(_request, { params }) {
   const connection = await pool.getConnection();
   try {
@@ -61,6 +73,19 @@ export async function GET(_request, { params }) {
     if (survey.link_estado === "cancelado") return NextResponse.json({ message: "Este enlace fue cancelado." }, { status: 410 });
     if (survey.expires_at && new Date(survey.expires_at).getTime() < Date.now()) {
       return NextResponse.json({ message: "Este enlace ya vencio." }, { status: 410 });
+    }
+    let routePoints = [];
+    try {
+      const [points] = await connection.query(
+        `SELECT id, latitud, longitud, precision_metros, velocidad, heading, capturado_at
+         FROM ventas_testdrive_ruta_puntos
+         WHERE testdrive_id=?
+         ORDER BY capturado_at ASC, id ASC`,
+        [survey.testdrive_id]
+      );
+      routePoints = points.map(mapRoutePoint);
+    } catch {
+      routePoints = [];
     }
     return NextResponse.json({
       ok: true,
@@ -81,6 +106,7 @@ export async function GET(_request, { params }) {
         oportunidadCodigo: survey.oportunidad_id,
         clienteNombre: String(survey.cliente_nombre || "").trim(),
       },
+      routePoints,
     });
   } catch (error) {
     console.error("Error loading public test drive survey:", error);

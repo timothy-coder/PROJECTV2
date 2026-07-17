@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar, Copy, Download, Eye, FileText, Frown, Gift, Info as InfoIcon, Link, Meh, MessageSquare, MoreVertical, Package, Pencil, PlayCircle, Plus, RotateCcw, Send, Smile, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { apiFetch } from "@/app/api/client";
 import { ClientDialog } from "@/components/clients/ClientDialog";
@@ -15,6 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOpportunityDetail } from "@/hooks/opportunities/useOpportunityDetail";
 import { hasPerm } from "@/lib/permissions";
+
+const TestDriveRouteMap = dynamic(() => import("@/components/opportunities/TestDriveRouteMap"), { ssr: false });
 
 export default function OpportunityDetailPage({ id }) {
   const { data, loading, save, reload } = useOpportunityDetail(id);
@@ -952,6 +955,16 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [certificate, setCertificate] = useState(null);
   const [survey, setSurvey] = useState(null);
+  const routeWatchers = useRef({});
+  const lastRoutePoints = useRef({});
+  useEffect(() => {
+    const watchers = routeWatchers.current;
+    return () => {
+      Object.values(watchers).forEach((watchId) => {
+        if (typeof navigator !== "undefined" && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+      });
+    };
+  }, []);
   const setStatus = (item, estado, extra = {}) => onAction({
     id: item.id,
     fechaTestdrive: item.fechaTestdrive,
@@ -964,6 +977,64 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     estado,
     ...extra,
   });
+  const saveRoutePoint = async (item, position) => {
+    const coords = position.coords || {};
+    const point = {
+      lat: coords.latitude,
+      lng: coords.longitude,
+      accuracy: coords.accuracy ?? null,
+      speed: coords.speed ?? null,
+      heading: coords.heading ?? null,
+      capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+    };
+    if (!shouldSendRoutePoint(lastRoutePoints.current[item.id], point)) return;
+    lastRoutePoints.current[item.id] = point;
+    await apiFetch(`/api/testdrives/${item.id}/route-points`, { method: "POST", body: JSON.stringify(point) });
+  };
+  const startRouteTracking = async (item, extra = {}) => {
+    if (!testConfig.activarRutaTestdrive) {
+      toast.error("La ruta de test drive no esta activa.");
+      return;
+    }
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      toast.error("Este navegador no permite capturar ubicacion.");
+      return;
+    }
+    await setStatus(item, "en_proceso", extra);
+    const options = { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 };
+    const onPosition = (position) => {
+      saveRoutePoint(item, position).catch(() => toast.error("No se pudo guardar un punto de la ruta."));
+    };
+    const onError = (error) => {
+      toast.error(error?.message || "No se pudo obtener la ubicacion.");
+    };
+    navigator.geolocation.getCurrentPosition(onPosition, onError, options);
+    if (routeWatchers.current[item.id]) navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
+    routeWatchers.current[item.id] = navigator.geolocation.watchPosition(onPosition, onError, options);
+    toast.success("Captura de ruta iniciada.");
+  };
+  const finishRouteTracking = async (item) => {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      try {
+        await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              saveRoutePoint(item, position).finally(resolve);
+            },
+            () => resolve(),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+          );
+        });
+      } catch {
+        // La ruta puede finalizar aunque el ultimo punto no se pueda capturar.
+      }
+    }
+    if (typeof navigator !== "undefined" && navigator.geolocation && routeWatchers.current[item.id]) {
+      navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
+      delete routeWatchers.current[item.id];
+    }
+    await setStatus(item, "finalizado", { finishRoute: true });
+  };
   const runMobile = (action) => {
     action();
     setOpenMenu(null);
@@ -1004,9 +1075,9 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
             <div className="hidden flex-wrap justify-end gap-2 sm:flex">
               {canStartTestDrive(t, testConfig) ? <Button size="sm" className="h-8 text-xs bg-violet-700 text-white hover:bg-violet-800" onClick={() => setCertificate({ item: t, startedAt: new Date() })}><PlayCircle className="size-4" />Inicio de prueba</Button> : null}
               {status === "en_proceso" ? <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() })}><FileText className="size-4" />Certificado</Button> : null}
-              {canStartRoute ? <Button size="sm" variant="outline" className="h-8 border-violet-300 text-xs text-violet-700" onClick={() => setStatus(t, "en_proceso", { startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
-              {canFinishRoute ? <Button size="sm" className="h-8 bg-emerald-700 text-xs text-white hover:bg-emerald-800" onClick={() => setStatus(t, "finalizado", { finishRoute: true })}>Finalizar</Button> : null}
-              {canResumeRoute ? <Button size="sm" variant="outline" className="h-8 border-amber-300 text-xs text-amber-700" onClick={() => setStatus(t, "en_proceso", { resumeRoute: true })}>Reanudar</Button> : null}
+              {canStartRoute ? <Button size="sm" variant="outline" className="h-8 border-violet-300 text-xs text-violet-700" onClick={() => startRouteTracking(t, { startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
+              {canFinishRoute ? <Button size="sm" className="h-8 bg-emerald-700 text-xs text-white hover:bg-emerald-800" onClick={() => finishRouteTracking(t)}>Finalizar</Button> : null}
+              {canResumeRoute ? <Button size="sm" variant="outline" className="h-8 border-amber-300 text-xs text-amber-700" onClick={() => startRouteTracking(t, { resumeRoute: true })}>Reanudar</Button> : null}
               {testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="h-8 border-violet-300 text-xs text-violet-700" onClick={() => sendSurveyLink(t)}><Link className="size-4" />Enviar encuesta</Button> : null}
               {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="h-8 border-blue-300 text-xs text-blue-700" onClick={() => setSurvey(t)}><MessageSquare className="size-4" />Encuesta</Button> : null}
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onOpen(t)}><Pencil className="size-4" />Editar</Button>
@@ -1019,9 +1090,9 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
                 <div className="absolute right-3 top-12 z-30 w-44 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl">
                   {canStartTestDrive(t, testConfig) ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => setCertificate({ item: t, startedAt: new Date() }))}>Inicio de prueba</button> : null}
                   {status === "en_proceso" ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobile(() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() }))}>Certificado</button> : null}
-                  {canStartRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { startRoute: true }))}>Iniciar</button> : null}
-                  {canFinishRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "finalizado", { finishRoute: true }))}>Finalizar</button> : null}
-                  {canResumeRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-amber-700 hover:bg-amber-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { resumeRoute: true }))}>Reanudar</button> : null}
+                  {canStartRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => startRouteTracking(t, { startRoute: true }))}>Iniciar</button> : null}
+                  {canFinishRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => finishRouteTracking(t))}>Finalizar</button> : null}
+                  {canResumeRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-amber-700 hover:bg-amber-50" onClick={() => runMobile(() => startRouteTracking(t, { resumeRoute: true }))}>Reanudar</button> : null}
                   {testConfig.habilitarEncuestaEnVivo ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => sendSurveyLink(t))}>Enviar encuesta</button> : null}
                   {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-blue-700 hover:bg-blue-50" onClick={() => runMobile(() => setSurvey(t))}>Encuesta</button> : null}
                   <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobile(() => onOpen(t))}>Editar</button>
@@ -1082,6 +1153,24 @@ function canStartTestDrive(item, config) {
   return Date.now() >= start.getTime() - minutes * 60000;
 }
 
+function shouldSendRoutePoint(previous, next) {
+  if (!previous) return true;
+  const elapsed = new Date(next.capturedAt).getTime() - new Date(previous.capturedAt).getTime();
+  if (elapsed >= 15000) return true;
+  return distanceMeters(previous, next) >= 8;
+}
+
+function distanceMeters(a, b) {
+  const radius = 6371000;
+  const toRad = (value) => (Number(value) * Math.PI) / 180;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return radius * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
 function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
   const survey = item.survey || {};
   const [form, setForm] = useState({
@@ -1117,6 +1206,16 @@ function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
           <DialogTitle>Encuesta del Test Drive</DialogTitle>
           <DialogDescription>Registra la calificacion de ruta y el feedback del cliente.</DialogDescription>
         </DialogHeader>
+        <div className="rounded-lg border bg-white p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold leading-tight">Ruta GPS registrada</p>
+              <p className="text-xs font-medium text-slate-500">Trayecto capturado desde el inicio hasta la finalizacion.</p>
+            </div>
+            <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-bold text-violet-700">{item.routePoints?.length || 0} puntos</span>
+          </div>
+          <TestDriveRouteMap points={item.routePoints || []} className="h-64" />
+        </div>
         <div className="rounded-lg border bg-slate-50 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>

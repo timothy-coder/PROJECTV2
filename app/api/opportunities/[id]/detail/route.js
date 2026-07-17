@@ -184,6 +184,36 @@ export async function GET(request, { params }) {
       )
       : [[]];
     const surveyByTestDrive = new Map(testDriveSurveys.map((row) => [Number(row.testdrive_id), row]));
+    let testDriveRoutePoints = [];
+    if (testDriveIds.length) {
+      try {
+        const [rows] = await connection.query(
+          `SELECT id, testdrive_id, latitud, longitud, precision_metros, velocidad, heading, capturado_at
+           FROM ventas_testdrive_ruta_puntos
+           WHERE testdrive_id IN (?)
+           ORDER BY capturado_at ASC, id ASC`,
+          [testDriveIds]
+        );
+        testDriveRoutePoints = rows;
+      } catch {
+        testDriveRoutePoints = [];
+      }
+    }
+    const routePointsByTestDrive = new Map();
+    testDriveRoutePoints.forEach((row) => {
+      const key = Number(row.testdrive_id);
+      const points = routePointsByTestDrive.get(key) || [];
+      points.push({
+        id: row.id,
+        lat: Number(row.latitud),
+        lng: Number(row.longitud),
+        accuracy: row.precision_metros === null ? null : Number(row.precision_metros),
+        speed: row.velocidad === null ? null : Number(row.velocidad),
+        heading: row.heading === null ? null : Number(row.heading),
+        capturedAt: row.capturado_at,
+      });
+      routePointsByTestDrive.set(key, points);
+    });
     const [closures] = await connection.query(`SELECT c.*, u.fullname AS user_name, cd.detalle AS clasificacion FROM ventas_oportunidades_cierres c INNER JOIN administracion_usuarios u ON u.id=c.created_by LEFT JOIN configuracion_ventas_cierres_detalle cd ON cd.id=c.cierre_detalle_id WHERE c.oportunidad_id=? ORDER BY c.created_at DESC`, [id]);
     const [reservations] = await connection.query(
       `SELECT r.id, r.estado, r.created_at, rd.tipo_persona
@@ -277,6 +307,7 @@ export async function GET(request, { params }) {
         rutaTestdrive: row.ruta_testdrive || "",
         rutaInicioAt: row.ruta_inicio_at,
         rutaFinAt: row.ruta_fin_at,
+        routePoints: routePointsByTestDrive.get(Number(row.id)) || [],
         surveyLink: linkByTestDrive.has(Number(row.id)) ? {
           id: linkByTestDrive.get(Number(row.id)).id,
           token: linkByTestDrive.get(Number(row.id)).token,
