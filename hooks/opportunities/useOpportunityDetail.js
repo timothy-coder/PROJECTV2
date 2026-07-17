@@ -23,7 +23,7 @@ export function useOpportunityDetail(id) {
       if (payload?.skipAutoAttention && typeof window !== "undefined") {
         sessionStorage.setItem(`opportunity-skip-auto-attention-${id}`, "1");
       }
-      await apiFetch(`/api/opportunities/${id}/detail`, { method: "POST", body: JSON.stringify(payload) });
+      const result = await apiFetch(`/api/opportunities/${id}/detail`, { method: "POST", body: JSON.stringify(payload) });
       await reload({ showLoading: false });
       if (typeof window !== "undefined") {
         const restoreScroll = () => window.scrollTo({ top: scrollY, left: 0, behavior: "auto" });
@@ -31,6 +31,7 @@ export function useOpportunityDetail(id) {
         setTimeout(restoreScroll, 50);
         setTimeout(restoreScroll, 150);
       }
+      return result;
     },
   }), [id, reload]);
   return { data, loading, reload, ...actions };

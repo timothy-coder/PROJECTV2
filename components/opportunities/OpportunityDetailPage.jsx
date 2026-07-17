@@ -32,8 +32,9 @@ export default function OpportunityDetailPage({ id }) {
   const canEditClient = hasPerm(currentUser.permissions || {}, ["clientes", "edit"]);
   async function saveWithToast(payload, successMessage) {
     try {
-      await save(payload);
+      const result = await save(payload);
       toast.success(successMessage || opportunityActionMessage(payload));
+      return result;
     } catch (error) {
       toast.error(error?.message || "No se pudo guardar la accion.");
       throw error;
@@ -153,6 +154,7 @@ function opportunityActionMessage(payload = {}) {
     "quote-cancel": "Cotizacion cancelada correctamente.",
     "reservation-delete": "Reserva eliminada correctamente.",
     testdrive: isEdit ? "Test drive actualizado correctamente." : "Test drive registrado correctamente.",
+    "testdrive-survey-link": "Enlace de encuesta generado correctamente.",
     closure: "Cierre registrado correctamente.",
   };
   return messages[action] || "Accion guardada correctamente.";
@@ -966,12 +968,24 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     action();
     setOpenMenu(null);
   };
+  const sendSurveyLink = async (item) => {
+    const result = await onAction({ action: "testdrive-survey-link", testdriveId: item.id });
+    const publicUrl = result?.publicUrl || item.surveyLink?.publicUrl;
+    if (!publicUrl) return;
+    const href = `${window.location.origin}${publicUrl}`;
+    try {
+      await navigator.clipboard.writeText(href);
+      toast.success("Enlace de encuesta copiado.");
+    } catch {
+      window.prompt("Copia el enlace de encuesta:", href);
+    }
+  };
   const testConfig = config || { minutosTestdrive: 0, activarPdfTestdrive: true };
   return (
     <section className="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="text-base font-bold sm:text-lg">Test Drive</h2>
-        <Button onClick={() => onOpen(null)}><Plus className="size-4" />Programar</Button>
+        <h2 className="text-sm font-bold leading-tight sm:text-base">Test Drive</h2>
+        <Button size="sm" className="h-8 text-xs" onClick={() => onOpen(null)}><Plus className="size-4" />Programar</Button>
       </div>
       <div className="space-y-2">
         {items.map((t) => {
@@ -983,20 +997,21 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
           return (
           <div key={t.id} className="relative flex items-start justify-between gap-3 rounded-lg border p-3">
             <div className="min-w-0">
-              <p className="font-bold">{formatDateEs(t.fechaTestdrive || t.fecha_testdrive)} - {formatTimeEs(t.horaInicio || t.hora_inicio)}{t.horaFin ? ` a ${formatTimeEs(t.horaFin)}` : ""}</p>
-              <p className="mt-1 truncate text-sm text-slate-600">{t.modelo || "Sin modelo"}</p>
-              <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">{testDriveStatusLabel(t.estado)}</p>
+              <p className="text-sm font-bold leading-tight sm:text-base">{formatDateEs(t.fechaTestdrive || t.fecha_testdrive)} - {formatTimeEs(t.horaInicio || t.hora_inicio)}{t.horaFin ? ` a ${formatTimeEs(t.horaFin)}` : ""}</p>
+              {t.modelo ? <p className="mt-1 truncate text-xs font-medium text-slate-600">{t.modelo}</p> : null}
+              <p className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{testDriveStatusLabel(t.estado)}</p>
             </div>
             <div className="hidden flex-wrap justify-end gap-2 sm:flex">
-              {canStartTestDrive(t, testConfig) ? <Button size="sm" className="bg-violet-700 text-white hover:bg-violet-800" onClick={() => setCertificate({ item: t, startedAt: new Date() })}><PlayCircle className="size-4" />Inicio de prueba</Button> : null}
-              {status === "en_proceso" ? <Button size="sm" variant="outline" onClick={() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() })}><FileText className="size-4" />Certificado</Button> : null}
-              {canStartRoute ? <Button size="sm" variant="outline" className="border-violet-300 text-violet-700" onClick={() => setStatus(t, "en_proceso", { startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
-              {canFinishRoute ? <Button size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => setStatus(t, "finalizado", { finishRoute: true })}>Finalizar</Button> : null}
-              {canResumeRoute ? <Button size="sm" variant="outline" className="border-amber-300 text-amber-700" onClick={() => setStatus(t, "en_proceso", { resumeRoute: true })}>Reanudar</Button> : null}
-              {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="border-blue-300 text-blue-700" onClick={() => setSurvey(t)}><MessageSquare className="size-4" />Encuesta</Button> : null}
-              <Button size="sm" variant="outline" onClick={() => onOpen(t)}><Pencil className="size-4" />Editar</Button>
-              {!testConfig.activarRutaTestdrive ? <Button size="sm" variant="outline" className="border-emerald-300 text-emerald-700" onClick={() => setStatus(t, "realizado")}>Realizado</Button> : null}
-              <Button size="sm" variant="outline" className="border-red-300 text-red-700" onClick={() => setStatus(t, "cancelado")}>Cancelado</Button>
+              {canStartTestDrive(t, testConfig) ? <Button size="sm" className="h-8 text-xs bg-violet-700 text-white hover:bg-violet-800" onClick={() => setCertificate({ item: t, startedAt: new Date() })}><PlayCircle className="size-4" />Inicio de prueba</Button> : null}
+              {status === "en_proceso" ? <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setCertificate({ item: t, startedAt: t.inicioPruebaAt ? new Date(t.inicioPruebaAt) : new Date() })}><FileText className="size-4" />Certificado</Button> : null}
+              {canStartRoute ? <Button size="sm" variant="outline" className="h-8 border-violet-300 text-xs text-violet-700" onClick={() => setStatus(t, "en_proceso", { startRoute: true })}><PlayCircle className="size-4" />Iniciar</Button> : null}
+              {canFinishRoute ? <Button size="sm" className="h-8 bg-emerald-700 text-xs text-white hover:bg-emerald-800" onClick={() => setStatus(t, "finalizado", { finishRoute: true })}>Finalizar</Button> : null}
+              {canResumeRoute ? <Button size="sm" variant="outline" className="h-8 border-amber-300 text-xs text-amber-700" onClick={() => setStatus(t, "en_proceso", { resumeRoute: true })}>Reanudar</Button> : null}
+              {testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="h-8 border-violet-300 text-xs text-violet-700" onClick={() => sendSurveyLink(t)}><Link className="size-4" />Enviar encuesta</Button> : null}
+              {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <Button size="sm" variant="outline" className="h-8 border-blue-300 text-xs text-blue-700" onClick={() => setSurvey(t)}><MessageSquare className="size-4" />Encuesta</Button> : null}
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => onOpen(t)}><Pencil className="size-4" />Editar</Button>
+              {!testConfig.activarRutaTestdrive ? <Button size="sm" variant="outline" className="h-8 border-emerald-300 text-xs text-emerald-700" onClick={() => setStatus(t, "realizado")}>Realizado</Button> : null}
+              <Button size="sm" variant="outline" className="h-8 border-red-300 text-xs text-red-700" onClick={() => setStatus(t, "cancelado")}>Cancelado</Button>
             </div>
             <div className="sm:hidden">
               <Button size="icon" variant="outline" onClick={() => setOpenMenu((current) => current === t.id ? null : t.id)}><MoreVertical className="size-4" /></Button>
@@ -1007,6 +1022,7 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
                   {canStartRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { startRoute: true }))}>Iniciar</button> : null}
                   {canFinishRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "finalizado", { finishRoute: true }))}>Finalizar</button> : null}
                   {canResumeRoute ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-amber-700 hover:bg-amber-50" onClick={() => runMobile(() => setStatus(t, "en_proceso", { resumeRoute: true }))}>Reanudar</button> : null}
+                  {testConfig.habilitarEncuestaEnVivo ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-violet-700 hover:bg-violet-50" onClick={() => runMobile(() => sendSurveyLink(t))}>Enviar encuesta</button> : null}
                   {status === "finalizado" && testConfig.habilitarEncuestaEnVivo ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-blue-700 hover:bg-blue-50" onClick={() => runMobile(() => setSurvey(t))}>Encuesta</button> : null}
                   <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium hover:bg-slate-100" onClick={() => runMobile(() => onOpen(t))}>Editar</button>
                   {!testConfig.activarRutaTestdrive ? <button type="button" className="block w-full rounded-md px-3 py-2 text-left font-medium text-emerald-700 hover:bg-emerald-50" onClick={() => runMobile(() => setStatus(t, "realizado"))}>Marcar realizado</button> : null}

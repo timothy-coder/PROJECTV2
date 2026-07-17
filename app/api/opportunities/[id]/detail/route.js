@@ -155,6 +155,26 @@ export async function GET(request, { params }) {
       : [[]];
     const [testDrives] = await connection.query(`SELECT t.*, mo.name AS modelo FROM ventas_oportunidades_test_drives t LEFT JOIN administracion_modelos mo ON mo.id=t.modelo_id WHERE t.oportunidad_id=? ORDER BY t.created_at DESC`, [id]);
     const testDriveIds = testDrives.map((item) => item.id);
+    let testDriveLinks = [];
+    if (testDriveIds.length) {
+      try {
+        const [rows] = await connection.query(
+          `SELECT id, testdrive_id, token, estado, expires_at, respondido_at
+           FROM ventas_testdrive_encuesta_links
+           WHERE testdrive_id IN (?)
+           ORDER BY created_at DESC`,
+          [testDriveIds]
+        );
+        testDriveLinks = rows;
+      } catch {
+        testDriveLinks = [];
+      }
+    }
+    const linkByTestDrive = new Map();
+    testDriveLinks.forEach((row) => {
+      const key = Number(row.testdrive_id);
+      if (!linkByTestDrive.has(key)) linkByTestDrive.set(key, row);
+    });
     const [testDriveSurveys] = testDriveIds.length
       ? await connection.query(
         `SELECT *
@@ -257,6 +277,14 @@ export async function GET(request, { params }) {
         rutaTestdrive: row.ruta_testdrive || "",
         rutaInicioAt: row.ruta_inicio_at,
         rutaFinAt: row.ruta_fin_at,
+        surveyLink: linkByTestDrive.has(Number(row.id)) ? {
+          id: linkByTestDrive.get(Number(row.id)).id,
+          token: linkByTestDrive.get(Number(row.id)).token,
+          estado: linkByTestDrive.get(Number(row.id)).estado || "activo",
+          publicUrl: `/testdrive-encuesta/${linkByTestDrive.get(Number(row.id)).token}`,
+          expiresAt: linkByTestDrive.get(Number(row.id)).expires_at,
+          respondidoAt: linkByTestDrive.get(Number(row.id)).respondido_at,
+        } : null,
         survey: surveyByTestDrive.has(Number(row.id)) ? mapTestDriveSurvey(surveyByTestDrive.get(Number(row.id))) : null,
       })),
       closures,
@@ -510,6 +538,51 @@ export async function POST(request, { params }) {
       }
       const testId = await stageId(connection, "Test drive");
       if (testId) await connection.query(`UPDATE ventas_oportunidades SET etapasconversion_id=? WHERE id=?`, [testId, id]);
+    }
+    if (body.action === "testdrive-survey-link") {
+      const testdriveId = Number(body.testdriveId);
+      const [[testdrive]] = await connection.query(`SELECT id FROM ventas_oportunidades_test_drives WHERE id=? AND oportunidad_id=? LIMIT 1`, [testdriveId, id]);
+      if (!testdrive) {
+        await connection.rollback();
+        return NextResponse.json({ message: "Test drive no encontrado." }, { status: 404 });
+      }
+      const config = await loadTestDriveConfig(connection);
+      if (!config.habilitarEncuestaEnVivo) {
+        await connection.rollback();
+        return NextResponse.json({ message: "La encuesta en vivo no esta activada." }, { status: 400 });
+      }
+      let existing = null;
+      try {
+        const [[row]] = await connection.query(
+          `SELECT id, token
+           FROM ventas_testdrive_encuesta_links
+           WHERE testdrive_id=? AND estado IN ('activo','respondido')
+           ORDER BY id DESC
+           LIMIT 1`,
+          [testdriveId]
+        );
+        existing = row || null;
+      } catch {
+        await connection.rollback();
+        return NextResponse.json({ message: "Falta crear la tabla ventas_testdrive_encuesta_links." }, { status: 400 });
+      }
+      let token = existing?.token;
+      let linkId = existing?.id;
+      if (!token) {
+        token = randomUUID();
+        const [created] = await connection.query(
+          `INSERT INTO ventas_testdrive_encuesta_links (testdrive_id, oportunidad_id, token, estado, created_by)
+           VALUES (?, ?, ?, 'activo', ?)`,
+          [testdriveId, id, token, user.id]
+        );
+        linkId = created.insertId;
+        try {
+          await connection.query(`UPDATE ventas_oportunidades_test_drives SET encuesta_link_id=? WHERE id=?`, [linkId, testdriveId]);
+        } catch {
+          // Columna opcional: el link sigue relacionado por testdrive_id.
+        }
+      }
+      responsePayload = { ok: true, token, linkId, publicUrl: `/testdrive-encuesta/${token}` };
     }
     if (body.action === "testdrive-survey") {
       const testdriveId = Number(body.testdriveId);
