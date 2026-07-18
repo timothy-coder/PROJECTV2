@@ -171,6 +171,10 @@ function hasRealValue(value) {
 function isClosedStage(value) {
   return String(value || "").trim().toLowerCase() === "cerrada";
 }
+function isPerformedTestDrive(value) {
+  const status = normalizeText(value);
+  return status === "realizado" || status === "finalizado";
+}
 function uniqueCount(values) {
   return new Set(values.filter((value) => value !== null && value !== undefined && String(value).trim() !== "")).size;
 }
@@ -290,6 +294,7 @@ function buildOpportunityRecords(rows, timeStates = []) {
       soldValue,
       isSold: isInvoiced,
       testDriveCount: testDriveRows.length,
+      testDriveDoneCount: testDriveRows.filter((row) => isPerformedTestDrive(row.testdrive_estado)).length,
       hasTestDrive: testDriveRows.length > 0,
       noTestDriveReason: testDriveRows.length ? "" : clean(closureReason !== EMPTY ? closureReason : base.testdrive_descripcion, "Sin test drive registrado"),
       matriculaStatus,
@@ -580,6 +585,7 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       daysFact: avg(countedRecords.map((item) => item.daysToInvoice)),
       inventoryVehicles,
       deliveredVehicles,
+      testDrivesDone: countedRecords.reduce((sum, item) => sum + Number(item.testDriveDoneCount || 0), 0),
       virtualQuotes,
       totalViews: countedRecords.reduce((sum, item) => sum + item.totalViews, 0),
       followUp: countedRecords.filter((item) => item.agendaGreen && !isClosedStage(item.stage)).length,
@@ -676,6 +682,11 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
       general: [`Total general: ${formatNumber(kpis.deliveredVehicles)} vehiculos.`],
       details: ["Cuenta las unidades que ya tienen registro de entrega."],
     },
+    testDrivesDone: {
+      title: "Test Drives",
+      general: [`Total general: ${formatNumber(kpis.testDrivesDone)} test drives realizados.`],
+      details: ["Cuenta los test drives con estado realizado o finalizado."],
+    },
     totalViews: {
       title: "Total Vistas",
       general: ["Suma de vistas totales registradas en cotizaciones."],
@@ -749,6 +760,17 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
         ],
         details: [
           "Unidades con registro de entrega.",
+        ],
+      },
+      testDrivesDone: {
+        title: "Test Drives",
+        general: [
+          `Total general: ${formatNumber(kpis.testDrivesDone)} test drives realizados.`,
+          `Oportunidades con test drive realizado: ${formatNumber(countedRecords.filter((item) => Number(item.testDriveDoneCount || 0) > 0).length)}.`,
+        ],
+        details: [
+          "Resultado por oportunidad:",
+          ...opportunityCountLines(countedRecords, "testDriveDoneCount", "Test Drives"),
         ],
       },
       totalViews: {
@@ -878,9 +900,10 @@ export default function SalesReportsDashboard({ viewSwitcher = null }) {
                 <Kpi title="Dí­as Cierre" value={formatNumber(kpis.daysClose, 1)} info={kpiInfoMap.daysClose} onInfo={setKpiInfo} />
                 <Kpi title="Dí­as Fact" value={formatNumber(kpis.daysFact, 1)} info={kpiInfoMap.daysFact} onInfo={setKpiInfo} />
                 </KpiGroup>
-                <KpiGroup title="Inventario y agenda" tone="blue" columns="grid-cols-3">
+                <KpiGroup title="Inventario y agenda" tone="blue" columns="grid-cols-2 sm:grid-cols-4">
                   <Kpi title="Veh. Inventario" value={formatNumber(kpis.inventoryVehicles)} info={kpiInfoMap.inventoryVehicles} onInfo={setKpiInfo} />
                 <Kpi title="Veh. Vendidos" value={formatNumber(kpis.deliveredVehicles)} info={kpiInfoMap.deliveredVehicles} onInfo={setKpiInfo} />
+                  <Kpi title="Test Drives" value={formatNumber(kpis.testDrivesDone)} info={kpiInfoMap.testDrivesDone} onInfo={setKpiInfo} />
                   <Kpi title="Seguimiento" value={formatNumber(kpis.followUp)} info={kpiInfoMap.followUp} onInfo={setKpiInfo} />
                 </KpiGroup>
               </section>
