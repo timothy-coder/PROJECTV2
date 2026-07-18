@@ -1133,6 +1133,7 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
       {survey ? (
         <TestDriveSurveyDialog
           item={survey}
+          config={testConfig}
           onClose={() => setSurvey(null)}
           onSubmit={async (payload) => {
             await onAction({ action: "testdrive-survey", testdriveId: survey.id, ...payload });
@@ -1185,8 +1186,9 @@ function distanceMeters(a, b) {
   return radius * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
+function TestDriveSurveyDialog({ item, config, onClose, onSubmit }) {
   const survey = item.survey || {};
+  const showGpsRoute = Boolean(config?.habilitarEncuestaEnVivo);
   const [form, setForm] = useState({
     rutaErgonomia: survey.rutaErgonomia || 0,
     rutaVisibilidad: survey.rutaVisibilidad || 0,
@@ -1252,6 +1254,7 @@ function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
               </div>
             </div>
           </div>
+          {showGpsRoute ? (
           <div className="rounded-lg border bg-white p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
@@ -1262,6 +1265,7 @@ function TestDriveSurveyDialog({ item, onClose, onSubmit }) {
             </div>
             <TestDriveRouteMap points={item.routePoints || []} className="h-64" />
           </div>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
