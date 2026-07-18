@@ -956,13 +956,16 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
   const [certificate, setCertificate] = useState(null);
   const [survey, setSurvey] = useState(null);
   const routeWatchers = useRef({});
+  const routeIntervals = useRef({});
   const lastRoutePoints = useRef({});
   useEffect(() => {
     const watchers = routeWatchers.current;
+    const intervals = routeIntervals.current;
     return () => {
       Object.values(watchers).forEach((watchId) => {
         if (typeof navigator !== "undefined" && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
       });
+      Object.values(intervals).forEach((intervalId) => window.clearInterval(intervalId));
     };
   }, []);
   const setStatus = (item, estado, extra = {}) => onAction({
@@ -1003,9 +1006,12 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     const onError = (error) => {
       toast.error(error?.message || "No se pudo obtener la ubicacion.");
     };
-    navigator.geolocation.getCurrentPosition(onPosition, onError, options);
+    const captureCurrentPosition = () => navigator.geolocation.getCurrentPosition(onPosition, onError, { ...options, maximumAge: 0 });
+    captureCurrentPosition();
     if (routeWatchers.current[item.id]) navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
+    if (routeIntervals.current[item.id]) window.clearInterval(routeIntervals.current[item.id]);
     routeWatchers.current[item.id] = navigator.geolocation.watchPosition(onPosition, onError, options);
+    routeIntervals.current[item.id] = window.setInterval(captureCurrentPosition, 5000);
     if (showToast) toast.success("Captura de ruta iniciada.");
     return true;
   };
@@ -1036,6 +1042,10 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     if (typeof navigator !== "undefined" && navigator.geolocation && routeWatchers.current[item.id]) {
       navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
       delete routeWatchers.current[item.id];
+    }
+    if (routeIntervals.current[item.id]) {
+      window.clearInterval(routeIntervals.current[item.id]);
+      delete routeIntervals.current[item.id];
     }
     await setStatus(item, "finalizado", { finishRoute: true });
   };
@@ -1125,6 +1135,7 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
           state={certificate}
           config={testConfig}
           onClose={() => setCertificate(null)}
+          onRouteStart={(item) => beginRouteWatcher(item, { showToast: true })}
           onSubmit={async (payload) => {
             await onAction(payload);
           }}
@@ -1171,8 +1182,8 @@ function canStartTestDrive(item, config) {
 function shouldSendRoutePoint(previous, next) {
   if (!previous) return true;
   const elapsed = new Date(next.capturedAt).getTime() - new Date(previous.capturedAt).getTime();
-  if (elapsed >= 15000) return true;
-  return distanceMeters(previous, next) >= 8;
+  if (elapsed >= 5000) return true;
+  return distanceMeters(previous, next) >= 3;
 }
 
 function distanceMeters(a, b) {
@@ -1447,7 +1458,7 @@ function SurveyYesNo({ label, value, onChange }) {
   );
 }
 
-function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
+function TestDriveCertificateDialog({ state, config, onClose, onSubmit, onRouteStart }) {
   const item = state.item;
   const startDate = state.startedAt instanceof Date && !Number.isNaN(state.startedAt.getTime()) ? state.startedAt : new Date();
   const defaultVehicle = item.modelo || item.certificadoVehiculo || "";
@@ -1485,6 +1496,7 @@ function TestDriveCertificateDialog({ state, config, onClose, onSubmit }) {
   };
   async function persist(extra = {}) {
     await onSubmit({ ...payload, ...extra });
+    if (extra.startRoute || extra.resumeRoute) onRouteStart?.(item);
     if (extra.finishRoute) setLocalState({ generated: true, routeStarted: true, routeFinished: true });
     else if (extra.startRoute) setLocalState((current) => ({ ...current, generated: true, routeStarted: true }));
     else setLocalState((current) => ({ ...current, generated: true }));
