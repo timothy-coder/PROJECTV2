@@ -957,15 +957,19 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
   const [survey, setSurvey] = useState(null);
   const routeWatchers = useRef({});
   const routeIntervals = useRef({});
+  const routeFlushIntervals = useRef({});
+  const routeFlushLocks = useRef({});
   const lastRoutePoints = useRef({});
   useEffect(() => {
     const watchers = routeWatchers.current;
     const intervals = routeIntervals.current;
+    const flushIntervals = routeFlushIntervals.current;
     return () => {
       Object.values(watchers).forEach((watchId) => {
         if (typeof navigator !== "undefined" && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
       });
       Object.values(intervals).forEach((intervalId) => window.clearInterval(intervalId));
+      Object.values(flushIntervals).forEach((intervalId) => window.clearInterval(intervalId));
     };
   }, []);
   const setStatus = (item, estado, extra = {}) => onAction({
@@ -980,6 +984,18 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     estado,
     ...extra,
   });
+  const flushRouteQueue = async (item) => {
+    if (routeFlushLocks.current[item.id]) return;
+    const queued = getRouteQueue(item.id);
+    if (!queued.length) return;
+    routeFlushLocks.current[item.id] = true;
+    try {
+      await apiFetch(`/api/testdrives/${item.id}/route-points`, { method: "POST", body: JSON.stringify({ points: queued }) });
+      removeRouteQueueItems(item.id, queued.length);
+    } finally {
+      routeFlushLocks.current[item.id] = false;
+    }
+  };
   const saveRoutePoint = async (item, position) => {
     const coords = position.coords || {};
     const point = {
@@ -992,14 +1008,15 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     };
     if (!shouldSendRoutePoint(lastRoutePoints.current[item.id], point)) return;
     lastRoutePoints.current[item.id] = point;
-    await apiFetch(`/api/testdrives/${item.id}/route-points`, { method: "POST", body: JSON.stringify(point) });
+    enqueueRoutePoint(item.id, point);
+    await flushRouteQueue(item);
   };
   const beginRouteWatcher = (item, { showToast = false } = {}) => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       toast.error("Este navegador no permite capturar ubicacion.");
       return false;
     }
-    const options = { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 };
+    const options = { enableHighAccuracy: true, maximumAge: 1500, timeout: 15000 };
     const onPosition = (position) => {
       saveRoutePoint(item, position).catch(() => toast.error("No se pudo guardar un punto de la ruta."));
     };
@@ -1011,7 +1028,10 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     if (routeWatchers.current[item.id]) navigator.geolocation.clearWatch(routeWatchers.current[item.id]);
     if (routeIntervals.current[item.id]) window.clearInterval(routeIntervals.current[item.id]);
     routeWatchers.current[item.id] = navigator.geolocation.watchPosition(onPosition, onError, options);
-    routeIntervals.current[item.id] = window.setInterval(captureCurrentPosition, 5000);
+    routeIntervals.current[item.id] = window.setInterval(captureCurrentPosition, 3000);
+    routeFlushIntervals.current[item.id] = window.setInterval(() => {
+      flushRouteQueue(item).catch(() => {});
+    }, 7000);
     if (showToast) toast.success("Captura de ruta iniciada.");
     return true;
   };
@@ -1047,6 +1067,15 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
       window.clearInterval(routeIntervals.current[item.id]);
       delete routeIntervals.current[item.id];
     }
+    if (routeFlushIntervals.current[item.id]) {
+      window.clearInterval(routeFlushIntervals.current[item.id]);
+      delete routeFlushIntervals.current[item.id];
+    }
+    try {
+      await flushRouteQueue(item);
+    } catch {
+      toast.warning("Quedaron puntos de ruta pendientes. Se sincronizaran al reanudar.");
+    }
     await setStatus(item, "finalizado", { finishRoute: true });
   };
   const runMobile = (action) => {
@@ -1075,6 +1104,22 @@ function TestDriveSection({ items, config, onOpen, onAction }) {
     });
     // El watcher debe reaccionar a cambios reales de items/config; beginRouteWatcher usa refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, testConfig.activarRutaTestdrive]);
+  useEffect(() => {
+    if (!testConfig.activarRutaTestdrive) return undefined;
+    const flushOpenRoutes = () => {
+      items.forEach((item) => {
+        flushRouteQueue(item).catch(() => {});
+      });
+    };
+    window.addEventListener("online", flushOpenRoutes);
+    document.addEventListener("visibilitychange", flushOpenRoutes);
+    window.addEventListener("pagehide", flushOpenRoutes);
+    return () => {
+      window.removeEventListener("online", flushOpenRoutes);
+      document.removeEventListener("visibilitychange", flushOpenRoutes);
+      window.removeEventListener("pagehide", flushOpenRoutes);
+    };
   }, [items, testConfig.activarRutaTestdrive]);
   return (
     <section className="mb-4 rounded-lg bg-white p-4 shadow-sm sm:p-5">
@@ -1195,6 +1240,36 @@ function distanceMeters(a, b) {
   const dLng = toRad(b.lng - a.lng);
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return radius * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function routeQueueKey(testdriveId) {
+  return `testdrive-route-queue:${testdriveId}`;
+}
+
+function getRouteQueue(testdriveId) {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(routeQueueKey(testdriveId)) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function setRouteQueue(testdriveId, points) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(routeQueueKey(testdriveId), JSON.stringify(points.slice(-1000)));
+}
+
+function enqueueRoutePoint(testdriveId, point) {
+  const queue = getRouteQueue(testdriveId);
+  queue.push(point);
+  setRouteQueue(testdriveId, queue);
+}
+
+function removeRouteQueueItems(testdriveId, count) {
+  const queue = getRouteQueue(testdriveId);
+  setRouteQueue(testdriveId, queue.slice(count));
 }
 
 function TestDriveSurveyDialog({ item, config, onClose, onSubmit }) {

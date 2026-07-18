@@ -17,6 +17,9 @@ export function SearchableSelect({
   disabled,
   onChange,
   className,
+  dropdownClassName,
+  dropdownMinWidth,
+  dropdownMaxWidth,
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
@@ -38,7 +41,9 @@ export function SearchableSelect({
     const topSpace = rect.top - gap;
     const openUp = bottomSpace < Math.min(160, desiredHeight) && topSpace > bottomSpace;
     const maxHeight = Math.max(180, Math.min(desiredHeight, openUp ? topSpace : bottomSpace));
-    const width = Math.min(rect.width, window.innerWidth - 16);
+    const minWidth = Math.max(rect.width, Number(dropdownMinWidth || 0));
+    const maxWidth = Number(dropdownMaxWidth || 0) || window.innerWidth - 16;
+    const width = Math.min(Math.max(rect.width, minWidth), maxWidth, window.innerWidth - 16);
     const left = Math.min(Math.max(rect.left, 8), window.innerWidth - width - 8);
     setPosition({
       top: openUp ? rect.top - maxHeight - gap : rect.bottom + gap,
@@ -46,7 +51,7 @@ export function SearchableSelect({
       width,
       maxHeight,
     });
-  }, [options.length]);
+  }, [dropdownMaxWidth, dropdownMinWidth, options.length]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -68,7 +73,7 @@ export function SearchableSelect({
         onClick={() => setOpen(false)}
       />
       <div
-        className="fixed z-[90] max-h-[min(320px,calc(100svh-1rem))] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg"
+        className={cn("fixed z-[90] max-h-[min(320px,calc(100svh-1rem))] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg", dropdownClassName)}
         style={position ? { top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight } : undefined}
       >
         <Command className="bg-white">
@@ -91,9 +96,9 @@ export function SearchableSelect({
                   onChange(String(option.value));
                   setOpen(false);
                 }}
-                className="flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-slate-700 outline-none data-[selected=true]:bg-slate-100 data-[selected=true]:text-slate-950"
+                className="flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 outline-none data-[selected=true]:bg-slate-100 data-[selected=true]:text-slate-950"
               >
-                <span className="truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 truncate" title={option.label}>{option.label}</span>
                 {String(option.value) === String(value) ? (
                   <Check className="size-4 text-blue-600" />
                 ) : null}

@@ -147,7 +147,7 @@ export async function PUT(request, { params }) {
     }
 
     const [[current]] = await pool.query(
-      `SELECT id, id_lead, email, celular, identificacion_fiscal
+      `SELECT id, id_lead, email, celular, identificacion_fiscal, created_by
        FROM administracion_clientes
        WHERE id = ?
        LIMIT 1`,
@@ -177,42 +177,67 @@ export async function PUT(request, { params }) {
       );
     }
 
-    const [result] = await pool.query(
-      `UPDATE administracion_clientes
-       SET id_lead = ?, nombre = ?, apellido = ?, email = ?, celular = ?,
-           tipo_identificacion = ?, identificacion_fiscal = ?,
-           fecha_nacimiento = ?, ocupacion = ?, domicilio = ?,
-           departamento_id = ?, provincia_id = ?, distrito_id = ?,
-           nombreconyugue = ?, dniconyugue = ?, nombre_comercial = ?,
-           created_by = COALESCE(?, created_by)
-       WHERE id = ?`,
-      [
-        payload.idLead,
-        payload.nombre,
-        payload.apellido,
-        payload.email,
-        payload.celular,
-        payload.tipoIdentificacion,
-        payload.identificacionFiscal,
-        payload.fechaNacimiento,
-        payload.ocupacion,
-        payload.domicilio,
-        payload.departamentoId,
-        payload.provinciaId,
-        payload.distritoId,
-        payload.nombreConyugue,
-        payload.dniConyugue,
-        payload.nombreComercial,
-        payload.createdBy,
-        id,
-      ]
-    );
+    const connection = await pool.getConnection();
+    let result;
+    let opportunitiesAssigned = 0;
+    try {
+      await connection.beginTransaction();
+      [result] = await connection.query(
+        `UPDATE administracion_clientes
+         SET id_lead = ?, nombre = ?, apellido = ?, email = ?, celular = ?,
+             tipo_identificacion = ?, identificacion_fiscal = ?,
+             fecha_nacimiento = ?, ocupacion = ?, domicilio = ?,
+             departamento_id = ?, provincia_id = ?, distrito_id = ?,
+             nombreconyugue = ?, dniconyugue = ?, nombre_comercial = ?,
+             created_by = COALESCE(?, created_by)
+         WHERE id = ?`,
+        [
+          payload.idLead,
+          payload.nombre,
+          payload.apellido,
+          payload.email,
+          payload.celular,
+          payload.tipoIdentificacion,
+          payload.identificacionFiscal,
+          payload.fechaNacimiento,
+          payload.ocupacion,
+          payload.domicilio,
+          payload.departamentoId,
+          payload.provinciaId,
+          payload.distritoId,
+          payload.nombreConyugue,
+          payload.dniConyugue,
+          payload.nombreComercial,
+          payload.createdBy,
+          id,
+        ]
+      );
+
+      if (payload.createdBy && Number(payload.createdBy) !== Number(current.created_by || 0)) {
+        const [assignResult] = await connection.query(
+          `UPDATE ventas_oportunidades o
+           LEFT JOIN configuracion_ventas_etapas e ON e.id = o.etapasconversion_id
+           SET o.asignado_a = ?
+           WHERE o.cliente_id = ?
+             AND LOWER(COALESCE(e.nombre, '')) <> 'cerrada'`,
+          [payload.createdBy, id]
+        );
+        opportunitiesAssigned = Number(assignResult.affectedRows || 0);
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
     if (!result.affectedRows) {
       return NextResponse.json({ message: "Cliente no encontrado." }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, opportunitiesAssigned });
   } catch (error) {
     console.error("Error updating client:", error);
 

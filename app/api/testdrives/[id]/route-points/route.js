@@ -61,9 +61,18 @@ export async function POST(request, { params }) {
   const testdriveId = Number(id);
   if (!testdriveId) return NextResponse.json({ message: "Test drive invalido." }, { status: 400 });
   const body = await request.json().catch(() => ({}));
-  const lat = Number(body.lat);
-  const lng = Number(body.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  const rawPoints = Array.isArray(body.points) ? body.points : [body];
+  const points = rawPoints
+    .map((point) => ({
+      lat: Number(point.lat),
+      lng: Number(point.lng),
+      accuracy: point.accuracy === undefined || point.accuracy === null ? null : Number(point.accuracy),
+      speed: point.speed === undefined || point.speed === null ? null : Number(point.speed),
+      heading: point.heading === undefined || point.heading === null ? null : Number(point.heading),
+      capturedAt: point.capturedAt ? new Date(point.capturedAt) : new Date(),
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  if (!points.length) {
     return NextResponse.json({ message: "Coordenadas invalidas." }, { status: 400 });
   }
   const connection = await pool.getConnection();
@@ -76,18 +85,18 @@ export async function POST(request, { params }) {
     await connection.query(
       `INSERT INTO ventas_testdrive_ruta_puntos
        (testdrive_id, latitud, longitud, precision_metros, velocidad, heading, capturado_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
+       VALUES ?`,
+      [points.map((point) => [
         testdriveId,
-        lat,
-        lng,
-        body.accuracy === undefined || body.accuracy === null ? null : Number(body.accuracy),
-        body.speed === undefined || body.speed === null ? null : Number(body.speed),
-        body.heading === undefined || body.heading === null ? null : Number(body.heading),
-        body.capturedAt ? new Date(body.capturedAt) : new Date(),
-      ]
+        point.lat,
+        point.lng,
+        point.accuracy,
+        point.speed,
+        point.heading,
+        Number.isNaN(point.capturedAt.getTime()) ? new Date() : point.capturedAt,
+      ])]
     );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, saved: points.length });
   } catch (error) {
     console.error("Error saving test drive route point:", error);
     return NextResponse.json({ message: "No se pudo guardar la ubicacion." }, { status: 500 });

@@ -180,7 +180,7 @@ export default function OpportunitiesPage({ userPermissions, kind = "opportunity
             <ChevronDown className={`size-4 transition ${filtersOpen ? "rotate-180" : ""}`} />
           </button>
           <div className={`${filtersOpen ? "grid" : "hidden"} mt-2 gap-2 sm:mt-0 sm:grid sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8`}>
-            <Field label="Cliente"><SearchableSelect value={filters.clienteId} options={clientOptions} onChange={(value) => handleFilterChange("clienteId", value)} /></Field>
+            <Field label="Cliente"><SearchableSelect value={filters.clienteId} options={clientOptions} dropdownMinWidth={360} dropdownMaxWidth={520} onChange={(value) => handleFilterChange("clienteId", value)} /></Field>
             <Field label="Origen"><SearchableSelect value={filters.origenId} options={originOptions} onChange={(value) => handleFilterChange("origenId", value)} /></Field>
             <Field label="Etapa"><SearchableSelect value={filters.etapaId} options={stageOptions} onChange={(value) => handleFilterChange("etapaId", value)} /></Field>
             {canViewAll ? <Field label="Asignado a"><SearchableSelect value={filters.asignadoA} options={userOptions} onChange={(value) => handleFilterChange("asignadoA", value)} /></Field> : null}

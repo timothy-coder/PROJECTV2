@@ -31,11 +31,15 @@ export default function TestDriveRouteMap({ points = [], className = "" }) {
   }
   const start = positions[0];
   const end = positions[positions.length - 1];
+  const middle = positions.slice(1, -1);
   return (
     <div className={`overflow-hidden rounded-lg border bg-white ${className}`}>
       <MapContainer center={start} zoom={15} scrollWheelZoom={false} className="h-full min-h-56 w-full">
         <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Polyline positions={positions} pathOptions={{ color: "#7c3aed", weight: 5, opacity: 0.85 }} />
+        {middle.map((position, index) => (
+          <CircleMarker key={`${position[0]}-${position[1]}-${index}`} center={position} radius={3} pathOptions={{ color: "#7c3aed", fillColor: "#7c3aed", fillOpacity: 0.75, opacity: 0.75 }} />
+        ))}
         <CircleMarker center={start} radius={7} pathOptions={{ color: "#059669", fillColor: "#10b981", fillOpacity: 1 }}>
           <Tooltip direction="top">Inicio</Tooltip>
         </CircleMarker>
