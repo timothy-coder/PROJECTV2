@@ -9,6 +9,7 @@ import {
   Cell,
   Funnel,
   FunnelChart,
+  Legend,
   LabelList,
   Line,
   LineChart as RechartsLineChart,
@@ -57,6 +58,8 @@ function readDate(value) {
 }
 
 function dateKey(value) {
+  const isoDate = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
   const date = readDate(value);
   if (!date) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -355,40 +358,75 @@ function filterRecords(records, filters, chartFilters) {
   });
 }
 
-function periodStartForFilters(filters) {
-  if (!filters.dateValue) return "";
-  if (filters.dateLevel === "day") return filters.dateValue;
-  if (filters.dateLevel === "month") return `${filters.dateValue}-01`;
-  if (filters.dateLevel === "year") return `${filters.dateValue}-01-01`;
-  return "";
+function buildMaintenanceOpportunityRecords(rows) {
+  return rows.map((row) => {
+    const day = dateKey(row.proximo_mantenimiento);
+    const vehicle = [row.marca_nombre, row.modelo_nombre].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
+    return {
+      id: row.vehiculo_id,
+      day,
+      month: day.slice(0, 7),
+      year: day.slice(0, 4),
+      model: clean(row.modelo_nombre),
+      vehicle,
+      status: clean(row.estado_recordatorio),
+    };
+  });
 }
 
-function filterRecordsWithoutDate(records, filters, chartFilters) {
+function isActionableMaintenanceOpportunity(record) {
+  const status = normalizeText(record.status);
+  return Boolean(status && status !== "programado" && status !== "cerrado");
+}
+
+function filterMaintenanceOpportunityRecords(records, filters, chartFilters) {
+  const unsupportedFilters = [
+    filters.advisor,
+    filters.stage,
+    chartFilters.advisor,
+    chartFilters.stage,
+    chartFilters.stageReport,
+    chartFilters.service,
+    chartFilters.center,
+    chartFilters.origin,
+    chartFilters.clientType,
+    chartFilters.closureReason,
+  ].some(Boolean);
+  if (unsupportedFilters) return [];
+
   return records.filter((record) => {
+    const matchesDate =
+      !filters.dateValue ||
+      (filters.dateLevel === "year" && record.year === filters.dateValue) ||
+      (filters.dateLevel === "month" && record.month === filters.dateValue) ||
+      (filters.dateLevel === "day" && record.day === filters.dateValue);
     const matchesVehicle =
       !filters.vehicleValue ||
       (filters.vehicleLevel === "brand" && record.vehicle.toLowerCase().startsWith(filters.vehicleValue.toLowerCase())) ||
       (filters.vehicleLevel === "vehicle" && record.vehicle === filters.vehicleValue);
-    const basic =
-      (!filters.advisor || record.advisor === filters.advisor) &&
-      matchesVehicle &&
-      (!filters.stage || record.stage === filters.stage);
-    const chart = Object.entries(chartFilters).every(([field, value]) => !value || record[field] === value);
-    return basic && chart;
+    const matchesChartVehicle =
+      (!chartFilters.model || record.model === chartFilters.model) &&
+      (!chartFilters.vehicle || record.vehicle === chartFilters.vehicle);
+    return matchesDate && matchesVehicle && matchesChartVehicle && isActionableMaintenanceOpportunity(record);
   });
-}
-
-function managedBeforePeriod(records, filters, chartFilters) {
-  const start = periodStartForFilters(filters);
-  if (!start) return 0;
-  return filterRecordsWithoutDate(records, filters, chartFilters)
-    .filter((record) => hasRealValue(record.code) && record.day && record.day < start)
-    .length;
 }
 
 function lineByDay(records) {
   const days = Array.from(new Set(records.map((item) => item.day).filter(Boolean))).sort();
   return days.map((day) => ({ day: dayNumber(day), value: records.filter((item) => item.day === day).length }));
+}
+
+function lineFollowUpByDay(records) {
+  const days = Array.from(new Set(records.map((item) => item.day).filter(Boolean))).sort();
+  return days.map((day) => {
+    const dayRecords = records.filter((item) => item.day === day);
+    const contacted = dayRecords.filter((item) => Number(item.appointmentCount || 0) > 0 || item.agendaAt).length;
+    return {
+      day: dayNumber(day),
+      opportunities: dayRecords.length,
+      contacted,
+    };
+  });
 }
 
 function buildDateTree(records) {
@@ -433,8 +471,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   const [filters, setFilters] = useState({ dateLevel: "month", dateValue: currentMonthKey(), advisor: "", vehicleLevel: "", vehicleValue: "", stage: "" });
   const [chartFilters, setChartFilters] = useState({});
   const [focusChart, setFocusChart] = useState(null);
-  const [vehiclesWithoutOpportunity, setVehiclesWithoutOpportunity] = useState(0);
-  const [maintenanceDueTotal, setMaintenanceDueTotal] = useState(0);
+  const [maintenanceOpportunityRows, setMaintenanceOpportunityRows] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -463,36 +500,17 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/powerbi/posventa/vehiculos-sin-oportunidad/data?withMeta=1&page=1&limit=1")
+    fetch("/api/powerbi/posventa/vehiculos-sin-oportunidad/data?withMeta=1&page=1&limit=100000")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.message || "No se pudo cargar vehiculos sin oportunidad.");
         return payload;
       })
       .then((payload) => {
-        if (!cancelled) setVehiclesWithoutOpportunity(Number(payload?.meta?.total || 0));
+        if (!cancelled) setMaintenanceOpportunityRows(Array.isArray(payload?.rows) ? payload.rows : []);
       })
       .catch(() => {
-        if (!cancelled) setVehiclesWithoutOpportunity(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/postventa-maintenance-due?page=1&limit=1")
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload?.message || "No se pudo cargar proximos mantenimientos.");
-        return payload;
-      })
-      .then((payload) => {
-        if (!cancelled) setMaintenanceDueTotal(Number(payload?.meta?.total || 0));
-      })
-      .catch(() => {
-        if (!cancelled) setMaintenanceDueTotal(0);
+        if (!cancelled) setMaintenanceOpportunityRows([]);
       });
     return () => {
       cancelled = true;
@@ -500,6 +518,11 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   }, []);
 
   const records = useMemo(() => buildRecords(rows, timeStates), [rows, timeStates]);
+  const maintenanceOpportunityRecords = useMemo(() => buildMaintenanceOpportunityRecords(maintenanceOpportunityRows), [maintenanceOpportunityRows]);
+  const filteredMaintenanceOpportunityRecords = useMemo(
+    () => filterMaintenanceOpportunityRecords(maintenanceOpportunityRecords, filters, chartFilters),
+    [maintenanceOpportunityRecords, filters, chartFilters]
+  );
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
   const reportRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.code)), [filteredRecords]);
   const createdOpportunityRecords = useMemo(
@@ -512,7 +535,8 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     vehicles: groupCount(records, "vehicle", 100).map((item) => item.name).sort((a, b) => a.localeCompare(b)),
     stages: groupCount(records, "stage", 100).map((item) => item.name),
   }), [records]);
-  const dateTree = useMemo(() => buildDateTree(records), [records]);
+  const dateTreeRecords = useMemo(() => [...records, ...maintenanceOpportunityRecords], [records, maintenanceOpportunityRecords]);
+  const dateTree = useMemo(() => buildDateTree(dateTreeRecords), [dateTreeRecords]);
   const vehicleTree = useMemo(() => buildVehicleTree(records), [records]);
 
   const kpis = useMemo(() => {
@@ -523,11 +547,9 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const platformBase = reportRecords.length;
     const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
-    const previousManaged = managedBeforePeriod(records, filters, chartFilters);
     const currentManaged = createdOpportunityRecords.length;
-    const opportunityBalance = Math.max(Number(maintenanceDueTotal || 0) - previousManaged - currentManaged, 0);
     return {
-      opportunities: opportunityBalance,
+      opportunities: filteredMaintenanceOpportunityRecords.length,
       managed: currentManaged,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
@@ -545,10 +567,10 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       followUp: reportRecords.filter((item) => item.agendaGreen && !item.closedAt && !isClosedStage(item.stage)).length,
       closed: reportRecords.filter((item) => item.closedAt).length,
       daysClose: avg(reportRecords.map((item) => item.daysToClose)),
-      withoutOpportunity: vehiclesWithoutOpportunity,
+      withoutOpportunity: maintenanceOpportunityRecords.length,
       platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [records, reportRecords, createdOpportunityRecords, filters, chartFilters, vehiclesWithoutOpportunity, maintenanceDueTotal]);
+  }, [reportRecords, createdOpportunityRecords, filteredMaintenanceOpportunityRecords, maintenanceOpportunityRecords]);
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
@@ -561,6 +583,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     clientType: groupCount(reportRecords, "clientType", 8),
     closureReason: groupCount(reportRecords, "closureReason", 6),
     days: lineByDay(reportRecords),
+    followUpDays: lineFollowUpByDay(reportRecords),
   }), [reportRecords]);
   const stageTotal = reportRecords.length;
 
@@ -623,8 +646,9 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
                 <Panel title="Tipo de Servicio" summary={chartSummary(charts.service, "servicio")} onFocus={() => setFocusChart("service")}><Donut data={charts.service} field="service" active={chartFilters.service} onSelect={toggleChartFilter} /></Panel>
               </section>
 
-              <section className="mt-2 grid gap-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
+              <section className="mt-2 grid gap-2 xl:grid-cols-[1.35fr_1.35fr_1fr_1fr_1fr_1fr]">
                 <Panel title="Oportunidades por Dia" summary={lineSummary(charts.days)} onFocus={() => setFocusChart("days")}><LineChart data={charts.days} /></Panel>
+                <Panel title="Seguimiento por Dia" summary={followUpLineSummary(charts.followUpDays)} onFocus={() => setFocusChart("followUpDays")}><FollowUpLineChart data={charts.followUpDays} /></Panel>
                 <Panel title="Centro / Taller" summary={chartSummary(charts.center, "centro")} onFocus={() => setFocusChart("center")}><Donut data={charts.center} field="center" active={chartFilters.center} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Origen" summary={chartSummary(charts.origin, "origen")} onFocus={() => setFocusChart("origin")}><Donut data={charts.origin} field="origin" active={chartFilters.origin} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Cliente" summary={chartSummary(charts.clientType, "tipo")} onFocus={() => setFocusChart("clientType")}><Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={toggleChartFilter} /></Panel>
@@ -813,6 +837,13 @@ function lineSummary(data) {
   return top?.value ? `Dia con mas oportunidades: ${top.day} (${top.value}).` : "Sin registros por dia.";
 }
 
+function followUpLineSummary(data) {
+  const opportunities = data.reduce((sum, item) => sum + Number(item.opportunities || 0), 0);
+  const contacted = data.reduce((sum, item) => sum + Number(item.contacted || 0), 0);
+  if (!opportunities) return "Sin oportunidades para seguimiento.";
+  return `Contactadas/agendadas: ${formatNumber(contacted)} de ${formatNumber(opportunities)} (${formatNumber((contacted / opportunities) * 100, 1)}%).`;
+}
+
 function FocusChartDialog({ chartKey, charts, stageTotal, chartFilters, onClose, onSelect }) {
   if (!chartKey) return null;
   const config = {
@@ -822,6 +853,7 @@ function FocusChartDialog({ chartKey, charts, stageTotal, chartFilters, onClose,
     vehicle: { title: "Vehiculo", summary: chartSummary(charts.vehicle, "vehiculo"), content: <Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={onSelect} /> },
     service: { title: "Tipo de Servicio", summary: chartSummary(charts.service, "servicio"), content: <Donut data={charts.service} field="service" active={chartFilters.service} onSelect={onSelect} /> },
     days: { title: "Oportunidades por Dia", summary: lineSummary(charts.days), content: <LineChart data={charts.days} /> },
+    followUpDays: { title: "Seguimiento por Dia", summary: followUpLineSummary(charts.followUpDays), content: <FollowUpLineChart data={charts.followUpDays} /> },
     center: { title: "Centro / Taller", summary: chartSummary(charts.center, "centro"), content: <Donut data={charts.center} field="center" active={chartFilters.center} onSelect={onSelect} /> },
     origin: { title: "Origen", summary: chartSummary(charts.origin, "origen"), content: <Donut data={charts.origin} field="origin" active={chartFilters.origin} onSelect={onSelect} /> },
     clientType: { title: "Tipo de Cliente", summary: chartSummary(charts.clientType, "tipo"), content: <Donut data={charts.clientType} field="clientType" active={chartFilters.clientType} onSelect={onSelect} /> },
@@ -975,6 +1007,32 @@ function LineChart({ data }) {
         <YAxis tick={{ fontSize: 10 }} />
         <Tooltip />
         <Line type="monotone" dataKey="value" stroke="#188ff2" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+      </RechartsLineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function FollowUpLineChart({ data }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <RechartsLineChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: -18 }}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <Tooltip
+          formatter={(value, name) => [
+            value,
+            name === "opportunities" ? "Creadas" : "Contactadas",
+          ]}
+        />
+        <Legend
+          verticalAlign="top"
+          height={24}
+          formatter={(value) => value === "opportunities" ? "Creadas" : "Contactadas"}
+          wrapperStyle={{ fontSize: 10, fontWeight: 700 }}
+        />
+        <Line type="monotone" dataKey="opportunities" stroke="#188ff2" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+        <Line type="monotone" dataKey="contacted" stroke="#209947" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
       </RechartsLineChart>
     </ResponsiveContainer>
   );

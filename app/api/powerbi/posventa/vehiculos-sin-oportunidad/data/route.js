@@ -183,6 +183,11 @@ export async function GET(request) {
     const brand = String(url.searchParams.get("brand") || "").trim().toLowerCase();
     const model = String(url.searchParams.get("model") || "").trim().toLowerCase();
 
+    const [frequencies] = await pool.query(
+      `SELECT dias FROM configuracion_prospeccion_frecuencia ORDER BY dias DESC`
+    );
+    const maxFrequencyDays = Math.max(0, ...frequencies.map((item) => Number(item.dias || 0)));
+
     const where = [
       "v.deleted_at IS NULL",
       "NOT EXISTS (SELECT 1 FROM posventa_oportunidades o WHERE o.vehiculo_id = v.id)",
@@ -307,10 +312,25 @@ export async function GET(request) {
       }
     }
 
-    const enrichedRows = rows.map((row) => ({
-      ...row,
-      ...computeNextMaintenance(row, historyByVehicleId.get(row.vehiculo_id) || []),
-    }));
+    const enrichedRows = rows.map((row) => {
+      const history = historyByVehicleId.get(row.vehiculo_id) || [];
+      const nextMaintenance = computeNextMaintenance(row, history);
+      const daysRemaining = nextMaintenance.dias_restantes;
+      const estadoRecordatorio = !history.length
+        ? "Sin historial"
+        : !nextMaintenance.proximo_mantenimiento
+          ? "Sin algoritmo"
+          : Number(daysRemaining) < 0
+            ? "Vencido"
+            : Number(daysRemaining) <= maxFrequencyDays
+              ? "Pendiente contacto"
+              : "Programado";
+      return {
+        ...row,
+        ...nextMaintenance,
+        estado_recordatorio: estadoRecordatorio,
+      };
+    });
 
     if (withMeta) {
       const [brands] = await pool.query(
