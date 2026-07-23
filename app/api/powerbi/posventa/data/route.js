@@ -128,6 +128,25 @@ SELECT
   cot_moneda.codigo AS cotizacion_moneda_codigo,
   cot_moneda.nombre AS cotizacion_moneda_nombre,
   cot_moneda.simbolo AS cotizacion_moneda_simbolo,
+  (
+    SELECT pm.name
+    FROM administracion_vehiculos_historial_mantenimientos hm
+    INNER JOIN posventa_submantenimiento sm ON sm.id = hm.submantenimiento_id
+    LEFT JOIN posventa_mantenimiento pm ON pm.id = sm.posventamantenimiento_id
+    WHERE hm.vehiculo_id = veh.id
+      AND hm.created_at >= o.created_at
+    ORDER BY hm.created_at DESC, hm.id DESC
+    LIMIT 1
+  ) AS mantenimiento_tipo_servicio,
+  (
+    SELECT sm.name
+    FROM administracion_vehiculos_historial_mantenimientos hm
+    INNER JOIN posventa_submantenimiento sm ON sm.id = hm.submantenimiento_id
+    WHERE hm.vehiculo_id = veh.id
+      AND hm.created_at >= o.created_at
+    ORDER BY hm.created_at DESC, hm.id DESC
+    LIMIT 1
+  ) AS submantenimiento_nombre,
   cot_impuesto.nombre AS cotizacion_impuesto_nombre,
   cot_impuesto.porcentaje AS cotizacion_impuesto_porcentaje_config,
   cot_centro.nombre AS cotizacion_centro,
@@ -171,10 +190,17 @@ LEFT JOIN (
   SELECT detail.*
   FROM posventa_oportunidades_detalles detail
   INNER JOIN (
-    SELECT oportunidad_padre_id, MAX(id) AS max_id
-    FROM posventa_oportunidades_detalles
-    GROUP BY oportunidad_padre_id
-  ) latest_detail ON latest_detail.max_id = detail.id
+    SELECT id
+    FROM (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY oportunidad_padre_id
+               ORDER BY fecha_agenda DESC, hora_agenda DESC, created_at DESC, id DESC
+             ) AS rn
+      FROM posventa_oportunidades_detalles
+    ) ranked_detail
+    WHERE ranked_detail.rn = 1
+  ) latest_detail ON latest_detail.id = detail.id
 ) d ON d.oportunidad_padre_id = o.id
 LEFT JOIN (
   SELECT activity.*

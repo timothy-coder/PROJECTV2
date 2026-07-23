@@ -264,7 +264,7 @@ export async function GET(request) {
       where.push(`NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id AND ${preventiveMaintenanceHistoryExists("h")})`);
     } else if (status === "Ventas sin mantenimiento") {
       where.push(
-        `sales_vehicle.reserva_id IS NOT NULL
+        `sales_vehicle.vin IS NOT NULL
          AND NOT EXISTS (SELECT 1 FROM administracion_vehiculos_historial_mantenimientos h WHERE h.vehiculo_id = v.id AND ${preventiveMaintenanceHistoryExists("h")})`
       );
     } else if (status === "Sin algoritmo") {
@@ -324,12 +324,21 @@ export async function GET(request) {
        ) cierre ON cierre.oportunidad_id=opp.id
        LEFT JOIN configuracion_posventas_cierres_detalle cierre_config ON cierre_config.id=cierre.cierre_detalle_id
        LEFT JOIN (
-         SELECT rd.vin, MAX(r.id) AS reserva_id
-         FROM ventas_reserva_detalles rd
-         INNER JOIN ventas_reservas r ON r.id=rd.reserva_id
-         WHERE rd.vin IS NOT NULL AND rd.vin <> ''
-         GROUP BY rd.vin
-       ) sales_vehicle ON sales_vehicle.vin=v.vin
+         SELECT vin, MAX(reserva_id) AS reserva_id
+         FROM (
+           SELECT UPPER(TRIM(rd.vin)) AS vin, MAX(r.id) AS reserva_id
+           FROM ventas_reserva_detalles rd
+           INNER JOIN ventas_reservas r ON r.id=rd.reserva_id
+           WHERE rd.vin IS NOT NULL AND TRIM(rd.vin) <> ''
+           GROUP BY UPPER(TRIM(rd.vin))
+           UNION ALL
+           SELECT UPPER(TRIM(h.vin)) AS vin, NULL AS reserva_id
+           FROM ventas_historial_carros h
+           WHERE h.vin IS NOT NULL AND TRIM(h.vin) <> ''
+           GROUP BY UPPER(TRIM(h.vin))
+         ) sales_sources
+         GROUP BY vin
+       ) sales_vehicle ON sales_vehicle.vin=UPPER(TRIM(v.vin))
        ${whereSql}`;
 
     const [[countRow]] = await pool.query(
@@ -349,6 +358,7 @@ export async function GET(request) {
           opp.id AS oportunidad_abierta_id, opp.oportunidad_id AS oportunidad_codigo,
           od.fecha_agenda, od.hora_agenda,
           cierre.detalle AS cierre_detalle, cierre_config.detalle AS cierre_motivo,
+          sales_vehicle.vin AS ventas_vin,
           sales_vehicle.reserva_id AS ventas_reserva_id
        ${baseFrom}
        ORDER BY c.nombre ASC, v.id DESC
@@ -576,7 +586,7 @@ export async function GET(request) {
         estadoRecordatorio,
         cierreMotivo: row.cierre_motivo || row.cierre_detalle || "",
         ventasReservaId: row.ventas_reserva_id || null,
-        ventasSinMantenimiento: Boolean(row.ventas_reserva_id && !hasHistory),
+        ventasSinMantenimiento: Boolean(row.ventas_vin && !hasHistory),
 
         oportunidadId: row.oportunidad_abierta_id,
         oportunidadCodigo: row.oportunidad_codigo || "",

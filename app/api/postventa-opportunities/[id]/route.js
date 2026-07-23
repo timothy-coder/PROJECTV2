@@ -51,7 +51,9 @@ async function stageIdByNames(connection, names) {
 
 function datePart(value) {
   if (!value) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
   return String(value).slice(0, 10);
 }
 
@@ -124,7 +126,7 @@ export async function GET(_request, { params }) {
       `SELECT id, fecha_agenda, hora_agenda, oportunidad_id, created_at
        FROM posventa_oportunidades_detalles
        WHERE oportunidad_padre_id=?
-       ORDER BY created_at DESC, id DESC`,
+       ORDER BY fecha_agenda DESC, hora_agenda DESC, created_at DESC, id DESC`,
       [id]
     );
     const [activities] = await connection.query(

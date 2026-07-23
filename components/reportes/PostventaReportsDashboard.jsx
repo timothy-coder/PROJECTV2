@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Expand, Loader2, RotateCcw } from "lucide-react";
 import {
   Bar,
@@ -240,18 +240,34 @@ function isRescheduledAppointment(value) {
   return String(value || "").toLowerCase().includes("reprogram");
 }
 
+function serviceCategory(value, subvalue = "") {
+  const text = cleanUpper(value, "");
+  const subtext = cleanUpper(subvalue, "");
+  const preventiveSubmaintenance = /^(1|2|3|4|5|6|7|8|9|10)[^A-Z0-9]*(MTTO|MANTENIMIENTO)\b/.test(subtext);
+  if (preventiveSubmaintenance) return "PREVENTIVO";
+  if (!text) return EMPTY;
+  if (text.includes("PREVENT")) return "PREVENTIVO";
+  if (text.includes("CORRECT")) return "CORRECTIVO";
+  if (text.includes("DIAGN")) return "DIAGNOSTICO";
+  if (text.includes("GARANT")) return "GARANTIA";
+  if (text === "PYP" || text.includes("PLANCH") || text.includes("PINT")) return "PYP";
+  return text;
+}
+
 function platformUseScore(record) {
   const required = [
-    record.code,
     record.client,
-    record.clientType,
-    record.vehicle,
-    record.stage,
-    record.origin,
-    record.advisor,
-    record.createdAt,
+    record.clientEmail,
+    record.clientPhone,
+    record.clientDocument,
+    record.clientAddress,
+    record.department,
+    record.province,
+    record.district,
+    record.plate,
+    record.clientBirthDate,
   ];
-  return required.every((value) => clean(value, "") !== "") ? 1 : 0;
+  return required.every(hasRealValue) ? 1 : 0;
 }
 
 function groupCount(records, key, limit = 10) {
@@ -265,6 +281,29 @@ function groupCount(records, key, limit = 10) {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, limit);
+}
+
+function stackByAdvisorAndModel(records) {
+  const topModels = groupCount(records, "model", 6).map((item) => item.name);
+  const advisors = groupCount(records, "advisor", 6).map((item) => item.name);
+  return advisors.map((advisor) => {
+    const row = { advisor };
+    topModels.forEach((model) => {
+      row[model] = records.filter((item) => item.advisor === advisor && item.model === model).length;
+    });
+    row.details = records
+      .filter((item) => item.advisor === advisor && topModels.includes(item.model))
+      .map((item) => ({
+        id: item.id,
+        client: item.client,
+        phone: item.phone,
+        stage: item.stage,
+        model: item.model,
+        origin: item.origin,
+      }))
+      .slice(0, 18);
+    return row;
+  });
 }
 
 function uniqueRows(rows, keyGetter) {
@@ -294,7 +333,9 @@ function buildRecords(rows, timeStates = []) {
     const effectiveCitaRows = citaRows.filter((row) => row.cita_id || isEffectiveAppointment(row.cita_estado));
     const effectiveStageCitaRows = citaRows.filter((row) => isEffectiveAppointment(row.cita_estado));
     const reprogrammedCitaRows = citaRows.filter((row) => isRescheduledAppointment(row.cita_estado));
-    const vehicle = [base.vehiculo_marca, base.vehiculo_modelo].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
+    const brand = clean(base.vehiculo_marca, "Sin marca");
+    const model = clean(base.vehiculo_modelo, EMPTY);
+    const vehicle = [brand, model].filter((item) => item && item !== EMPTY && item !== "Sin marca").join(" ") || model || brand || EMPTY;
     const plate = clean(base.vehiculo_placa || base.vehiculo_vin, "");
     const center = clean(base.cotizacion_centro || base.cita_centro || base.cita_taller || base.cotizacion_taller || base.cotizacion_mostrador);
     const stage = clean(base.etapa_nombre);
@@ -308,15 +349,26 @@ function buildRecords(rows, timeStates = []) {
       year: yearKey(base.fechacreacionoportunidadpv),
       advisor: clean(base.usuario_asignado_nombre || base.cita_asesor_nombre || base.cotizacion_usuario_nombre || base.usuario_asignado_username, "Sin asesor"),
       client: clean(base.nombreapellidocliente),
+      phone: clean(base.celularcliente, "-"),
       clientType: clean(base.tipoidentificacioncliente),
-      model: clean(base.vehiculo_modelo),
+      clientEmail: clean(base.correocliente, ""),
+      clientPhone: clean(base.celularcliente, ""),
+      clientDocument: clean(base.numeroidentificacioncliente, ""),
+      clientBirthDate: clean(base.fechanacimientocliente, ""),
+      clientAddress: clean(base.domiciliocliente, ""),
+      department: clean(base.departamento, ""),
+      province: clean(base.provincia, ""),
+      district: clean(base.distrito, ""),
+      brand,
+      model,
+      plate,
       vehicle,
       vehicleDetail: plate ? `${vehicle} / ${plate}` : vehicle,
       stage,
       stageReport: effectiveStageCitaRows.length ? "Cita efectiva" : stage,
       origin: clean(base.suborigen_nombre || base.origen_nombre),
       center,
-      service: clean(base.cita_tipo_servicio || base.cotizacion_tipo || base.producto_descripcion),
+      service: serviceCategory(base.mantenimiento_tipo_servicio || base.cita_tipo_servicio || base.cotizacion_tipo || base.producto_descripcion, base.submantenimiento_nombre),
       quoteCount: quoteRows.length,
       quoteTotal: quoteRows.reduce((sum, row) => sum + moneyNumber(row.cotizacion_monto_total), 0),
       productCount: uniqueCount(group.map((row) => row.cotizacion_producto_id)),
@@ -327,7 +379,7 @@ function buildRecords(rows, timeStates = []) {
       daysToEffectiveAppointments: effectiveCitaRows.map((row) => daysBetween(base.fechacreacionoportunidadpv, row.cita_start_at || row.cita_created_at)),
       viewCount: viewRows.length,
       virtualQuoteCount: quoteRows.filter((row) => clean(row.cotizacion_public_token, "") !== "").length,
-      closureReason: cleanUpper(close.cierre_motivo_configurado || base.cierre_motivo_configurado),
+      closureReason: cleanUpper(close.cierre_motivo_configurado || close.cierre_detalle || base.cierre_motivo_configurado || base.cierre_detalle),
       closedAt: close.cierre_created_at,
       daysToClose: daysBetween(base.fechacreacionoportunidadpv, close.cierre_created_at),
       agendaAt: agendaDateTime(base.fecha_agenda, base.hora_agenda),
@@ -346,7 +398,7 @@ function filterRecords(records, filters, chartFilters) {
       (filters.dateLevel === "day" && record.day === filters.dateValue);
     const matchesVehicle =
       !filters.vehicleValue ||
-      (filters.vehicleLevel === "brand" && record.vehicle.toLowerCase().startsWith(filters.vehicleValue.toLowerCase())) ||
+      (filters.vehicleLevel === "brand" && record.brand === filters.vehicleValue) ||
       (filters.vehicleLevel === "vehicle" && record.vehicle === filters.vehicleValue);
     const basic =
       matchesDate &&
@@ -361,13 +413,16 @@ function filterRecords(records, filters, chartFilters) {
 function buildMaintenanceOpportunityRecords(rows) {
   return rows.map((row) => {
     const day = dateKey(row.proximo_mantenimiento);
-    const vehicle = [row.marca_nombre, row.modelo_nombre].map((item) => clean(item, "")).filter(Boolean).join(" ") || EMPTY;
+    const brand = clean(row.marca_nombre, "Sin marca");
+    const model = clean(row.modelo_nombre, EMPTY);
+    const vehicle = [brand, model].filter((item) => item && item !== EMPTY && item !== "Sin marca").join(" ") || model || brand || EMPTY;
     return {
       id: row.vehiculo_id,
       day,
       month: day.slice(0, 7),
       year: day.slice(0, 4),
-      model: clean(row.modelo_nombre),
+      brand,
+      model,
       vehicle,
       status: clean(row.estado_recordatorio),
     };
@@ -379,36 +434,9 @@ function isActionableMaintenanceOpportunity(record) {
   return Boolean(status && status !== "programado" && status !== "cerrado");
 }
 
-function filterMaintenanceOpportunityRecords(records, filters, chartFilters) {
-  const unsupportedFilters = [
-    filters.advisor,
-    filters.stage,
-    chartFilters.advisor,
-    chartFilters.stage,
-    chartFilters.stageReport,
-    chartFilters.service,
-    chartFilters.center,
-    chartFilters.origin,
-    chartFilters.clientType,
-    chartFilters.closureReason,
-  ].some(Boolean);
-  if (unsupportedFilters) return [];
-
-  return records.filter((record) => {
-    const matchesDate =
-      !filters.dateValue ||
-      (filters.dateLevel === "year" && record.year === filters.dateValue) ||
-      (filters.dateLevel === "month" && record.month === filters.dateValue) ||
-      (filters.dateLevel === "day" && record.day === filters.dateValue);
-    const matchesVehicle =
-      !filters.vehicleValue ||
-      (filters.vehicleLevel === "brand" && record.vehicle.toLowerCase().startsWith(filters.vehicleValue.toLowerCase())) ||
-      (filters.vehicleLevel === "vehicle" && record.vehicle === filters.vehicleValue);
-    const matchesChartVehicle =
-      (!chartFilters.model || record.model === chartFilters.model) &&
-      (!chartFilters.vehicle || record.vehicle === chartFilters.vehicle);
-    return matchesDate && matchesVehicle && matchesChartVehicle && isActionableMaintenanceOpportunity(record);
-  });
+function isDelayedOpportunity(record) {
+  if (!record?.agendaAt || record.closedAt || isClosedStage(record.stage)) return false;
+  return record.agendaAt.getTime() < Date.now();
 }
 
 function lineByDay(records) {
@@ -431,8 +459,11 @@ function lineFollowUpByDay(records) {
 
 function buildDateTree(records) {
   const years = new Map();
+  const currentYear = new Date().getFullYear();
   records.forEach((record) => {
     if (!record.year || !record.month || !record.day) return;
+    const numericYear = Number(record.year);
+    if (!Number.isFinite(numericYear) || numericYear > currentYear) return;
     if (!years.has(record.year)) years.set(record.year, new Map());
     const months = years.get(record.year);
     const month = record.month.slice(5, 7);
@@ -453,13 +484,17 @@ function buildDateTree(records) {
 function buildVehicleTree(records) {
   const map = new Map();
   records.forEach((record) => {
-    const brand = clean(record.vehicle.split(" ")[0], "Sin marca");
+    const brand = clean(record.brand || record.vehicle.split(" ")[0], "Sin marca");
+    const model = clean(record.model || record.vehicle, EMPTY);
+    const label = model === EMPTY ? record.vehicle : model;
     if (!map.has(brand)) map.set(brand, new Set());
-    map.get(brand).add(record.vehicle);
+    map.get(brand).add(JSON.stringify({ key: record.vehicle, label }));
   });
   return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([brand, vehicles]) => ({
     brand,
-    vehicles: Array.from(vehicles).sort().map((vehicle) => ({ key: vehicle, label: vehicle })),
+    vehicles: Array.from(vehicles)
+      .map((vehicle) => JSON.parse(vehicle))
+      .sort((a, b) => a.label.localeCompare(b.label)),
   }));
 }
 
@@ -473,9 +508,10 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
   const [focusChart, setFocusChart] = useState(null);
   const [maintenanceOpportunityRows, setMaintenanceOpportunityRows] = useState([]);
 
-  useEffect(() => {
+  const loadReportData = useCallback(({ showLoading = false } = {}) => {
     let cancelled = false;
-    fetch("/api/powerbi/posventa/data?limit=100000&withMeta=1")
+    if (showLoading) setLoading(true);
+    const request = fetch("/api/powerbi/posventa/data?limit=100000&withMeta=1")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.message || "No se pudo cargar la data.");
@@ -485,6 +521,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
         if (!cancelled) {
           setRows(Array.isArray(payload) ? payload : Array.isArray(payload?.rows) ? payload.rows : []);
           setTimeStates(Array.isArray(payload?.timeStates) ? payload.timeStates : []);
+          setMessage("");
         }
       })
       .catch((error) => {
@@ -493,14 +530,17 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
+    return {
+      request,
+      cancel: () => {
+        cancelled = true;
+      },
     };
   }, []);
 
-  useEffect(() => {
+  const loadMaintenanceOpportunityData = useCallback(() => {
     let cancelled = false;
-    fetch("/api/powerbi/posventa/vehiculos-sin-oportunidad/data?withMeta=1&page=1&limit=100000")
+    const request = fetch("/api/powerbi/posventa/vehiculos-sin-oportunidad/data?withMeta=1&page=1&limit=100000")
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload?.message || "No se pudo cargar vehiculos sin oportunidad.");
@@ -512,17 +552,43 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       .catch(() => {
         if (!cancelled) setMaintenanceOpportunityRows([]);
       });
-    return () => {
-      cancelled = true;
+    return {
+      request,
+      cancel: () => {
+        cancelled = true;
+      },
     };
   }, []);
 
+  useEffect(() => {
+    const reportLoad = loadReportData({ showLoading: true });
+    const maintenanceLoad = loadMaintenanceOpportunityData();
+    return () => {
+      reportLoad.cancel();
+      maintenanceLoad.cancel();
+    };
+  }, [loadMaintenanceOpportunityData, loadReportData]);
+
+  useEffect(() => {
+    const refresh = () => {
+      loadReportData();
+      loadMaintenanceOpportunityData();
+    };
+    const interval = window.setInterval(refresh, 30000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [loadMaintenanceOpportunityData, loadReportData]);
+
   const records = useMemo(() => buildRecords(rows, timeStates), [rows, timeStates]);
   const maintenanceOpportunityRecords = useMemo(() => buildMaintenanceOpportunityRecords(maintenanceOpportunityRows), [maintenanceOpportunityRows]);
-  const filteredMaintenanceOpportunityRecords = useMemo(
-    () => filterMaintenanceOpportunityRecords(maintenanceOpportunityRecords, filters, chartFilters),
-    [maintenanceOpportunityRecords, filters, chartFilters]
-  );
   const filteredRecords = useMemo(() => filterRecords(records, filters, chartFilters), [records, filters, chartFilters]);
   const reportRecords = useMemo(() => filteredRecords.filter((record) => hasRealValue(record.code)), [filteredRecords]);
   const createdOpportunityRecords = useMemo(
@@ -548,8 +614,12 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
     const scheduledOpportunityCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0).length;
     const notCompletedAppointmentCount = reportRecords.filter((item) => Number(item.appointmentCount || 0) > 0 && Number(item.effectiveAppointmentCount || 0) === 0).length;
     const currentManaged = createdOpportunityRecords.length;
+    const delayedOpportunities = reportRecords.filter(isDelayedOpportunity).length;
+    const generalMaintenanceOpportunities = maintenanceOpportunityRecords.filter(isActionableMaintenanceOpportunity).length;
+    const generalDelayedOpportunities = records.filter(isDelayedOpportunity).length;
     return {
-      opportunities: filteredMaintenanceOpportunityRecords.length,
+      opportunities: generalMaintenanceOpportunities + generalDelayedOpportunities,
+      delayedOpportunities,
       managed: currentManaged,
       projected: (reportRecords.length / elapsedProspectDays) * prospectDays,
       quotes: reportRecords.reduce((sum, item) => sum + item.quoteCount, 0),
@@ -570,12 +640,13 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
       withoutOpportunity: maintenanceOpportunityRecords.length,
       platformUse: platformBase ? (reportRecords.reduce((sum, item) => sum + platformUseScore(item), 0) / platformBase) * 100 : 0,
     };
-  }, [reportRecords, createdOpportunityRecords, filteredMaintenanceOpportunityRecords, maintenanceOpportunityRecords]);
+  }, [records, reportRecords, createdOpportunityRecords, maintenanceOpportunityRecords]);
 
   const charts = useMemo(() => ({
     model: groupCount(reportRecords, "model", 8),
     stage: groupCount(reportRecords, "stageReport", 8),
     advisor: groupCount(reportRecords, "advisor", 8),
+    advisorModel: stackByAdvisorAndModel(reportRecords),
     vehicle: groupCount(reportRecords, "vehicle", 8),
     service: groupCount(reportRecords, "service", 8),
     center: groupCount(reportRecords, "center", 8),
@@ -626,6 +697,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
             <>
               <section className="mb-2 grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-12">
                 <Kpi title="Oportunidades" value={formatNumber(kpis.opportunities)} />
+                <Kpi title="Retrasadas" value={formatNumber(kpis.delayedOpportunities)} tone="red" />
                 <Kpi title="Gestionadas" value={formatNumber(kpis.managed)} />
                 <Kpi title="Proyectado" value={formatNumber(kpis.projected)} />
                 <Kpi title="Cotizaciones" value={formatNumber(kpis.quotes)} />
@@ -642,7 +714,7 @@ export default function PostventaReportsDashboard({ viewSwitcher = null }) {
               <section className="grid gap-2 xl:grid-cols-[1fr_1fr_1fr_1fr]">
                 <Panel title="Oportunidad por Modelo" summary={chartSummary(charts.model, "modelo")} onFocus={() => setFocusChart("model")}><Donut data={charts.model} field="model" active={chartFilters.model} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Etapas" summary={chartSummary(charts.stage, "etapa", stageTotal)} onFocus={() => setFocusChart("stage")}><StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stageReport} onSelect={toggleChartFilter} /></Panel>
-                <Panel title="Asesor" summary={chartSummary(charts.advisor, "asesor")} onFocus={() => setFocusChart("advisor")}><BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={toggleChartFilter} /></Panel>
+                <Panel title="Asesor" summary={stackSummary(charts.advisorModel)} onFocus={() => setFocusChart("advisor")}><StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} activeAdvisor={chartFilters.advisor} onSelect={toggleChartFilter} /></Panel>
                 <Panel title="Tipo de Servicio" summary={chartSummary(charts.service, "servicio")} onFocus={() => setFocusChart("service")}><Donut data={charts.service} field="service" active={chartFilters.service} onSelect={toggleChartFilter} /></Panel>
               </section>
 
@@ -726,7 +798,7 @@ function FilterBox({ label, value, onChange, options }) {
   );
 }
 
-function TreeFilterShell({ label, display, children, onClear }) {
+function TreeFilterShell({ label, display, children, onClear, menuClassName = "" }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative z-50 rounded-md border border-slate-700/30 bg-white p-2 shadow-sm">
@@ -738,7 +810,7 @@ function TreeFilterShell({ label, display, children, onClear }) {
         <span className="truncate">{display}</span>
         <ChevronDown className={`size-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
       </button>
-      {open ? <div className="absolute left-2 right-2 top-[68px] z-[999] max-h-72 overflow-auto rounded-md border border-slate-300 bg-[#d2d2d2] p-2 text-xs shadow-xl">{children}</div> : null}
+      {open ? <div className={`absolute left-2 right-2 top-[68px] z-[999] max-h-72 overflow-auto rounded-md border border-slate-300 bg-[#d2d2d2] p-2 text-xs shadow-xl ${menuClassName}`}>{children}</div> : null}
     </div>
   );
 }
@@ -776,18 +848,27 @@ function DateTreeFilter({ valueLevel, value, tree, onChange }) {
 function VehicleTreeFilter({ valueLevel, value, tree, onChange }) {
   const [openBrands, setOpenBrands] = useState({});
   return (
-    <TreeFilterShell label="Vehiculo" display={value || "Todos"} onClear={() => onChange("", "")}>
+    <TreeFilterShell label="Vehiculo" display={vehicleTreeDisplay(valueLevel, value)} onClear={() => onChange("", "")} menuClassName="min-w-[320px]">
       {tree.map((brand) => (
         <div key={brand.brand} className="space-y-1">
           <div className="flex items-center gap-1">
             <button type="button" onClick={() => setOpenBrands((current) => ({ ...current, [brand.brand]: !(current[brand.brand] ?? true) }))}>{(openBrands[brand.brand] ?? true) ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}</button>
-            <button type="button" className="inline-flex min-w-0 items-center gap-2" onClick={() => onChange("brand", brand.brand)}><span className={`size-3 shrink-0 border ${valueLevel === "brand" && value === brand.brand ? "bg-slate-700" : "bg-transparent"}`} /><span className="truncate font-semibold">{brand.brand}</span></button>
+            <button type="button" className="inline-flex min-w-0 items-center gap-2" onClick={() => onChange("brand", brand.brand)} title={brand.brand}><span className={`size-3 shrink-0 border ${valueLevel === "brand" && value === brand.brand ? "bg-slate-700" : "bg-transparent"}`} /><span className="truncate font-semibold">{brand.brand}</span></button>
           </div>
-          {(openBrands[brand.brand] ?? true) ? <div className="ml-8 grid gap-1">{brand.vehicles.map((vehicle) => <button key={vehicle.key} type="button" className="inline-flex min-w-0 items-center gap-2 text-left" onClick={() => onChange("vehicle", vehicle.key)}><span className={`size-3 shrink-0 border ${valueLevel === "vehicle" && value === vehicle.key ? "bg-slate-700" : "bg-transparent"}`} /><span className="truncate">{vehicle.label}</span></button>)}</div> : null}
+          {(openBrands[brand.brand] ?? true) ? <div className="ml-8 grid gap-1">{brand.vehicles.map((vehicle) => <button key={vehicle.key} type="button" className="inline-flex min-w-0 items-center gap-2 text-left" onClick={() => onChange("vehicle", vehicle.key)} title={vehicle.label}><span className={`size-3 shrink-0 border ${valueLevel === "vehicle" && value === vehicle.key ? "bg-slate-700" : "bg-transparent"}`} /><span className="truncate">{vehicle.label}</span></button>)}</div> : null}
         </div>
       ))}
     </TreeFilterShell>
   );
+}
+
+function vehicleTreeDisplay(level, value) {
+  if (!value) return "Todos";
+  if (level === "vehicle") {
+    const parts = String(value).split(" ");
+    return parts.length > 1 ? parts.slice(1).join(" ") : value;
+  }
+  return value;
 }
 
 function dateTreeDisplay(level, value) {
@@ -798,10 +879,13 @@ function dateTreeDisplay(level, value) {
   return "Todas";
 }
 
-function Kpi({ title, value }) {
+function Kpi({ title, value, tone = "violet" }) {
+  const toneClass = tone === "red"
+    ? "bg-gradient-to-r from-red-600 to-red-500"
+    : "bg-gradient-to-r from-[#6717f2] to-[#4b16df]";
   return (
     <Card className="gap-0 overflow-hidden bg-white py-0 shadow-sm">
-      <div className="bg-gradient-to-r from-[#6717f2] to-[#4b16df] px-2 py-1 text-center text-xs font-black text-white">{title}</div>
+      <div className={`${toneClass} px-2 py-1 text-center text-xs font-black text-white`}>{title}</div>
       <CardContent className="flex h-14 items-center justify-center px-2 text-center text-lg font-black leading-tight md:text-xl">
         <span className="block max-w-full break-words">{value || "-"}</span>
       </CardContent>
@@ -831,6 +915,17 @@ function chartSummary(data, label, totalCount) {
   return `Mayor ${label}: ${top.name} con ${top.value} (${formatNumber((Number(top.value || 0) / total) * 100, 1)}% de ${total}).`;
 }
 
+function stackSummary(data) {
+  const top = [...data].sort((a, b) => {
+    const totalA = Object.entries(a).filter(([key]) => key !== "advisor" && key !== "details").reduce((sum, [, value]) => sum + Number(value || 0), 0);
+    const totalB = Object.entries(b).filter(([key]) => key !== "advisor" && key !== "details").reduce((sum, [, value]) => sum + Number(value || 0), 0);
+    return totalB - totalA;
+  })[0];
+  if (!top) return "Sin registros por asesor.";
+  const total = Object.entries(top).filter(([key]) => key !== "advisor" && key !== "details").reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  return total ? `Mayor asesor: ${top.advisor} con ${formatNumber(total)}.` : "Sin registros por asesor.";
+}
+
 function lineSummary(data) {
   if (!data.length) return "Sin registros por dia.";
   const top = [...data].sort((a, b) => Number(b.value || 0) - Number(a.value || 0))[0];
@@ -849,7 +944,7 @@ function FocusChartDialog({ chartKey, charts, stageTotal, chartFilters, onClose,
   const config = {
     model: { title: "Oportunidad por Modelo", summary: chartSummary(charts.model, "modelo"), content: <Donut data={charts.model} field="model" active={chartFilters.model} onSelect={onSelect} /> },
     stage: { title: "Etapas", summary: chartSummary(charts.stage, "etapa", stageTotal), content: <StageFunnel data={charts.stage} totalCount={stageTotal} active={chartFilters.stageReport} onSelect={onSelect} /> },
-    advisor: { title: "Asesor", summary: chartSummary(charts.advisor, "asesor"), content: <BarList data={charts.advisor} field="advisor" active={chartFilters.advisor} onSelect={onSelect} /> },
+    advisor: { title: "Asesor", summary: stackSummary(charts.advisorModel), content: <StackedAdvisor data={charts.advisorModel} models={charts.model.map((item) => item.name)} activeAdvisor={chartFilters.advisor} onSelect={onSelect} /> },
     vehicle: { title: "Vehiculo", summary: chartSummary(charts.vehicle, "vehiculo"), content: <Donut data={charts.vehicle} field="vehicle" active={chartFilters.vehicle} onSelect={onSelect} /> },
     service: { title: "Tipo de Servicio", summary: chartSummary(charts.service, "servicio"), content: <Donut data={charts.service} field="service" active={chartFilters.service} onSelect={onSelect} /> },
     days: { title: "Oportunidades por Dia", summary: lineSummary(charts.days), content: <LineChart data={charts.days} /> },
@@ -889,6 +984,93 @@ function BarList({ data, field, active, onSelect }) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+function StackedAdvisor({ data, models = [], activeAdvisor, onSelect }) {
+  const activeModels = models.filter((model) => data.some((row) => Number(row[model] || 0) > 0));
+  if (!data.length || !activeModels.length) {
+    return <div className="grid h-full place-items-center text-xs font-semibold text-slate-500">Sin registros por asesor.</div>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 8, right: 14, bottom: 8, left: -12 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="advisor" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={42} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <Tooltip
+          allowEscapeViewBox={{ x: true, y: true }}
+          content={<StackedAdvisorTooltip />}
+          cursor={{ fill: "rgba(15, 23, 42, 0.06)" }}
+          itemSorter={() => 0}
+          offset={18}
+          wrapperStyle={{ zIndex: 9999, pointerEvents: "none" }}
+        />
+        {activeModels.map((model, index) => (
+          <Bar
+            key={model}
+            dataKey={model}
+            stackId="modelos"
+            fill={COLORS[index % COLORS.length]}
+            opacity={!activeAdvisor ? 1 : 0.72}
+            onClick={(entry) => onSelect?.("advisor", entry.advisor)}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function StackedAdvisorTooltip({ active, payload, label, coordinate }) {
+  if (!active || !payload?.length) return null;
+  const items = [...payload]
+    .filter((item) => Number(item.value || 0) > 0)
+    .reverse();
+  const details = payload[0]?.payload?.details || [];
+  const shiftLeft = Number(coordinate?.x || 0) > 160;
+  return (
+    <div
+      className="w-[min(520px,calc(100vw-32px))] rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[10px] shadow-xl"
+      style={{ transform: shiftLeft ? "translate(-112%, -52%)" : "translate(10px, -52%)" }}
+    >
+      <p className="mb-1 truncate font-black text-slate-700">{label}</p>
+      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
+        {items.map((item) => (
+          <span key={item.dataKey} className="flex items-center gap-1 font-bold" style={{ color: item.color || item.fill }}>
+            <span className="size-2 shrink-0 rounded-sm" style={{ backgroundColor: item.color || item.fill }} />
+            <span className="truncate">{item.name}: {item.value}</span>
+          </span>
+        ))}
+      </div>
+      <div className="max-h-64 overflow-auto rounded-sm border border-slate-200">
+        <table className="w-full border-collapse text-left text-[10px]">
+          <thead className="sticky top-0 bg-white text-slate-900 shadow-sm">
+            <tr>
+              <th className="px-2 py-1 font-black">Cliente</th>
+              <th className="px-2 py-1 font-black">Celular</th>
+              <th className="px-2 py-1 font-black">Etapa</th>
+              <th className="px-2 py-1 font-black">Modelo</th>
+              <th className="px-2 py-1 font-black">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.length ? details.map((item, index) => (
+              <tr key={`${item.id}-${index}`} className={index % 2 ? "bg-slate-100" : "bg-white"}>
+                <td className="max-w-32 px-2 py-1 font-semibold text-slate-700">{item.client}</td>
+                <td className="px-2 py-1 text-slate-600">{item.phone}</td>
+                <td className="px-2 py-1 text-slate-600">{item.stage}</td>
+                <td className="px-2 py-1 text-slate-600">{item.model}</td>
+                <td className="px-2 py-1 text-slate-600">{item.origin}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td className="px-2 py-3 text-center font-semibold text-slate-500" colSpan={5}>Sin oportunidades para mostrar.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

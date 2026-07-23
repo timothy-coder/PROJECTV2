@@ -20,7 +20,9 @@ function canSeeAllClients(user) {
 
 function datePart(value) {
   if (!value) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
   return String(value).slice(0, 10);
 }
 
@@ -97,14 +99,17 @@ async function ensureOverduePostventaAgendaNotifications({ user, config, canAll 
      INNER JOIN administracion_clientes c ON c.id = o.cliente_id
      INNER JOIN configuracion_posventa_etapasconversion e ON e.id = o.etapasconversionpv_id
      INNER JOIN (
-       SELECT detail.*
-       FROM posventa_oportunidades_detalles detail
-       INNER JOIN (
-         SELECT oportunidad_padre_id, MAX(id) AS max_id
-         FROM posventa_oportunidades_detalles
-         WHERE fecha_agenda IS NOT NULL AND hora_agenda IS NOT NULL
-         GROUP BY oportunidad_padre_id
-       ) latest_detail ON latest_detail.max_id = detail.id
+       SELECT *
+       FROM (
+         SELECT detail.*,
+                ROW_NUMBER() OVER (
+                  PARTITION BY detail.oportunidad_padre_id
+                  ORDER BY detail.fecha_agenda DESC, detail.hora_agenda DESC, detail.created_at DESC, detail.id DESC
+                ) AS rn
+         FROM posventa_oportunidades_detalles detail
+         WHERE detail.fecha_agenda IS NOT NULL AND detail.hora_agenda IS NOT NULL
+       ) latest_detail
+       WHERE latest_detail.rn = 1
      ) d ON d.oportunidad_padre_id = o.id
      WHERE o.oportunidad_id LIKE ?
        AND d.fecha_agenda IS NOT NULL
@@ -249,7 +254,11 @@ export async function GET(request) {
        LEFT JOIN (
          SELECT *
          FROM (
-           SELECT od.*, ROW_NUMBER() OVER (PARTITION BY od.oportunidad_padre_id ORDER BY od.created_at DESC, od.id DESC) AS rn
+           SELECT od.*,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY od.oportunidad_padre_id
+                    ORDER BY od.fecha_agenda DESC, od.hora_agenda DESC, od.created_at DESC, od.id DESC
+                  ) AS rn
            FROM posventa_oportunidades_detalles od
          ) latest_detail
          WHERE latest_detail.rn=1
